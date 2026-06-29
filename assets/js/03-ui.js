@@ -33,6 +33,17 @@ document.addEventListener('keydown', function(e) {
   if (e.key === '?' && document.activeElement !== input) { e.preventDefault(); toggleShortcuts(); }
   // Ctrl+F: in-session search
   if (e.ctrlKey && e.key === 'f') { e.preventDefault(); openSearch(); }
+  // Ctrl+P: toggle pin on active session
+  if (e.ctrlKey && e.key === 'p') {
+    e.preventDefault();
+    if (activeSessionId) {
+      pywebview.api.list_sessions().then(function(data) {
+        if (!data || !data.sessions) return;
+        var s = data.sessions.find(function(x) { return x.id === activeSessionId; });
+        if (s) { var method = s.pinned ? 'unpin_session' : 'pin_session'; pywebview.api[method](activeSessionId).then(function() { if (typeof refreshSessions === 'function') refreshSessions(); }); }
+      });
+    }
+  }
 });
 
 // Auto-resize textarea
@@ -41,8 +52,8 @@ input.addEventListener('input', function() {
   this.style.height = Math.min(this.scrollHeight, 180) + 'px';
 });
 
-// Message copy (delegated)
-msgs.addEventListener('click', function(e) {
+// Message copy (delegated to stable wrapper)
+msgsWrapper.addEventListener('click', function(e) {
   if (!e.target.classList.contains('msg-copy')) return;
   var msg = e.target.closest('.msg-agent');
   if (!msg) return;
@@ -69,6 +80,7 @@ function toggleShortcuts() {
       + sc('?', 'Toggle shortcuts')
       + sc('Ctrl+B', 'Toggle sidebar')
       + sc('Ctrl+N', 'New session')
+      + sc('Ctrl+P', 'Pin/unpin session')
       + sc('Ctrl+F', 'Search messages')
       + sc('Esc', 'Cancel / close')
       + sc('Enter', 'Send message')

@@ -3,7 +3,7 @@
 "use strict";
 
 const $ = (s) => document.querySelector(s);
-const msgs = $('#messages');
+const msgsWrapper = $('#messages');
 const input = $('#input');
 const sendBtn = $('#send-btn');
 const cancelBtn = $('#cancel-btn');
@@ -21,6 +21,43 @@ let currentToolRow = null;
 let sessionTitle = '';
 let firstPrompt = '';
 window._loadingHistory = false;
+
+// --- Per-session DOM containers ---
+const MSG_CAP = 100;
+let msgs = null; // points to active .session-msgs div
+
+function ensureSessionContainer(sessionId) {
+  if (!sessionId) sessionId = '__default';
+  var el = msgsWrapper.querySelector('.session-msgs[data-session-id="' + sessionId + '"]');
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'session-msgs';
+    el.dataset.sessionId = sessionId;
+    msgsWrapper.appendChild(el);
+  }
+  return el;
+}
+
+function switchContainer(sessionId) {
+  msgsWrapper.querySelectorAll('.session-msgs.active').forEach(function(c) {
+    c.classList.remove('active');
+  });
+  var target = ensureSessionContainer(sessionId);
+  target.classList.add('active');
+  msgs = target;
+  return target;
+}
+
+function trimMessages() {
+  if (!msgs) return;
+  while (msgs.children.length > MSG_CAP) {
+    msgs.removeChild(msgs.firstChild);
+  }
+}
+
+// Init default container
+msgs = ensureSessionContainer('__default');
+msgs.classList.add('active');
 
 // Context meter update
 function updateCtxMeter(pct) {

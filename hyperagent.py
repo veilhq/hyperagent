@@ -46,6 +46,40 @@ def _log(msg):
 
 
 # ---------------------------------------------------------------------------
+# Thread-safe preferences I/O
+# ---------------------------------------------------------------------------
+
+_prefs_lock = threading.Lock()
+
+
+def _load_prefs():
+    with _prefs_lock:
+        if PREFS_FILE.exists():
+            try:
+                return json.loads(PREFS_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        return {}
+
+
+def _save_prefs(prefs):
+    with _prefs_lock:
+        PREFS_FILE.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
+
+
+def _save_session_id(sid):
+    prefs = _load_prefs()
+    prefs["sessionId"] = sid
+    _save_prefs(prefs)
+
+
+def _clear_session_id():
+    prefs = _load_prefs()
+    prefs.pop("sessionId", None)
+    _save_prefs(prefs)
+
+
+# ---------------------------------------------------------------------------
 # Auth helpers
 # ---------------------------------------------------------------------------
 
@@ -131,21 +165,22 @@ def _do_login_visible():
 # ---------------------------------------------------------------------------
 
 class ACPClient:
-    def __init__(self):
+    def __init__(self, session_id=None, window=None):
         self._process = None
         self._socket = None
         self._sockfile = None
-        self._window = None
+        self._window = window
         self._state = "stopped"  # stopped | starting | ready | prompting
         self._id_counter = 0
         self._pending = {}  # id -> callback
-        self._session_id = None
-        self._owned_sessions = set()  # all session IDs created by this process
+        self._session_id = session_id
+        self._owned_sessions = set()  # session IDs created by this instance
         self._lock = threading.Lock()
         self._last_push = 0
         self._server_sock = None
         self._last_metadata = None
         self._active_prompt_id = None
+        self._on_session_assigned = None  # callback(session_id) for registry
 
     def set_window(self, window):
         self._window = window
@@ -227,6 +262,7 @@ class ACPClient:
 
     def stop(self):
         self._state = "stopped"
+        self._owned_sessions.clear()
         try:
             if self._socket:
                 self._socket.close()
@@ -312,8 +348,10 @@ class ACPClient:
         if isinstance(result, dict) and "sessionId" in result:
             self._session_id = result["sessionId"]
             self._owned_sessions.add(self._session_id)
-            self._save_session_id(self._session_id)
+            _save_session_id(self._session_id)
             self._state = "ready"
+            if self._on_session_assigned:
+                self._on_session_assigned(self._session_id)
         elif isinstance(result, dict) and "error" in result:
             # session/load failed — create new
             self._new_session()
@@ -336,7 +374,7 @@ class ACPClient:
                 if isinstance(result, dict) and "sessionId" in result:
                     self._session_id = result["sessionId"]
                     self._owned_sessions.add(self._session_id)
-                    self._save_session_id(self._session_id)
+                    _save_session_id(self._session_id)
                 elif isinstance(result, dict) and "error" in result:
                     self._state = "ready"
                     self._push_state()
@@ -367,6 +405,7 @@ class ACPClient:
         self._state = "ready"
         data = result or {}
         data["_elapsed"] = elapsed
+        data["_sessionId"] = self._session_id
         if hasattr(self, '_last_metadata') and self._last_metadata:
             data["_metadata"] = self._last_metadata
             self._last_metadata = None
@@ -382,14 +421,14 @@ class ACPClient:
             self._active_prompt_id = None
             self._request("session/cancel", {"sessionId": self._session_id})
             self._state = "ready"
-            self._push_js("__acpTurnEnd", {"_cancelled": True})
+            self._push_js("__acpTurnEnd", {"_cancelled": True, "_sessionId": self._session_id})
             self._push_state()
 
     def new_session(self):
         if self._state not in ("ready",):
             return
         self._session_id = None
-        self._clear_session_id()
+        _clear_session_id()
         self._state = "ready"
         self._push_state()
         self._push_js("__acpNewSession", {})
@@ -444,6 +483,7 @@ class ACPClient:
             su_type = update.get("sessionUpdate", "unknown")
             if su_type != "agent_message_chunk":
                 _log(f"session_update: type={su_type} id={update.get('toolCallId','')[:20]} title={update.get('title','')}")
+            update["_sessionId"] = self._session_id
             self._push_js_throttled("__acpUpdate", update)
         elif method == "_kiro.dev/metadata":
             params = msg.get("params", {})
@@ -496,33 +536,11 @@ class ACPClient:
         self._push_js(fn_name, data)
 
     def _push_state(self):
-        self._push_js("__acpStateChange", {"state": self._state})
+        self._push_js("__acpStateChange", {"state": self._state, "_sessionId": self._session_id})
 
     # --- Session persistence ---
 
-    def _load_prefs(self):
-        if PREFS_FILE.exists():
-            try:
-                return json.loads(PREFS_FILE.read_text(encoding="utf-8"))
-            except Exception:
-                pass
-        return {}
-
-    def _save_prefs(self, prefs):
-        PREFS_FILE.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
-
-    def _load_session_id(self):
-        return self._load_prefs().get("sessionId")
-
-    def _save_session_id(self, sid):
-        prefs = self._load_prefs()
-        prefs["sessionId"] = sid
-        self._save_prefs(prefs)
-
-    def _clear_session_id(self):
-        prefs = self._load_prefs()
-        prefs.pop("sessionId", None)
-        self._save_prefs(prefs)
+    # Session persistence delegated to module-level _load_prefs / _save_prefs
 
 
 # ---------------------------------------------------------------------------
@@ -530,53 +548,51 @@ class ACPClient:
 # ---------------------------------------------------------------------------
 
 class HyperagentAPI:
-    def __init__(self, acp_client):
-        self._acp = acp_client
+    MAX_LIVE_SESSIONS = 4
+
+    def __init__(self, initial_client):
+        self._clients = {}  # session_id -> ACPClient
+        self._active_session_id = None
+        self._window = None
+        # Keep a reference to the initial client for bootstrapping
+        self._boot_client = initial_client
+
+    @property
+    def _acp(self):
+        """Active ACPClient — backwards-compatible accessor."""
+        if self._active_session_id and self._active_session_id in self._clients:
+            return self._clients[self._active_session_id]
+        return self._boot_client
+
+    def _register_client(self, session_id, client):
+        """Add a client to the registry."""
+        self._clients[session_id] = client
+
+    def _unregister_client(self, session_id):
+        """Remove a client from the registry and stop it."""
+        client = self._clients.pop(session_id, None)
+        if client:
+            client.stop()
+
+    def _live_count(self):
+        """Number of live (non-stopped) clients."""
+        return sum(1 for c in self._clients.values() if c._state != "stopped")
 
     def send_prompt(self, text):
         if text and text.strip():
             threading.Thread(target=self._acp.prompt, args=(text.strip(),), daemon=True).start()
 
-    def generate_title(self, user_message):
-        """Generate a short session title from the user's first message."""
-        def _run():
-            try:
-                # Simple heuristic: use first sentence/line, cleaned up
-                text = user_message.strip()
-                # Take first line or first sentence
-                for sep in ['\n', '. ', '? ', '! ']:
-                    if sep in text:
-                        text = text[:text.index(sep)]
-                        break
-                # Remove common filler prefixes
-                for prefix in ['can you ', 'could you ', 'please ', 'i want to ', 'i need to ', "let's ", 'help me ']:
-                    if text.lower().startswith(prefix):
-                        text = text[len(prefix):]
-                        break
-                # Capitalize and truncate
-                title = text[:40].strip()
-                if len(user_message) > 40:
-                    title = title.rstrip('.!?, ') + '...'
-                if title:
-                    title = title[0].upper() + title[1:]
-                else:
-                    title = user_message[:30]
-
-                self._acp._push_js("__acpSessionTitle", {"title": title})
-                # Persist title for sidebar
-                if self._acp._session_id:
-                    prefs = self._acp._load_prefs()
-                    titles = prefs.get("sessionTitles", {})
-                    titles[self._acp._session_id] = title
-                    prefs["sessionTitles"] = titles
-                    self._acp._save_prefs(prefs)
-            except Exception as e:
-                _log(f"generate_title error: {e}")
-                fallback = user_message[:30].strip()
-                if len(user_message) > 30:
-                    fallback += '...'
-                self._acp._push_js("__acpSessionTitle", {"title": fallback})
-        threading.Thread(target=_run, daemon=True).start()
+    def rename_session(self, session_id, name):
+        """Rename a session — persist custom name to preferences."""
+        name = (name or "").strip()[:50]
+        if not name:
+            return False
+        prefs = _load_prefs()
+        titles = prefs.get("sessionTitles", {})
+        titles[session_id] = name
+        prefs["sessionTitles"] = titles
+        _save_prefs(prefs)
+        return True
 
     def cancel(self):
         self._acp.cancel()
@@ -586,6 +602,59 @@ class HyperagentAPI:
 
     def reconnect(self):
         threading.Thread(target=self._acp.start, daemon=True).start()
+
+    def pin_session(self, session_id):
+        """Pin a session — keep its ACPClient alive in the background."""
+        if self._live_count() >= self.MAX_LIVE_SESSIONS:
+            self._acp._push_js("__acpError", {"error": f"Max {self.MAX_LIVE_SESSIONS} live sessions reached"})
+            return False
+        # If the session already has a live client, just mark as pinned in prefs
+        prefs = _load_prefs()
+        pinned = set(prefs.get("pinnedSessions", []))
+        pinned.add(session_id)
+        prefs["pinnedSessions"] = list(pinned)
+        _save_prefs(prefs)
+        return True
+
+    def unpin_session(self, session_id):
+        """Unpin a session — tear down its subprocess if it's not the active session."""
+        prefs = _load_prefs()
+        pinned = set(prefs.get("pinnedSessions", []))
+        pinned.discard(session_id)
+        prefs["pinnedSessions"] = list(pinned)
+        _save_prefs(prefs)
+        # Tear down if not the active session
+        if session_id != self._active_session_id:
+            self._unregister_client(session_id)
+        return True
+
+    def switch_session(self, session_id):
+        """Switch active session. Instant for pinned (live), teardown/reload for cold."""
+        threading.Thread(
+            target=self._switch_session_async, args=(session_id,), daemon=True
+        ).start()
+
+    def _switch_session_async(self, session_id):
+        """Internal: handle session switch logic."""
+        prefs = _load_prefs()
+        pinned = set(prefs.get("pinnedSessions", []))
+
+        # If target has a live client in registry — instant swap
+        if session_id in self._clients and self._clients[session_id]._state != "stopped":
+            old_id = self._active_session_id
+            self._active_session_id = session_id
+            _save_session_id(session_id)
+            self._acp._push_js("__acpSessionSwitched", {"sessionId": session_id, "instant": True})
+            self._acp._push_state()
+            return
+
+        # Cold switch — tear down current if not pinned
+        if self._active_session_id and self._active_session_id not in pinned:
+            self._unregister_client(self._active_session_id)
+
+        # Load via existing load_session path
+        self._active_session_id = session_id
+        self._load_session_async(session_id)
 
     def get_state(self):
         return self._acp.state
@@ -674,7 +743,7 @@ class HyperagentAPI:
             if pid == 0:
                 return False
             # Don't mark our own kiro-cli's sessions as locked
-            if pid == self._get_own_kiro_pid():
+            if pid in self._get_own_kiro_pids():
                 return False
             import ctypes
             kernel32 = ctypes.windll.kernel32
@@ -687,23 +756,31 @@ class HyperagentAPI:
         except Exception:
             return False
 
-    def _get_own_kiro_pid(self):
-        """Get the PID of our kiro-cli process from any owned session lock."""
+    def _get_own_kiro_pids(self):
+        """Get PIDs of all kiro-cli processes owned by any live client in the registry."""
+        pids = set()
         try:
-            sessions_to_check = self._acp._owned_sessions.copy()
-            if self._acp._session_id:
-                sessions_to_check.add(self._acp._session_id)
             sessions_dir = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "sessions" / "cli"
+            # Collect owned sessions from all live clients
+            sessions_to_check = set()
+            for client in self._clients.values():
+                sessions_to_check.update(client._owned_sessions)
+                if client._session_id:
+                    sessions_to_check.add(client._session_id)
+            # Also check boot client
+            sessions_to_check.update(self._boot_client._owned_sessions)
+            if self._boot_client._session_id:
+                sessions_to_check.add(self._boot_client._session_id)
             for sid in sessions_to_check:
                 lock_file = sessions_dir / f"{sid}.lock"
                 if lock_file.exists():
                     data = json.loads(lock_file.read_text(encoding="utf-8"))
                     pid = int(data.get("pid", 0))
                     if pid:
-                        return pid
+                        pids.add(pid)
         except Exception:
             pass
-        return None
+        return pids
 
     def list_sessions(self):
         """List sessions by reading metadata directly from the filesystem."""
@@ -750,12 +827,19 @@ class HyperagentAPI:
             sessions.sort(key=lambda s: s.get("_updated", ""), reverse=True)
             for s in sessions:
                 del s["_updated"]
-            # Override with AI-generated titles
-            saved_titles = self._acp._load_prefs().get("sessionTitles", {})
+            # Override with AI-generated titles and add pin/state info
+            prefs = _load_prefs()
+            saved_titles = prefs.get("sessionTitles", {})
+            pinned_ids = set(prefs.get("pinnedSessions", []))
             for s in sessions:
                 if s["id"] in saved_titles:
                     s["title"] = saved_titles[s["id"]]
-            return {"sessions": sessions, "active": self._acp._session_id}
+                s["pinned"] = s["id"] in pinned_ids
+                # Check if session has a live client with state info
+                client = self._clients.get(s["id"])
+                s["processing"] = bool(client and client._state == "prompting")
+                s["completed"] = False  # set by frontend via indicator updates
+            return {"sessions": sessions, "active": self._active_session_id or self._acp._session_id}
         except Exception as e:
             _log(f"list_sessions error: {e}")
             return {"sessions": [], "active": None}
@@ -795,8 +879,9 @@ class HyperagentAPI:
         process holds an advisory lock on the session store, causing the
         separate kiro-cli delete command to silently fail.
         """
-        if session_id == self._acp._session_id:
-            return False  # Don't delete the active session
+        # Reject deletion of any session with a live client (active or pinned)
+        if session_id in self._clients and self._clients[session_id]._state != "stopped":
+            return False
         try:
             sessions_dir = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "sessions" / "cli"
             # Remove all files matching the session ID (*.json, *.jsonl, *.lock, *.history)
@@ -874,7 +959,10 @@ class HyperagentAPI:
                 self._acp._push_js("__acpError", {"error": f"Failed to load session"})
             else:
                 self._acp._session_id = session_id
-                self._acp._save_session_id(session_id)
+                _save_session_id(session_id)
+                # Register client under the loaded session ID
+                self._register_client(session_id, self._acp)
+                self._active_session_id = session_id
                 # Safe to delete throwaway now that session/load succeeded
                 if throwaway_to_clean[0]:
                     self._delete_session_files(throwaway_to_clean[0])
@@ -972,6 +1060,12 @@ def main():
     acp = ACPClient()
     api = HyperagentAPI(acp)
 
+    # When boot client gets a session, register it in the multi-client registry
+    def _on_boot_session(session_id):
+        api._register_client(session_id, acp)
+        api._active_session_id = session_id
+    acp._on_session_assigned = _on_boot_session
+
     icon_path = str(ICON_FILE) if ICON_FILE.exists() else None
 
     # Spawn ACP subprocess and start reader BEFORE webview to avoid pipe issues
@@ -991,12 +1085,16 @@ def main():
         time.sleep(1)
         _apply_window_chrome("Hyperagent", str(ICON_FILE))
         acp.set_window(window)
+        api._window = window
         _log("on_start: window ready, connecting protocol")
         acp.connect()
         # Start theme file watcher
         _start_theme_watcher(window, api)
 
     webview.start(on_start, icon=icon_path, debug=False)
+    # Stop all live clients on exit
+    for client in list(api._clients.values()):
+        client.stop()
     acp.stop()
 
 

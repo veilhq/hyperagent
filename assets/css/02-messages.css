@@ -2,14 +2,23 @@
 
 #messages {
   flex: 1;
+  overflow: hidden;
+  display: flex;
+  position: relative;
+}
+
+.session-msgs {
+  position: absolute;
+  inset: 0;
   overflow-y: auto;
   padding: 1.25rem 1.5rem;
-  display: flex;
+  display: none;
   flex-direction: column;
   gap: 0.3rem;
 }
+.session-msgs.active { display: flex; }
 
-#messages.no-animate .msg { animation: none; }
+.session-msgs.no-animate .msg { animation: none; }
 
 /* ---- Gap rhythm: more space at turn boundaries ---- */
 .msg-user { margin-top: 1rem; }

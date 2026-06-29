@@ -102,3 +102,103 @@
   color: var(--warm);
   margin-left: 0.4rem;
 }
+
+/* --- Pin indicator (left border) --- */
+.session-item.pinned { border-left-color: var(--accent); }
+
+/* --- More button (…) --- */
+.session-more-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0 0.2rem;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease), color 0.15s var(--ease);
+}
+.session-item:hover .session-more-btn { opacity: 1; }
+.session-more-btn:hover { color: var(--accent); }
+
+/* --- Session dot indicators --- */
+.session-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  display: inline-block;
+  margin: 0 0.3rem;
+  flex-shrink: 0;
+}
+.session-dot.pulsing {
+  animation: dotPulse 1.2s ease-in-out infinite;
+}
+.session-dot.done {
+  background: var(--comp);
+  width: auto;
+  height: auto;
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: var(--comp);
+  padding: 0 0.15rem;
+}
+@keyframes dotPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* --- Context menu --- */
+.session-ctx-menu {
+  position: fixed;
+  z-index: 9999;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  padding: 0.3rem 0;
+  min-width: 110px;
+}
+.session-ctx-item {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 0.65rem;
+  padding: 0.4rem 0.8rem;
+  text-align: left;
+  cursor: pointer;
+}
+.session-ctx-item:hover { background: var(--accent-glow); color: var(--accent); }
+.session-ctx-item.disabled { color: var(--text-dim); cursor: default; opacity: 0.4; }
+.session-ctx-item.disabled:hover { background: none; color: var(--text-dim); }
+
+/* --- Rename input --- */
+.session-rename-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  color: var(--text-bright);
+  font-family: inherit;
+  font-size: 0.7rem;
+  padding: 0.15rem 0.3rem;
+  outline: none;
+}
+
+/* --- Toast notification --- */
+.ha-toast {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  color: var(--text);
+  font-size: 0.65rem;
+  padding: 0.6rem 1rem;
+  z-index: 9998;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.3s var(--ease), transform 0.3s var(--ease);
+  max-width: 280px;
+}
+.ha-toast.visible { opacity: 1; transform: translateY(0); }
+.ha-toast-title { font-weight: 700; color: var(--accent); margin-bottom: 0.2rem; }

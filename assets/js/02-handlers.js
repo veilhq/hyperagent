@@ -1,6 +1,24 @@
 /* ===== Hyperagent: ACP Handlers ===== */
 
+// Active session tracking for event routing
+var activeSessionId = null;
+window._setActiveSession = function(id) { activeSessionId = id; };
+window._getActiveSession = function() { return activeSessionId; };
+
 function scrollBottom() { msgs.scrollTo({ top: msgs.scrollHeight, behavior: 'smooth' }); }
+
+function showToast(title, body) {
+  var t = document.createElement('div');
+  t.className = 'ha-toast';
+  t.innerHTML = '<div class="ha-toast-title">' + title + '</div>' + (body ? '<div>' + body + '</div>' : '');
+  document.body.appendChild(t);
+  requestAnimationFrame(function() { t.classList.add('visible'); });
+  setTimeout(function() {
+    t.classList.remove('visible');
+    setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 400);
+  }, 4000);
+}
+window.showToast = showToast;
 
 function msgTime() {
   var d = new Date();
@@ -104,6 +122,12 @@ window.__acpToolHint = function(data) {
 
 window.__acpUpdate = function(update) {
   if (state === 'starting' || state !== 'prompting' || window._loadingHistory) return;
+  // Route: if event is for a background session, update sidebar indicator only
+  var sid = update._sessionId;
+  if (sid && activeSessionId && sid !== activeSessionId) {
+    if (window._updateSessionIndicator) window._updateSessionIndicator(sid, 'processing');
+    return;
+  }
   switch (update.sessionUpdate) {
     case 'agent_message_chunk':
       var ti = document.getElementById('typing-indicator');
@@ -230,6 +254,16 @@ window.__acpUpdate = function(update) {
 };
 
 window.__acpTurnEnd = function(data) {
+  // Route: background session completed — show toast + sidebar indicator
+  var sid = data._sessionId;
+  if (sid && activeSessionId && sid !== activeSessionId) {
+    if (window._updateSessionIndicator) window._updateSessionIndicator(sid, 'done');
+    var el = document.querySelector('[data-session-id="' + sid + '"] .session-item-title');
+    var name = el ? el.textContent : 'Background session';
+    showToast('Response completed', name);
+    return;
+  }
+
   // Remove streaming cursors
   msgs.querySelectorAll('.streaming-cursor').forEach(function(el) { el.remove(); });
 
@@ -247,9 +281,14 @@ window.__acpTurnEnd = function(data) {
     return;
   }
 
-  // Request AI-generated title after first turn
+  // Auto-title from first prompt (persists via rename_session)
   if (firstPrompt && !sessionTitle) {
-    pywebview.api.generate_title(firstPrompt);
+    var autoTitle = firstPrompt.split('\n')[0].slice(0, 40).trim();
+    if (firstPrompt.length > 40) autoTitle = autoTitle.replace(/[.!?, ]+$/, '') + '...';
+    sessionTitle = autoTitle;
+    var titleEl = document.getElementById('session-title');
+    if (titleEl && autoTitle) { titleEl.textContent = autoTitle; titleEl.classList.add('has-title'); }
+    if (activeSessionId) pywebview.api.rename_session(activeSessionId, autoTitle);
     firstPrompt = '';
   }
 
@@ -281,9 +320,21 @@ window.__acpTurnEnd = function(data) {
   currentMsgText = '';
   toolCards = {};
   currentToolRow = null;
+  trimMessages();
 };
 
 window.__acpStateChange = function(data) {
+  // Route: background session state changes update sidebar only
+  var sid = data._sessionId;
+  if (sid && activeSessionId && sid !== activeSessionId) {
+    if (data.state === 'prompting' && window._updateSessionIndicator) {
+      window._updateSessionIndicator(sid, 'processing');
+    } else if (data.state === 'ready' && window._updateSessionIndicator) {
+      // Don't clear — let __acpTurnEnd set 'done' indicator
+    }
+    return;
+  }
+
   state = data.state;
   statusEl.textContent = state;
   statusEl.className = 'topbar-status ' + state;
@@ -378,6 +429,12 @@ window.__acpAuthComplete = function() {
 };
 
 window.__acpNewSession = function() {
+  // Create a fresh container (old one stays for pinned sessions)
+  activeSessionId = null;
+  var fresh = ensureSessionContainer('__new_' + Date.now());
+  msgsWrapper.querySelectorAll('.session-msgs.active').forEach(function(c) { c.classList.remove('active'); });
+  fresh.classList.add('active');
+  msgs = fresh;
   msgs.innerHTML = '';
   currentMsgEl = null;
   currentMsgText = '';
@@ -392,6 +449,16 @@ window.__acpNewSession = function() {
   if (window.showWelcome) showWelcome();
 };
 
+window.__acpSessionSwitched = function(data) {
+  if (!data || !data.sessionId) return;
+  activeSessionId = data.sessionId;
+  // Swap DOM container — show the pinned session's preserved messages
+  switchContainer(data.sessionId);
+  msgs.scrollTop = msgs.scrollHeight;
+  // Clear 'done' indicator on the session we just switched to
+  if (window._updateSessionIndicator) window._updateSessionIndicator(data.sessionId, 'clear');
+};
+
 window.__acpSessionTitle = function(data) {
   sessionTitle = data.title || '';
   var titleEl = document.getElementById('session-title');
@@ -402,6 +469,10 @@ window.__acpSessionTitle = function(data) {
 };
 
 window.__acpSessionLoaded = function(data) {
+  if (data && data.sessionId) {
+    activeSessionId = data.sessionId;
+    switchContainer(data.sessionId);
+  }
   if (window._loadingHistoryTimeout) { clearTimeout(window._loadingHistoryTimeout); window._loadingHistoryTimeout = null; }
   window._loadingHistory = true;
   msgs.classList.add('no-animate');
