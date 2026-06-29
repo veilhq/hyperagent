@@ -163,7 +163,7 @@ body {
 
 /* ---- Responsive: narrow window ---- */
 @media (max-width: 600px) {
-  .session-msgs { padding: 0.75rem; }
+  #messages { padding: 0.75rem; }
   .msg { max-width: 98%; font-size: 0.75rem; }
   .msg-user { max-width: 90%; }
   .input-area { padding: 0.6rem 0.75rem; }
@@ -177,5 +177,5 @@ body {
 @media (min-width: 1200px) {
   .msg { max-width: clamp(400px, 70%, 900px); }
   .msg-user { max-width: clamp(200px, 55%, 600px); }
-  .session-msgs { padding: 1.5rem 3rem; }
+  #messages { padding: 1.5rem 3rem; }
 }
