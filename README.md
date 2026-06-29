@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/hyperagent-box.png" alt="Hyperagent" width="200">
+  <img src="assets/hyperagent.svg" alt="Hyperagent" width="200">
 </p>
 
 <h1 align="center">Hyperagent</h1>
