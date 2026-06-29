@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Hyperagent</title>
+<style>
+{{CSS}}
+</style>
+</head>
+<body>
+<div id="ha-splash" class="ha-splash">
+  <div class="ha-splash-flag">
+    <svg class="ha-splash-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108.28 108.28" fill="currentColor"><path d="M107.94,71.76l-35.71-35.71-.04-.04h-34.8c-.63,0-1.14-.51-1.14-1.14V1.14c0-.63-.51-1.14-1.14-1.14H1.14C.51,0,0,.51,0,1.14v34.58c0,.3.12.59.33.8l33.56,33.56c.72.72.21,1.94-.8,1.94H1.14c-.63,0-1.14.51-1.14,1.14v33.98c0,.63.51,1.14,1.14,1.14h33.98c.63,0,1.14-.51,1.14-1.14v-33.73c0-.63.51-1.14,1.14-1.14h33.48c.63,0,1.14.51,1.14,1.14v33.73c0,.63.51,1.14,1.14,1.14h33.98c.63,0,1.14-.51,1.14-1.14v-34.58c0-.3-.12-.59-.33-.8Z"/><path d="M72.67,18.01l7.88,3.11c2.6,1.03,4.66,3.08,5.68,5.68l3.11,7.87c.18.45.82.45,1,0l3.11-7.87c1.03-2.6,3.08-4.66,5.68-5.68l7.88-3.11c.45-.18.45-.82,0-1l-7.88-3.11c-2.6-1.03-4.66-3.08-5.68-5.68l-3.11-7.87c-.18-.45-.82-.45-1,0l-3.11,7.87c-1.03,2.6-3.08,4.66-5.68,5.68l-7.88,3.11c-.45.18-.45.82,0,1Z"/></svg>
+  </div>
+  <div class="ha-splash-blink"></div>
+</div>
+<div id="app">
+  <div class="status-cluster">
+    <span class="topbar-status">connecting</span>
+    <span class="status-title" id="session-title"></span>
+    <div class="ctx-meter" id="ctx-meter" title="Context window usage">
+      <span class="ctx-meter-label" id="ctx-label"></span>
+      <div class="ctx-meter-bar"><div class="ctx-meter-fill" id="ctx-fill"></div></div>
+    </div>
+  </div>
+  <div class="error-bar"></div>
+  <div class="main-layout">
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">Sessions</div>
+      <div id="session-list" class="session-list"></div>
+    </aside>
+    <div id="messages"></div>
+  </div>
+  <div id="thinking-bar" class="thinking-bar"></div>
+  <div class="input-area">
+    <button class="input-icon-btn" onclick="toggleSidebar()" title="Sessions (Ctrl+B)">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><rect x="3" y="3" width="18" height="18"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+    </button>
+    <button class="input-icon-btn" onclick="newSession()" title="New Chat (Ctrl+N)">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <div class="input-wrap">
+      <textarea id="input" rows="1" placeholder="Message Hyperagent..."></textarea>
+    </div>
+    <button id="send-btn">Send</button>
+    <button id="cancel-btn">Stop</button>
+  </div>
+</div>
+<script>
+{{JS}}
+</script>
+</body>
+</html>

@@ -1,0 +1,134 @@
+/* ===== Hyperagent: Tool Cards ===== */
+
+.tool-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-self: flex-start;
+  padding: 0.3rem 0;
+}
+.tool-card {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  cursor: pointer;
+  font-size: 0.55rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  animation: fadeSlideIn 0.15s var(--ease);
+  transition: opacity 0.2s var(--ease), transform 0.15s var(--ease), width 0.2s var(--ease), padding 0.2s var(--ease);
+}
+.tool-card.show-label {
+  width: auto;
+  padding: 0.2rem 0.4rem;
+}
+.tool-card:hover {
+  transform: translateY(-1px);
+  opacity: 0.85;
+}
+.tool-card-icon {
+  font-size: 0.6rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tool-card-label {
+  white-space: nowrap;
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-width 0.25s var(--ease), opacity 0.2s var(--ease);
+}
+.tool-card.show-label .tool-card-label {
+  max-width: 12rem;
+  opacity: 1;
+  margin-left: 0.25rem;
+}
+
+/* State badge colors — by MCP group */
+.tool-card.running.tc-core { background: var(--warm); color: var(--bg); }
+.tool-card.running.tc-web { background: var(--cool); color: var(--bg); }
+.tool-card.running.tc-aws { background: #ff9900; color: var(--bg); }
+.tool-card.running.tc-devops { background: #0078d4; color: var(--bg); }
+.tool-card.running.tc-hyper { background: var(--accent); color: var(--bg); }
+.tool-card.running.tc-knowledge { background: var(--comp); color: var(--bg); }
+.tool-card.completed {
+  opacity: 0.6;
+  animation: toolFlash 0.4s ease-out;
+}
+@keyframes toolFlash {
+  0% { opacity: 0; transform: scale(0.8); }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; transform: scale(1); }
+}
+.tool-card.completed.tc-core { background: var(--warm); color: var(--bg); }
+.tool-card.completed.tc-web { background: var(--cool); color: var(--bg); }
+.tool-card.completed.tc-aws { background: #ff9900; color: var(--bg); }
+.tool-card.completed.tc-devops { background: #0078d4; color: var(--bg); }
+.tool-card.completed.tc-hyper { background: var(--accent); color: var(--bg); }
+.tool-card.completed.tc-knowledge { background: var(--comp); color: var(--bg); }
+.tool-card.failed {
+  background: var(--bg-elevated);
+  color: var(--text-dim);
+  opacity: 0.5;
+}
+
+/* Long-running warning — pulsing badge */
+.tool-card.long-running {
+  animation: toolPulse 1.5s ease-in-out infinite;
+}
+@keyframes toolPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ---- Tool detail panel (expandable) ---- */
+.tool-detail {
+  display: none;
+  align-self: flex-start;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--accent-border);
+  padding: 0.4rem 0.6rem;
+  margin: 0.1rem 0;
+  font-size: 0.6rem;
+  line-height: 1.5;
+  max-width: clamp(300px, 85%, 800px);
+  overflow: hidden;
+  animation: fadeSlideIn 0.15s var(--ease);
+}
+.tool-detail.visible { display: block; }
+.tool-detail-header {
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.5rem;
+  margin-bottom: 0.2rem;
+}
+.tool-detail-body {
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+/* ---- Turn-end divider ---- */
+.turn-end {
+  align-self: flex-start;
+  font-size: 0.55rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  margin: 0.3rem 0 0.6rem;
+  opacity: 0;
+  animation: fadeSlideIn 0.3s var(--ease) forwards;
+}

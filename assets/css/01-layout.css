@@ -1,0 +1,103 @@
+/* ===== Hyperagent: Layout (app shell) ===== */
+
+#app { display: flex; flex-direction: column; height: 100%; opacity: 0; animation: appFadeIn 0.4s ease 0.3s forwards; }
+
+@keyframes appFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- Floating status cluster (top-right) ---- */
+.status-cluster {
+  position: fixed;
+  top: 0.5rem;
+  right: 0.75rem;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.topbar-status {
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--bg);
+  background: var(--text-dim);
+  padding: 0.15rem 0.4rem;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: background 0.25s var(--ease);
+}
+.topbar-status.ready { background: var(--accent); }
+.topbar-status.prompting { background: var(--warm); }
+.topbar-status.crashed { background: var(--comp); }
+
+.status-title {
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: var(--bg);
+  background: var(--text-dim);
+  padding: 0.15rem 0.4rem;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: none;
+}
+.status-title.has-title { display: inline-block; }
+
+/* Context usage meter */
+.ctx-meter {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  padding: 0.1rem 0.35rem;
+}
+.ctx-meter-label {
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.ctx-meter-bar {
+  width: 36px;
+  height: 3px;
+  background: var(--border);
+  position: relative;
+  overflow: hidden;
+}
+.ctx-meter-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.4s var(--ease), background 0.3s var(--ease);
+}
+.ctx-meter-fill.warn { background: var(--warm); }
+.ctx-meter-fill.critical { background: var(--comp); }
+
+/* Error bar */
+.error-bar {
+  max-height: 0;
+  overflow: hidden;
+  padding: 0 1.25rem;
+  background: rgba(255, 51, 51, 0.05);
+  border-bottom: 1px solid transparent;
+  color: var(--comp);
+  font-size: 0.68rem;
+  opacity: 0;
+  transition: max-height 0.25s var(--ease), opacity 0.25s var(--ease), padding 0.25s var(--ease), border-color 0.25s var(--ease);
+}
+.error-bar.visible {
+  max-height: 3rem;
+  opacity: 1;
+  padding: 0.5rem 1.25rem;
+  border-bottom-color: rgba(255, 51, 51, 0.3);
+}
+.error-bar a { color: var(--comp); text-decoration: underline; }
