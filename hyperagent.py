@@ -636,6 +636,9 @@ class HyperagentAPI:
 
     def _switch_session_async(self, session_id):
         """Internal: handle session switch logic."""
+        if session_id == self._active_session_id:
+            return
+
         prefs = _load_prefs()
         pinned = set(prefs.get("pinnedSessions", []))
 
@@ -644,9 +647,22 @@ class HyperagentAPI:
             old_id = self._active_session_id
             self._active_session_id = session_id
             _save_session_id(session_id)
-            self._acp._push_js("__acpSessionSwitched", {"sessionId": session_id, "instant": True})
-            self._acp._push_state()
+            target_state = self._clients[session_id]._state
+            self._acp._push_js("__acpSessionSwitched", {"sessionId": session_id, "instant": True, "state": target_state})
             return
+
+        # Current session is mid-prompt — protect it before switching
+        current_client = self._clients.get(self._active_session_id)
+        if current_client and current_client._state == "prompting":
+            if self._active_session_id not in pinned:
+                # Auto-pin so it continues processing in background
+                if self._live_count() < self.MAX_LIVE_SESSIONS:
+                    pinned.add(self._active_session_id)
+                    prefs["pinnedSessions"] = list(pinned)
+                    _save_prefs(prefs)
+                else:
+                    # At limit — cancel the prompt before tearing down
+                    current_client.cancel()
 
         # Cold switch — tear down current if not pinned
         if self._active_session_id and self._active_session_id not in pinned:
@@ -1091,7 +1107,7 @@ def main():
         # Start theme file watcher
         _start_theme_watcher(window, api)
 
-    webview.start(on_start, icon=icon_path, debug=False)
+    webview.start(on_start, icon=icon_path, debug=True)
     # Stop all live clients on exit
     for client in list(api._clients.values()):
         client.stop()

@@ -2,6 +2,13 @@
 (function() {
 "use strict";
 
+// Global error catcher — shows JS errors in the error bar
+window.onerror = function(msg, url, line, col, err) {
+  var bar = document.querySelector('.error-bar');
+  if (bar) { bar.textContent = 'JS: ' + msg + ' (line ' + line + ')'; bar.classList.add('visible'); }
+  console.error('JS ERROR:', msg, 'line:', line, err);
+};
+
 const $ = (s) => document.querySelector(s);
 const msgsWrapper = $('#messages');
 const input = $('#input');

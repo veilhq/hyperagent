@@ -121,13 +121,13 @@ window.__acpToolHint = function(data) {
 // --- ACP handlers (called from Python via evaluate_js) ---
 
 window.__acpUpdate = function(update) {
-  if (state === 'starting' || state !== 'prompting' || window._loadingHistory) return;
   // Route: if event is for a background session, update sidebar indicator only
   var sid = update._sessionId;
   if (sid && activeSessionId && sid !== activeSessionId) {
     if (window._updateSessionIndicator) window._updateSessionIndicator(sid, 'processing');
     return;
   }
+  if (state === 'starting' || state !== 'prompting' || window._loadingHistory) return;
   switch (update.sessionUpdate) {
     case 'agent_message_chunk':
       var ti = document.getElementById('typing-indicator');
@@ -457,6 +457,15 @@ window.__acpSessionSwitched = function(data) {
   msgs.scrollTop = msgs.scrollHeight;
   // Clear 'done' indicator on the session we just switched to
   if (window._updateSessionIndicator) window._updateSessionIndicator(data.sessionId, 'clear');
+  // Update global state to reflect the target session's actual state
+  if (data.state) {
+    state = data.state;
+    statusEl.textContent = state;
+    statusEl.className = 'topbar-status ' + state;
+    sendBtn.disabled = state !== 'ready';
+    app.classList.toggle('prompting', state === 'prompting');
+    if (state === 'prompting') { showThinking(); } else { hideThinking(); }
+  }
 };
 
 window.__acpSessionTitle = function(data) {

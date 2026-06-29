@@ -168,7 +168,7 @@ function loadSession(id) {
   window._loadingHistoryTimeout = setTimeout(function() { window._loadingHistory = false; }, 10000);
   if (window._setActiveSession) window._setActiveSession(id);
   if (window._updateSessionIndicator) window._updateSessionIndicator(id, 'clear');
-  pywebview.api.load_session(id);
+  pywebview.api.switch_session(id);
   sessionList.querySelectorAll('.session-item').forEach(function(el) {
     el.classList.toggle('active', el.dataset.sessionId === id);
   });
