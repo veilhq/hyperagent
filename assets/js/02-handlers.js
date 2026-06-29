@@ -2,6 +2,13 @@
 
 function scrollBottom() { msgs.scrollTo({ top: msgs.scrollHeight, behavior: 'smooth' }); }
 
+function collapseToolRow() {
+  if (currentToolRow) {
+    var cards = currentToolRow.querySelectorAll('.tool-card.show-label');
+    for (var i = 0; i < cards.length; i++) cards[i].classList.remove('show-label');
+  }
+}
+
 function msgTime() {
   var d = new Date();
   return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
@@ -108,6 +115,7 @@ window.__acpUpdate = function(update) {
     case 'agent_message_chunk':
       var ti = document.getElementById('typing-indicator');
       if (ti) ti.remove();
+      collapseToolRow();
       currentToolRow = null;
       ensureAgentMsg();
       currentMsgText += update.content.text;
@@ -140,7 +148,7 @@ window.__acpUpdate = function(update) {
       }
       var card = document.createElement('div');
       var toolName = toolNameMap[update.toolCallId] || update.title || update.toolCallId;
-      card.className = 'tool-card running tc-' + toolGroup(toolName);
+      card.className = 'tool-card running show-label tc-' + toolGroup(toolName);
       card.id = 'tool-' + update.toolCallId;
       var icon = toolIcon(toolName);
       var label = update.title || update.toolCallId;
@@ -224,6 +232,35 @@ window.__acpUpdate = function(update) {
         // Store output
         if (update.output) tc._toolData.output = update.output;
         if (update.result) tc._toolData.output = update.result;
+        // Auto-show error inline for failed tools
+        if (fail) {
+          var errText = update.output || update.result || update.error || '';
+          if (typeof errText === 'object') errText = errText.message || errText.error || JSON.stringify(errText);
+          if (errText) {
+            var errEl = document.createElement('div');
+            errEl.className = 'tool-error-inline';
+            var esc = String(errText).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            if (esc.length > 300) esc = esc.slice(0, 300) + '…';
+            errEl.textContent = esc;
+            // Insert after the tool-row containing this card
+            var row = tc.closest('.tool-row');
+            if (row && row.parentNode) {
+              row.parentNode.insertBefore(errEl, row.nextSibling);
+            } else {
+              msgs.appendChild(errEl);
+            }
+            scrollBottom();
+          }
+          // Flash the error bar briefly as a notification
+          var toolLabel = tc._toolData && tc._toolData.name ? tc._toolData.name : 'Tool';
+          errorBar.textContent = toolLabel + ' failed';
+          errorBar.classList.add('visible');
+          if (window._toolFailTimer) clearTimeout(window._toolFailTimer);
+          window._toolFailTimer = setTimeout(function() {
+            // Only dismiss if it's still showing our tool failure message
+            if (errorBar.textContent.indexOf('failed') > -1) errorBar.classList.remove('visible');
+          }, 3000);
+        }
       }
       break;
   }
@@ -232,6 +269,7 @@ window.__acpUpdate = function(update) {
 window.__acpTurnEnd = function(data) {
   // Remove streaming cursors
   msgs.querySelectorAll('.streaming-cursor').forEach(function(el) { el.remove(); });
+  collapseToolRow();
 
   // If cancelled, show short indicator instead of full stats
   if (data._cancelled) {

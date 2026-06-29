@@ -315,6 +315,10 @@ class ACPClient:
             self._save_session_id(self._session_id)
             self._state = "ready"
         elif isinstance(result, dict) and "error" in result:
+            err = result["error"]
+            err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+            _log(f"_on_session error, creating new: {err_msg}")
+            self._push_js("__acpError", {"error": f"Session load failed ({err_msg}), creating new session", "source": "jsonrpc"})
             # session/load failed — create new
             self._new_session()
             return
@@ -338,9 +342,11 @@ class ACPClient:
                     self._owned_sessions.add(self._session_id)
                     self._save_session_id(self._session_id)
                 elif isinstance(result, dict) and "error" in result:
+                    err = result["error"]
+                    err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
                     self._state = "ready"
                     self._push_state()
-                    self._push_js("__acpError", {"error": "Failed to create session"})
+                    self._push_js("__acpError", {"error": f"Session creation failed: {err_msg}", "source": "jsonrpc"})
                     return
                 # Now send the actual prompt
                 if self._session_id:
@@ -367,6 +373,11 @@ class ACPClient:
         self._state = "ready"
         data = result or {}
         data["_elapsed"] = elapsed
+        # Surface error details to frontend
+        if isinstance(result, dict) and "error" in result:
+            err = result["error"]
+            err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+            self._push_js("__acpError", {"error": f"Prompt failed: {err_msg}", "source": "jsonrpc"})
         if hasattr(self, '_last_metadata') and self._last_metadata:
             data["_metadata"] = self._last_metadata
             self._last_metadata = None
@@ -439,6 +450,11 @@ class ACPClient:
 
         # Notification (session/update)
         method = msg.get("method", "")
+        if method == "_bridge/stderr":
+            text = msg.get("params", {}).get("text", "")
+            _log(f"kiro-cli stderr: {text}")
+            self._push_js("__acpError", {"error": text, "source": "stderr"})
+            return
         if method == "session/update":
             update = msg.get("params", {}).get("update", {})
             su_type = update.get("sessionUpdate", "unknown")
@@ -870,8 +886,10 @@ class HyperagentAPI:
 
         def on_load_result(result):
             if isinstance(result, dict) and "error" in result:
+                err = result["error"]
+                err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
                 _log(f"sidebar load failed: {result}")
-                self._acp._push_js("__acpError", {"error": f"Failed to load session"})
+                self._acp._push_js("__acpError", {"error": f"Failed to load session: {err_msg}", "source": "jsonrpc"})
             else:
                 self._acp._session_id = session_id
                 self._acp._save_session_id(session_id)

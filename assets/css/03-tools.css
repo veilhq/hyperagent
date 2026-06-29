@@ -74,9 +74,37 @@
 .tool-card.completed.tc-hyper { background: var(--accent); color: var(--bg); }
 .tool-card.completed.tc-knowledge { background: var(--comp); color: var(--bg); }
 .tool-card.failed {
-  background: var(--bg-elevated);
-  color: var(--text-dim);
-  opacity: 0.5;
+  background: var(--comp);
+  color: var(--bg);
+  opacity: 0.85;
+  animation: toolFailShake 0.3s ease-out;
+}
+@keyframes toolFailShake {
+  0% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  50% { transform: translateX(2px); }
+  75% { transform: translateX(-1px); }
+  100% { transform: translateX(0); }
+}
+
+/* Inline error snippet shown below failed tool cards */
+.tool-error-inline {
+  display: block;
+  align-self: flex-start;
+  background: var(--bg-surface);
+  border: 1px solid var(--comp);
+  border-left: 2px solid var(--comp);
+  padding: 0.3rem 0.5rem;
+  margin: 0.1rem 0 0.2rem;
+  font-size: 0.55rem;
+  line-height: 1.4;
+  color: var(--comp);
+  max-width: clamp(300px, 85%, 800px);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 80px;
+  overflow-y: auto;
+  animation: fadeSlideIn 0.15s var(--ease);
 }
 
 /* Long-running warning — pulsing badge */

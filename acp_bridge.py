@@ -89,16 +89,27 @@ def main():
         proc.terminate()
         log("relay_stdin: process terminated")
 
-    # Drain stderr
-    def drain():
+    # Forward stderr to parent as JSON-RPC notifications
+    def relay_stderr():
         try:
-            while proc.poll() is None:
-                proc.stderr.read(4096)
-        except Exception:
-            pass
+            while True:
+                line = proc.stderr.readline()
+                if not line:
+                    break
+                text = line.decode("utf-8", errors="replace").rstrip()
+                if text:
+                    log(f"stderr: {text}")
+                    msg = json.dumps({"jsonrpc": "2.0", "method": "_bridge/stderr", "params": {"text": text}}) + "\n"
+                    try:
+                        sf.write(msg.encode())
+                        sf.flush()
+                    except Exception:
+                        pass
+        except Exception as e:
+            log(f"relay_stderr error: {e}")
 
     threading.Thread(target=relay_stdout, daemon=True).start()
-    threading.Thread(target=drain, daemon=True).start()
+    threading.Thread(target=relay_stderr, daemon=True).start()
     relay_stdin()  # blocks until socket closes
 
 
