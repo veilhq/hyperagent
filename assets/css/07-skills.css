@@ -1,0 +1,86 @@
+/* ===== Hyperagent: Skill Activation UI ===== */
+
+/* ---- Topbar skill strip ---- */
+.skill-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.skill-strip:not(:empty) {
+  padding-right: 0.3rem;
+  border-right: 1px solid var(--border);
+  margin-right: 0.1rem;
+}
+
+.skill-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.12rem 0.4rem;
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--cool);
+  border: 1px solid var(--cool);
+  animation: skillBadgeIn 0.25s var(--ease);
+  box-shadow: 0 0 4px var(--cool), inset 0 0 4px rgba(0, 204, 204, 0.05);
+}
+.skill-badge-icon {
+  font-size: 0.55rem;
+  line-height: 1;
+  animation: skillIconPulse 2.5s ease-in-out infinite;
+}
+
+@keyframes skillBadgeIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes skillIconPulse {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 0.3; }
+}
+
+/* ---- Inline skill card (message stream) ---- */
+.skill-card {
+  align-self: flex-start;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  margin: 0.2rem 0;
+  background: var(--bg-surface);
+  max-width: clamp(300px, 85%, 600px);
+  animation: skillCardIn 0.3s var(--ease);
+  box-shadow: 0 0 6px rgba(0, 204, 204, 0.08);
+}
+.skill-card-name {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--cool);
+  white-space: nowrap;
+  animation: skillTextGlow 2s ease-in-out 1;
+}
+.skill-card-desc {
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@keyframes skillCardIn {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes skillTextGlow {
+  0% { text-shadow: 0 0 6px var(--cool); }
+  50% { text-shadow: 0 0 12px var(--cool), 0 0 2px var(--cool); }
+  100% { text-shadow: none; }
+}

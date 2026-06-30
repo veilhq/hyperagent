@@ -107,6 +107,37 @@ window.__acpToolHint = function(data) {
   }
 };
 
+// --- Skill activation handler ---
+var activeSkills = {};
+
+function getSkillStrip() {
+  return document.getElementById('skill-strip');
+}
+
+window.__acpSkillActivation = function(data) {
+  var name = data.name || 'unknown';
+  var desc = data.description || '';
+  var strip = getSkillStrip();
+
+  // Topbar badge (deduplicate by name)
+  if (!activeSkills[name] && strip) {
+    var badge = document.createElement('span');
+    badge.className = 'skill-badge';
+    badge.innerHTML = '<span class="skill-badge-icon">&#9670;</span>' + name;
+    badge.title = desc;
+    strip.appendChild(badge);
+    activeSkills[name] = badge;
+  }
+
+  // Inline skill card in message stream
+  var card = document.createElement('div');
+  card.className = 'skill-card';
+  card.innerHTML = '<span class="skill-card-name">&#9670; ' + name + '</span>'
+    + (desc ? '<span class="skill-card-desc">' + desc + '</span>' : '');
+  msgs.appendChild(card);
+  scrollBottom();
+};
+
 // --- ACP handlers (called from Python via evaluate_js) ---
 
 window.__acpUpdate = function(update) {
@@ -271,6 +302,9 @@ window.__acpTurnEnd = function(data) {
   msgs.querySelectorAll('.streaming-cursor').forEach(function(el) { el.remove(); });
   collapseToolRow();
 
+  // Clear skill badges from topbar
+  // (Skills persist for the session — only clear on new session)
+
   // If cancelled, show short indicator instead of full stats
   if (data._cancelled) {
     var cdiv = document.createElement('div');
@@ -424,6 +458,9 @@ window.__acpNewSession = function() {
   currentToolRow = null;
   sessionTitle = '';
   firstPrompt = '';
+  var skillStripEl = getSkillStrip();
+  if (skillStripEl) skillStripEl.innerHTML = '';
+  activeSkills = {};
   var titleEl = document.getElementById('session-title');
   if (titleEl) { titleEl.textContent = ''; titleEl.classList.remove('has-title'); }
   updateCtxMeter(0);

@@ -31,6 +31,7 @@ HYPERAGENT_DIR = Path(__file__).parent.resolve()
 HYPERSPACE_ROOT = HYPERAGENT_DIR.parent
 PORTAL_ROOT = HYPERSPACE_ROOT.parent
 HYPERVISOR_DIR = HYPERSPACE_ROOT / ".hypervisor"
+SKILLS_DIR = PORTAL_ROOT / ".kiro" / "skills"
 PREFS_FILE = HYPERAGENT_DIR / "preferences.json"
 ICON_FILE = HYPERVISOR_DIR / "assets" / "ha-box.ico"
 
@@ -43,6 +44,45 @@ _LOG_FILE = HYPERAGENT_DIR / "debug.log"
 def _log(msg):
     with open(_LOG_FILE, "a", encoding="utf-8") as f:
         f.write(f"{time.time():.3f} {msg}\n")
+
+
+# ---------------------------------------------------------------------------
+# Skill metadata cache
+# ---------------------------------------------------------------------------
+
+def _load_skill_metadata():
+    """Scan .kiro/skills/*/SKILL.md and extract name + description from frontmatter."""
+    skills = {}
+    if not SKILLS_DIR.exists():
+        return skills
+    for skill_dir in SKILLS_DIR.iterdir():
+        if not skill_dir.is_dir():
+            continue
+        skill_file = skill_dir / "SKILL.md"
+        if not skill_file.exists():
+            continue
+        try:
+            text = skill_file.read_text(encoding="utf-8")
+            # Parse YAML frontmatter between --- fences
+            if text.startswith("---"):
+                end = text.index("---", 3)
+                front = text[3:end]
+                name = ""
+                desc = ""
+                for line in front.strip().splitlines():
+                    if line.startswith("name:"):
+                        name = line[5:].strip()
+                    elif line.startswith("description:"):
+                        desc = line[12:].strip()
+                if name:
+                    skills[name] = {"name": name, "description": desc}
+        except Exception:
+            continue
+    return skills
+
+
+_SKILL_CACHE = _load_skill_metadata()
+_SKILL_MD_PATTERN = re.compile(r"[/\\]\.kiro[/\\]skills[/\\]([^/\\]+)[/\\]SKILL\.md")
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +186,7 @@ class ACPClient:
         self._server_sock = None
         self._last_metadata = None
         self._active_prompt_id = None
+        self._skill_tool_ids = set()  # tool call IDs for SKILL.md reads (suppressed from UI)
 
     def set_window(self, window):
         self._window = window
@@ -381,6 +422,7 @@ class ACPClient:
         if hasattr(self, '_last_metadata') and self._last_metadata:
             data["_metadata"] = self._last_metadata
             self._last_metadata = None
+        self._skill_tool_ids.clear()
         self._push_js("__acpTurnEnd", data)
         self._push_state()
 
@@ -393,6 +435,7 @@ class ACPClient:
             self._active_prompt_id = None
             self._request("session/cancel", {"sessionId": self._session_id})
             self._state = "ready"
+            self._skill_tool_ids.clear()
             self._push_js("__acpTurnEnd", {"_cancelled": True})
             self._push_state()
 
@@ -460,6 +503,22 @@ class ACPClient:
             su_type = update.get("sessionUpdate", "unknown")
             if su_type != "agent_message_chunk":
                 _log(f"session_update: type={su_type} id={update.get('toolCallId','')[:20]} title={update.get('title','')}")
+            # Detect skill activation: a tool_call reading a SKILL.md file
+            if su_type == "tool_call":
+                _log(f"tool_call_full: {json.dumps(update)[:800]}")
+                skill_name = self._detect_skill_activation(update)
+                if skill_name:
+                    if skill_name == "_unknown":
+                        meta = {"name": "skill", "description": "Skill context activated"}
+                    else:
+                        meta = _SKILL_CACHE.get(skill_name, {"name": skill_name, "description": ""})
+                    self._push_js("__acpSkillActivation", meta)
+                    self._skill_tool_ids.add(update.get("toolCallId", ""))
+                    return  # suppress normal tool card
+            # Suppress tool_call_update for skill reads
+            if su_type == "tool_call_update":
+                if update.get("toolCallId", "") in self._skill_tool_ids:
+                    return  # suppress completion event for skill reads
             self._push_js_throttled("__acpUpdate", update)
         elif method == "_kiro.dev/metadata":
             params = msg.get("params", {})
@@ -490,6 +549,28 @@ class ACPClient:
             else:
                 self._send({"jsonrpc": "2.0", "id": rid, "result": {"outcome": {"outcome": "selected"}}})
 
+    def _detect_skill_activation(self, update):
+        """Check if a tool_call is reading a SKILL.md file. Returns skill name or None."""
+        title = update.get("title", "")
+        if "SKILL.md" not in title:
+            return None
+        # Check locations array (contains full file path)
+        locations = update.get("locations")
+        if locations and isinstance(locations, list):
+            for loc in locations:
+                p = loc.get("path", "")
+                m = _SKILL_MD_PATTERN.search(p)
+                if m:
+                    return m.group(1)
+        # Fallback: check rawInput for the path
+        raw = update.get("rawInput")
+        if raw and isinstance(raw, dict):
+            text = json.dumps(raw)
+            m = _SKILL_MD_PATTERN.search(text)
+            if m:
+                return m.group(1)
+        # Last resort: title says SKILL.md but we can't identify which
+        return "_unknown"
     # --- Push to frontend ---
 
     def _push_js(self, fn_name, data):
