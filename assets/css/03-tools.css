@@ -122,7 +122,6 @@
   align-self: flex-start;
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-left: 2px solid var(--accent-border);
   padding: 0.4rem 0.6rem;
   margin: 0.1rem 0;
   font-size: 0.6rem;

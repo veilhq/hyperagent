@@ -246,6 +246,17 @@
   animation: splashBlink 0.6s step-end infinite;
 }
 
+/* ---- Stream word fade-in ---- */
+.stream-word {
+  display: inline;
+  opacity: 0;
+  animation: wordIn 0.5s ease-out forwards;
+}
+@keyframes wordIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
 /* ---- Thinking indicator (CRT scan line) ---- */
 .thinking-bar {
   display: none;

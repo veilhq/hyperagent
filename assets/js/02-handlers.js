@@ -39,6 +39,102 @@ function ensureAgentMsg() {
   return currentMsgEl;
 }
 
+// --- Stream buffer + word-by-word drain ---
+var streamBuffer = '';
+var streamDraining = false;
+var streamDrainMs = 120;        // ms between word renders
+var streamMaxBuffer = 200;      // chars in buffer before we speed up
+
+function drainStream() {
+  if (!streamBuffer.length) { streamDraining = false; return; }
+  // Adaptive: drain faster when buffer is deep
+  var wordsThisTick = 1;
+  var delay = streamDrainMs;
+  if (streamBuffer.length > streamMaxBuffer) {
+    wordsThisTick = Math.ceil(streamBuffer.length / 40);
+    delay = 16;
+  }
+  // Pull words (preserving whitespace boundaries)
+  var pulled = '';
+  var count = 0;
+  var i = 0;
+  while (i < streamBuffer.length && count < wordsThisTick) {
+    while (i < streamBuffer.length && /\s/.test(streamBuffer[i])) { pulled += streamBuffer[i]; i++; }
+    while (i < streamBuffer.length && !/\s/.test(streamBuffer[i])) { pulled += streamBuffer[i]; i++; }
+    count++;
+  }
+  streamBuffer = streamBuffer.slice(i);
+  if (!pulled) { streamDraining = false; return; }
+  // Append to currentMsgText and re-render
+  currentMsgText += pulled;
+  if (currentMsgEl) {
+    currentMsgEl._rawText = currentMsgText;
+    var meta = currentMsgEl.querySelector('.msg-meta');
+    currentMsgEl.innerHTML = '';
+    if (meta) currentMsgEl.appendChild(meta);
+    var rendered = renderMarkdown(currentMsgText);
+    currentMsgEl.insertAdjacentHTML('beforeend', rendered + '<button class="msg-copy">Copy</button>');
+    // Fade-in: wrap trailing chars in .stream-word
+    fadeTrailingText(currentMsgEl, pulled.length);
+    scrollBottom();
+  }
+  if (streamBuffer.length) {
+    setTimeout(drainStream, delay);
+  } else {
+    streamDraining = false;
+  }
+}
+
+function fadeTrailingText(el, charCount) {
+  var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  var nodes = [];
+  var node;
+  while (node = walker.nextNode()) {
+    var p = node.parentElement;
+    if (p && (p.classList.contains('msg-meta') || p.classList.contains('msg-role') || p.classList.contains('msg-time') || p.classList.contains('msg-copy') || p.classList.contains('streaming-cursor'))) continue;
+    nodes.push(node);
+  }
+  var remaining = charCount;
+  for (var i = nodes.length - 1; i >= 0 && remaining > 0; i--) {
+    var n = nodes[i];
+    var text = n.textContent;
+    if (text.length <= remaining) {
+      var wrap = document.createElement('span');
+      wrap.className = 'stream-word';
+      n.parentNode.insertBefore(wrap, n);
+      wrap.appendChild(n);
+      remaining -= text.length;
+    } else {
+      var splitAt = text.length - remaining;
+      var tail = n.splitText(splitAt);
+      var wrap2 = document.createElement('span');
+      wrap2.className = 'stream-word';
+      tail.parentNode.insertBefore(wrap2, tail);
+      wrap2.appendChild(tail);
+      remaining = 0;
+    }
+  }
+}
+
+function flushStream() {
+  if (streamBuffer.length) {
+    currentMsgText += streamBuffer;
+    streamBuffer = '';
+  }
+  streamDraining = false;
+  if (currentMsgEl) {
+    currentMsgEl._rawText = currentMsgText;
+    var meta = currentMsgEl.querySelector('.msg-meta');
+    currentMsgEl.innerHTML = '';
+    if (meta) currentMsgEl.appendChild(meta);
+    currentMsgEl.insertAdjacentHTML('beforeend', renderMarkdown(currentMsgText) + '<button class="msg-copy">Copy</button>');
+    currentMsgEl.querySelectorAll('.stream-word').forEach(function(sw) {
+      while (sw.firstChild) sw.parentNode.insertBefore(sw.firstChild, sw);
+      sw.remove();
+    });
+  }
+}
+
 // --- Tool icon mapping ---
 function toolIcon(name) {
   var n = (name || '').toLowerCase();
@@ -149,18 +245,19 @@ window.__acpUpdate = function(update) {
       collapseToolRow();
       currentToolRow = null;
       ensureAgentMsg();
-      currentMsgText += update.content.text;
-      currentMsgEl._rawText = currentMsgText;
-      var meta = currentMsgEl.querySelector('.msg-meta');
-      currentMsgEl.innerHTML = '';
-      if (meta) currentMsgEl.appendChild(meta);
-      currentMsgEl.insertAdjacentHTML('beforeend', renderMarkdown(currentMsgText) + '<span class="streaming-cursor"></span><button class="msg-copy">Copy</button>');
-      scrollBottom();
+      // Buffer the delta — drainStream renders it word-by-word with fade
+      streamBuffer += update.content.text;
+      if (!streamDraining) {
+        streamDraining = true;
+        setTimeout(drainStream, streamDrainMs);
+      }
       break;
 
     case 'tool_call':
       var ti2 = document.getElementById('typing-indicator');
       if (ti2) ti2.remove();
+      // Flush buffered stream text before showing tool card
+      flushStream();
       // Finalize any in-progress agent message so subsequent text appears
       // below the tool row — but only if it has content (avoid empty boxes).
       if (currentMsgEl && !currentMsgText.trim()) {
@@ -298,6 +395,8 @@ window.__acpUpdate = function(update) {
 };
 
 window.__acpTurnEnd = function(data) {
+  // Flush any remaining buffered stream text
+  flushStream();
   // Remove streaming cursors
   msgs.querySelectorAll('.streaming-cursor').forEach(function(el) { el.remove(); });
   collapseToolRow();
@@ -453,6 +552,8 @@ window.__acpNewSession = function() {
   msgs.innerHTML = '';
   currentMsgEl = null;
   currentMsgText = '';
+  streamBuffer = '';
+  streamDraining = false;
   toolCards = {};
   toolNameMap = {};
   currentToolRow = null;
