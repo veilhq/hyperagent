@@ -404,11 +404,25 @@ window.__acpTurnEnd = function(data) {
   // Clear skill badges from topbar
   // (Skills persist for the session — only clear on new session)
 
-  // If cancelled, show short indicator instead of full stats
+  // If cancelled, show short indicator with available stats
   if (data._cancelled) {
+    var cparts = [];
+    if (data._elapsed) cparts.push(data._elapsed + 's');
+    if (data._metadata) {
+      var cm = data._metadata;
+      if (cm.contextUsagePercentage != null) {
+        cparts.push(Math.round(cm.contextUsagePercentage) + '% ctx');
+        updateCtxMeter(cm.contextUsagePercentage);
+      }
+      if (cm.meteringUsage && cm.meteringUsage.length) {
+        var ctotal = 0;
+        for (var ci = 0; ci < cm.meteringUsage.length; ci++) ctotal += cm.meteringUsage[ci].value;
+        cparts.push(ctotal.toFixed(2) + ' credits');
+      } else if (cm.creditsUsed) { cparts.push(cm.creditsUsed + ' credits'); }
+    }
     var cdiv = document.createElement('div');
     cdiv.className = 'turn-end cancelled';
-    cdiv.textContent = '— cancelled';
+    cdiv.textContent = '— cancelled' + (cparts.length ? ' · ' + cparts.join(' · ') : '');
     msgs.appendChild(cdiv);
     scrollBottom();
     currentMsgEl = null;
@@ -458,7 +472,7 @@ window.__acpStateChange = function(data) {
   state = data.state;
   statusEl.textContent = state;
   statusEl.className = 'topbar-status ' + state;
-  sendBtn.disabled = state !== 'ready';
+  sendBtn.disabled = (state !== 'ready' && state !== 'prompting');
   app.classList.toggle('prompting', state === 'prompting');
 
   // Thinking indicator
@@ -509,9 +523,95 @@ window.__acpStateChange = function(data) {
 
 // --- CRT scan thinking indicator ---
 var thinkingBar = document.getElementById('thinking-bar');
+var thinkingCtx = thinkingBar.getContext('2d');
+var thinkingRaf = null;
+var thinkingTime = 0;
+
+// Bayer 8x8 ordered dither matrix (normalized 0-1)
+var bayerMatrix = [
+  [ 0, 32,  8, 40,  2, 34, 10, 42],
+  [48, 16, 56, 24, 50, 18, 58, 26],
+  [12, 44,  4, 36, 14, 46,  6, 38],
+  [60, 28, 52, 20, 62, 30, 54, 22],
+  [ 3, 35, 11, 43,  1, 33,  9, 41],
+  [51, 19, 59, 27, 49, 17, 57, 25],
+  [15, 47,  7, 39, 13, 45,  5, 37],
+  [63, 31, 55, 23, 61, 29, 53, 21]
+];
+for (var bi = 0; bi < 8; bi++) {
+  for (var bj = 0; bj < 8; bj++) {
+    bayerMatrix[bi][bj] /= 64;
+  }
+}
+
+function thinkingDitherFrame() {
+  var w = thinkingBar.width;
+  var h = thinkingBar.height;
+  if (w === 0 || h === 0) {
+    thinkingRaf = requestAnimationFrame(thinkingDitherFrame);
+    return;
+  }
+
+  var accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#00ff41';
+  var r = parseInt(accent.slice(1,3),16), g = parseInt(accent.slice(3,5),16), b = parseInt(accent.slice(5,7),16);
+
+  var t = thinkingTime;
+  var cell = 2;
+  var imgData = thinkingCtx.createImageData(w, h);
+  var data = imgData.data;
+
+  var cols = Math.ceil(w / cell);
+  var rows = Math.ceil(h / cell);
+
+  for (var row = 0; row < rows; row++) {
+    for (var col = 0; col < cols; col++) {
+      var px = col * cell;
+      var py = row * cell;
+
+      var cx = w * 0.5 + Math.sin(t * 0.4) * w * 0.3;
+      var cy = h * 0.5 + Math.cos(t * 0.3) * h * 0.3;
+      var dx = (px - cx) / w;
+      var dy = (py - cy) / h;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+
+      var g1 = 0.5 + 0.5 * Math.sin(dist * 6 - t * 0.8);
+      var g2 = 0.5 + 0.5 * Math.sin((px + py) * 0.0032 + t * 0.5);
+      var g3 = 0.5 + 0.5 * Math.cos((py - px) * 0.0041 - t * 0.3);
+      var val = (g1 * 0.5 + g2 * 0.25 + g3 * 0.25);
+      val = val * val;
+
+      var threshold = bayerMatrix[row & 7][col & 7];
+      var on = val > threshold;
+
+      for (var sy = 0; sy < cell && py + sy < h; sy++) {
+        for (var sx = 0; sx < cell && px + sx < w; sx++) {
+          var idx = ((py + sy) * w + (px + sx)) * 4;
+          if (on) {
+            data[idx] = r;
+            data[idx + 1] = g;
+            data[idx + 2] = b;
+            data[idx + 3] = 200;
+          }
+        }
+      }
+    }
+  }
+
+  thinkingCtx.fillStyle = '#000000';
+  thinkingCtx.fillRect(0, 0, w, h);
+  thinkingCtx.putImageData(imgData, 0, 0);
+
+  thinkingTime += 0.05;
+  thinkingRaf = requestAnimationFrame(thinkingDitherFrame);
+}
 
 function showThinking() {
   thinkingBar.classList.add('active');
+  // Size canvas to actual pixel dimensions
+  thinkingBar.width = thinkingBar.offsetWidth;
+  thinkingBar.height = thinkingBar.offsetHeight;
+  thinkingTime = Math.random() * 100;
+  if (!thinkingRaf) thinkingRaf = requestAnimationFrame(thinkingDitherFrame);
   // Show inline typing dots
   if (!document.getElementById('typing-indicator')) {
     var ti = document.createElement('div');
@@ -525,6 +625,7 @@ function showThinking() {
 
 function hideThinking() {
   thinkingBar.classList.remove('active');
+  if (thinkingRaf) { cancelAnimationFrame(thinkingRaf); thinkingRaf = null; }
   var ti = document.getElementById('typing-indicator');
   if (ti) ti.remove();
 }
@@ -586,6 +687,9 @@ window.__acpSessionLoaded = function(data) {
   currentMsgText = '';
   toolCards = {};
   currentToolRow = null;
+  activeSkills = {};
+  var skillStripReset = getSkillStrip();
+  if (skillStripReset) skillStripReset.innerHTML = '';
   var messages = data && data.messages;
   // Derive session title from first user message
   if (messages && messages.length) {
@@ -615,6 +719,45 @@ window.__acpSessionLoaded = function(data) {
           body.className = 'msg-body';
           body.textContent = m.text;
           el.appendChild(body);
+        } else if (m.role === 'skill') {
+          // Render skill activation card + topbar badge
+          var sCard = document.createElement('div');
+          sCard.className = 'skill-card';
+          sCard.innerHTML = '<span class="skill-card-name">&#9670; ' + m.name + '</span>'
+            + (m.description ? '<span class="skill-card-desc">' + m.description + '</span>' : '');
+          msgs.appendChild(sCard);
+          // Topbar badge (deduplicate)
+          var sStrip = getSkillStrip();
+          if (!activeSkills[m.name] && sStrip) {
+            var sBadge = document.createElement('span');
+            sBadge.className = 'skill-badge';
+            sBadge.innerHTML = '<span class="skill-badge-icon">&#9670;</span>' + m.name;
+            sBadge.title = m.description || '';
+            sStrip.appendChild(sBadge);
+            activeSkills[m.name] = sBadge;
+          }
+          idx++;
+          continue;
+        } else if (m.role === 'tool') {
+          // Collect consecutive tool entries into one tool-row
+          var row = document.createElement('div');
+          row.className = 'tool-row';
+          while (idx < total && messages[idx].role === 'tool') {
+            var tm = messages[idx];
+            var card = document.createElement('div');
+            var tName = tm.name || 'tool';
+            card.className = 'tool-card completed tc-' + toolGroup(tName);
+            var tIcon = toolIcon(tName);
+            card.innerHTML = '<span class="tool-card-icon">' + tIcon + '</span><span class="tool-card-label">' + tName + '</span>';
+            card.title = tName;
+            card.addEventListener('click', (function(c) {
+              return function() { c.classList.toggle('show-label'); };
+            })(card));
+            row.appendChild(card);
+            idx++;
+          }
+          msgs.appendChild(row);
+          continue;
         } else {
           el.className = 'msg msg-agent';
           el.innerHTML = '<span class="msg-meta"><span class="msg-role">Agent</span></span>' + renderMarkdown(m.text);

@@ -187,6 +187,7 @@ class ACPClient:
         self._last_metadata = None
         self._active_prompt_id = None
         self._skill_tool_ids = set()  # tool call IDs for SKILL.md reads (suppressed from UI)
+        self._cancelled = threading.Event()  # suppress session/update after cancel until next prompt
 
     def set_window(self, window):
         self._window = window
@@ -370,6 +371,7 @@ class ACPClient:
     def prompt(self, text):
         if self._state != "ready":
             return
+        self._cancelled.clear()  # clear cancel suppression for new prompt
         # Lazy session creation: if no session exists yet, create one then prompt
         if not self._session_id:
             self._state = "prompting"
@@ -426,18 +428,39 @@ class ACPClient:
         self._push_js("__acpTurnEnd", data)
         self._push_state()
 
-    def cancel(self):
+    def cancel(self, reason=None):
+        reason = reason or "user"
+        _log(f"cancel() called: reason={reason} state={self._state} session={self._session_id}")
         if self._state == "prompting" and self._session_id:
+            self._cancelled.set()
             # Remove the pending callback for the active prompt so
             # the stale response from kiro-cli is silently dropped
-            if self._active_prompt_id is not None:
-                self._pending.pop(self._active_prompt_id, None)
+            prompt_id = self._active_prompt_id
+            if prompt_id is not None:
+                self._pending.pop(prompt_id, None)
+                _log(f"cancel: popped pending id={prompt_id}")
             self._active_prompt_id = None
-            self._request("session/cancel", {"sessionId": self._session_id})
+            # Send both cancellation mechanisms:
+            # 1. session/cancel (ACP notification — must NOT have an id)
+            self._notify("session/cancel", {"sessionId": self._session_id})
+            _log("cancel: sent session/cancel (notification)")
+            # 2. $/cancel_request (ACP generic per-request cancellation, targets the prompt)
+            if prompt_id is not None:
+                self._notify("$/cancel_request", {"requestId": prompt_id})
+                _log(f"cancel: sent $/cancel_request for id={prompt_id}")
             self._state = "ready"
             self._skill_tool_ids.clear()
-            self._push_js("__acpTurnEnd", {"_cancelled": True})
+            # Include elapsed time and any metadata we have
+            cancel_data = {"_cancelled": True}
+            cancel_data["_elapsed"] = round(time.time() - getattr(self, '_prompt_start', time.time()), 1)
+            if self._last_metadata:
+                cancel_data["_metadata"] = self._last_metadata
+                self._last_metadata = None
+            self._push_js("__acpTurnEnd", cancel_data)
             self._push_state()
+            _log("cancel: pushed state=ready to frontend")
+        else:
+            _log(f"cancel: SKIPPED (state={self._state}, session={self._session_id})")
 
     def new_session(self):
         if self._state not in ("ready",):
@@ -499,6 +522,10 @@ class ACPClient:
             self._push_js("__acpError", {"error": text, "source": "stderr"})
             return
         if method == "session/update":
+            # Suppress all session updates after cancel until next prompt
+            if self._cancelled.is_set():
+                _log("session/update SUPPRESSED (cancelled)")
+                return
             update = msg.get("params", {}).get("update", {})
             su_type = update.get("sessionUpdate", "unknown")
             if su_type != "agent_message_chunk":
@@ -521,10 +548,14 @@ class ACPClient:
                     return  # suppress completion event for skill reads
             self._push_js_throttled("__acpUpdate", update)
         elif method == "_kiro.dev/metadata":
+            if self._cancelled.is_set():
+                return
             params = msg.get("params", {})
             _log(f"metadata: {json.dumps(params)[:500]}")
             self._last_metadata = params
         elif method == "_kiro.dev/session/update":
+            if self._cancelled.is_set():
+                return
             params = msg.get("params", {})
             _log(f"session_update_dev: {json.dumps(params)[:500]}")
             # Push tool name hint to frontend for icon resolution
@@ -539,8 +570,20 @@ class ACPClient:
     def _handle_server_request(self, msg):
         method = msg.get("method", "")
         if "permission" in method or "confirm" in method:
-            # Auto-approve
             rid = msg["id"]
+            # If cancelled, deny permission to stop the agent from continuing
+            if self._cancelled.is_set():
+                options = msg.get("params", {}).get("options", [])
+                deny = next((o for o in options if "deny" in o.get("kind", "") or "reject" in o.get("kind", "")), None)
+                if deny:
+                    self._send({"jsonrpc": "2.0", "id": rid,
+                        "result": {"outcome": {"outcome": "selected", "optionId": deny["optionId"]}}})
+                else:
+                    # No explicit deny option — send dismiss/cancel outcome
+                    self._send({"jsonrpc": "2.0", "id": rid,
+                        "result": {"outcome": {"outcome": "dismissed"}}})
+                return
+            # Auto-approve
             options = msg.get("params", {}).get("options", [])
             allow = next((o for o in options if "allow" in o.get("kind", "")), options[0] if options else None)
             if allow:
@@ -562,13 +605,23 @@ class ACPClient:
                 m = _SKILL_MD_PATTERN.search(p)
                 if m:
                     return m.group(1)
-        # Fallback: check rawInput for the path
+        # Fallback: extract paths directly from rawInput operations
         raw = update.get("rawInput")
         if raw and isinstance(raw, dict):
-            text = json.dumps(raw)
-            m = _SKILL_MD_PATTERN.search(text)
-            if m:
-                return m.group(1)
+            ops = raw.get("operations", [])
+            for op in ops:
+                if isinstance(op, dict):
+                    p = op.get("path", "")
+                    if p:
+                        m = _SKILL_MD_PATTERN.search(p)
+                        if m:
+                            return m.group(1)
+            # Also check a top-level path field
+            p = raw.get("path", "")
+            if p:
+                m = _SKILL_MD_PATTERN.search(p)
+                if m:
+                    return m.group(1)
         # Last resort: title says SKILL.md but we can't identify which
         return "_unknown"
     # --- Push to frontend ---
@@ -675,8 +728,8 @@ class HyperagentAPI:
                 self._acp._push_js("__acpSessionTitle", {"title": fallback})
         threading.Thread(target=_run, daemon=True).start()
 
-    def cancel(self):
-        self._acp.cancel()
+    def cancel(self, reason=None):
+        self._acp.cancel(reason=reason)
 
     def new_session(self):
         threading.Thread(target=self._acp.new_session, daemon=True).start()
@@ -691,16 +744,75 @@ class HyperagentAPI:
         if self._acp._window:
             self._acp._window.toggle_fullscreen()
 
+    # --- Gradient map presets (mirrors theme.js GRADIENT_MAPS) ---
+    GRADIENT_MAPS = {
+        "phosphor": {"accent": "#00ff41", "warm": "#ffb000", "cool": "#00cccc", "comp": "#ff3333",
+                     "semantics": {"success": "#00ff41", "warning": "#ffb000", "error": "#ff3333", "info": "#00cccc"}},
+        "blade-runner": {"accent": "#ff6ac1", "warm": "#ffd700", "cool": "#7dcfff", "comp": "#ff2e63",
+                         "semantics": {"success": "#5af78e", "warning": "#ffd700", "error": "#ff2e63", "info": "#7dcfff"}},
+        "ocean-depth": {"accent": "#00bfff", "warm": "#f0a500", "cool": "#4de0d0", "comp": "#ff6b6b",
+                        "semantics": {"success": "#4de0d0", "warning": "#f0a500", "error": "#ff6b6b", "info": "#00bfff"}},
+        "amber-terminal": {"accent": "#ffb000", "warm": "#ff6b35", "cool": "#ffe066", "comp": "#ff4444",
+                           "semantics": {"success": "#7ddb57", "warning": "#ffe066", "error": "#ff4444", "info": "#66ccff"}},
+        "ultraviolet": {"accent": "#b266ff", "warm": "#ff66b2", "cool": "#66ccff", "comp": "#ff4466",
+                        "semantics": {"success": "#66ffb2", "warning": "#ffcc66", "error": "#ff4466", "info": "#66ccff"}},
+        "solar-flare": {"accent": "#ff6600", "warm": "#ff3366", "cool": "#ffcc00", "comp": "#ff0044",
+                        "semantics": {"success": "#66ff66", "warning": "#ffcc00", "error": "#ff0044", "info": "#33ccff"}},
+        "arctic": {"accent": "#66ffee", "warm": "#aaddff", "cool": "#88ffcc", "comp": "#ff6688",
+                   "semantics": {"success": "#88ffcc", "warning": "#ffdd66", "error": "#ff6688", "info": "#66ffee"}},
+        "neon-noir": {"accent": "#39ff14", "warm": "#ff073a", "cool": "#00fff7", "comp": "#ff00ff",
+                      "semantics": {"success": "#39ff14", "warning": "#ffdd00", "error": "#ff073a", "info": "#00fff7"}},
+        "rust": {"accent": "#e65c00", "warm": "#e04000", "cool": "#ff9933", "comp": "#ff2200",
+                 "semantics": {"success": "#66cc66", "warning": "#ff9933", "error": "#ff2200", "info": "#5599cc"}},
+        "synthwave": {"accent": "#f72585", "warm": "#b44aff", "cool": "#4cc9f0", "comp": "#ff006e",
+                      "semantics": {"success": "#72efdd", "warning": "#ffc300", "error": "#ff006e", "info": "#4cc9f0"}},
+        "dracula": {"accent": "#bd93f9", "warm": "#ff79c6", "cool": "#8be9fd", "comp": "#ff5555",
+                    "semantics": {"success": "#50fa7b", "warning": "#f1fa8c", "error": "#ff5555", "info": "#8be9fd"}},
+        "monokai": {"accent": "#a6e22e", "warm": "#fd971f", "cool": "#66d9ef", "comp": "#f92672",
+                    "semantics": {"success": "#a6e22e", "warning": "#e6db74", "error": "#f92672", "info": "#66d9ef"}},
+        "gruvbox": {"accent": "#fabd2f", "warm": "#fe8019", "cool": "#83a598", "comp": "#fb4934",
+                    "semantics": {"success": "#b8bb26", "warning": "#fabd2f", "error": "#fb4934", "info": "#83a598"}},
+        "catppuccin": {"accent": "#cba6f7", "warm": "#f9e2af", "cool": "#89dceb", "comp": "#f38ba8",
+                       "semantics": {"success": "#a6e3a1", "warning": "#f9e2af", "error": "#f38ba8", "info": "#89dceb"}},
+        "nord": {"accent": "#88c0d0", "warm": "#ebcb8b", "cool": "#a3be8c", "comp": "#bf616a",
+                 "semantics": {"success": "#a3be8c", "warning": "#ebcb8b", "error": "#bf616a", "info": "#88c0d0"}},
+        "tokyo-night": {"accent": "#7aa2f7", "warm": "#e0af68", "cool": "#73daca", "comp": "#f7768e",
+                        "semantics": {"success": "#9ece6a", "warning": "#e0af68", "error": "#f7768e", "info": "#7aa2f7"}},
+        "cyberdeck": {"accent": "#00ff9f", "warm": "#ffe600", "cool": "#00e5ff", "comp": "#ff003c",
+                      "semantics": {"success": "#00ff9f", "warning": "#ffe600", "error": "#ff003c", "info": "#00e5ff"}},
+        "vaporwave": {"accent": "#ff71ce", "warm": "#b967ff", "cool": "#01cdfe", "comp": "#ff71ce",
+                      "semantics": {"success": "#05ffa1", "warning": "#fffb96", "error": "#ff71ce", "info": "#01cdfe"}},
+    }
+
     def get_accent(self):
         """Read theme from hypervisor's theme-defaults.json and return full palette."""
         theme_file = HYPERVISOR_DIR / "theme-defaults.json"
         try:
             data = json.loads(theme_file.read_text(encoding="utf-8"))
+            theme_mode = data.get("mode", "custom")
+            gradient_map = data.get("gradientMap")
+
+            # Preset mode: return the preset palette directly
+            if theme_mode == "preset" and gradient_map and gradient_map in self.GRADIENT_MAPS:
+                preset = self.GRADIENT_MAPS[gradient_map]
+                return {
+                    "accent": preset["accent"],
+                    "warm": preset["warm"],
+                    "cool": preset["cool"],
+                    "comp": preset["comp"],
+                    "semantics": preset.get("semantics"),
+                    "mode": "preset",
+                    "gradientMap": gradient_map,
+                }
+
+            # Custom mode: derive via OKLCH
             accent = data.get("accent", "#00ff41")
             mode = data.get("paletteMode", "split")
         except Exception:
             accent, mode = "#00ff41", "split"
-        return self._build_palette(accent, mode)
+        palette = self._build_palette_oklch(accent, mode)
+        palette["mode"] = "custom"
+        return palette
 
     @staticmethod
     def _build_palette(hex_color, mode):
@@ -759,6 +871,155 @@ class HyperagentAPI:
             comp = hsl_to_hex(h + 180, s * 0.7, min(l * 0.85, 0.55))
 
         return {"accent": hex_color, "warm": warm, "cool": cool, "comp": comp}
+
+    @staticmethod
+    def _build_palette_oklch(hex_color, mode):
+        """Derive warm/cool/comp using OKLCH color space (perceptually uniform).
+        Parallel to _build_palette() — not yet wired as default."""
+        import math
+
+        # --- Conversion utilities ---
+        def multiply_matrix3(m, v):
+            return [
+                m[0]*v[0] + m[1]*v[1] + m[2]*v[2],
+                m[3]*v[0] + m[4]*v[1] + m[5]*v[2],
+                m[6]*v[0] + m[7]*v[1] + m[8]*v[2],
+            ]
+
+        def srgb_to_linear(c):
+            if abs(c) <= 0.04045:
+                return c / 12.92
+            return (-1 if c < 0 else 1) * (((abs(c) + 0.055) / 1.055) ** 2.4)
+
+        def linear_to_srgb(c):
+            if abs(c) > 0.0031308:
+                return (-1 if c < 0 else 1) * (1.055 * (abs(c) ** (1 / 2.4)) - 0.055)
+            return 12.92 * c
+
+        M_SRGB_TO_XYZ = [
+            0.41239079926595934, 0.357584339383878,   0.1804807884018343,
+            0.21263900587151027, 0.715168678767756,   0.07219231536073371,
+            0.01933081871559182, 0.11919477979462598, 0.9505321522496607,
+        ]
+        M_XYZ_TO_SRGB = [
+             3.2409699419045226,  -1.537383177570094,   -0.4986107602930034,
+            -0.9692436362808796,   1.8759675015077202,   0.04155505740717559,
+             0.05563007969699366, -0.20397695888897652,  1.0569715142428786,
+        ]
+        M_XYZ_TO_LMS = [
+            0.8190224379967030, 0.3619062600528904, -0.1288737815209879,
+            0.0329836539323885, 0.9292868615863434,  0.0361446663506424,
+            0.0481771893596242, 0.2642395317527308,  0.6335478284694309,
+        ]
+        M_LMS_TO_OKLAB = [
+            0.2104542683093140,  0.7936177747023054, -0.0040720430116193,
+            1.9779985324311684, -2.4285922420485799,  0.4505937096174110,
+            0.0259040424655478,  0.7827717124575296, -0.8086757549230774,
+        ]
+        M_OKLAB_TO_LMS = [
+            1,  0.3963377773761749,  0.2158037573099136,
+            1, -0.1055613458156586, -0.0638541728258133,
+            1, -0.0894841775298119, -1.2914855480194092,
+        ]
+        M_LMS_TO_XYZ = [
+             1.2268798758459243, -0.5578149944602171,  0.2813910456659647,
+            -0.0405757452148008,  1.1122868032803170, -0.0717110580655164,
+            -0.0763729366746601, -0.4214933324022432,  1.5869240198367816,
+        ]
+
+        def hex_to_oklch(hex_str):
+            r = int(hex_str[1:3], 16) / 255
+            g = int(hex_str[3:5], 16) / 255
+            b = int(hex_str[5:7], 16) / 255
+            lin = [srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b)]
+            xyz = multiply_matrix3(M_SRGB_TO_XYZ, lin)
+            lms = multiply_matrix3(M_XYZ_TO_LMS, xyz)
+            lms_cbrt = [math.copysign(abs(x) ** (1/3), x) if x != 0 else 0 for x in lms]
+            lab = multiply_matrix3(M_LMS_TO_OKLAB, lms_cbrt)
+            L = lab[0]
+            a, b_val = lab[1], lab[2]
+            C = math.sqrt(a*a + b_val*b_val)
+            H = 0 if (abs(a) < 0.0002 and abs(b_val) < 0.0002) else (math.degrees(math.atan2(b_val, a)) % 360)
+            return (L, C, H)
+
+        def oklch_to_srgb(l, c, h):
+            h_rad = math.radians(h)
+            a = c * math.cos(h_rad)
+            b_val = c * math.sin(h_rad)
+            lms_cbrt = multiply_matrix3(M_OKLAB_TO_LMS, [l, a, b_val])
+            lms = [x*x*x for x in lms_cbrt]
+            xyz = multiply_matrix3(M_LMS_TO_XYZ, lms)
+            lin_rgb = multiply_matrix3(M_XYZ_TO_SRGB, xyz)
+            return [linear_to_srgb(lin_rgb[0]), linear_to_srgb(lin_rgb[1]), linear_to_srgb(lin_rgb[2])]
+
+        def in_gamut(rgb):
+            return all(-0.001 <= ch <= 1.001 for ch in rgb)
+
+        def oklch_to_hex(l, c, h):
+            # Binary search chroma reduction for gamut clamping
+            rgb = oklch_to_srgb(l, c, h)
+            if not in_gamut(rgb):
+                lo, hi = 0.0, c
+                for _ in range(20):
+                    mid = (lo + hi) / 2
+                    rgb = oklch_to_srgb(l, mid, h)
+                    if in_gamut(rgb):
+                        lo = mid
+                    else:
+                        hi = mid
+                rgb = oklch_to_srgb(l, lo, h)
+            rgb = [max(0, min(1, ch)) for ch in rgb]
+            return "#{:02x}{:02x}{:02x}".format(
+                round(rgb[0] * 255), round(rgb[1] * 255), round(rgb[2] * 255))
+
+        # --- Palette derivation ---
+        L, C, H = hex_to_oklch(hex_color)
+        L = max(L, 0.55)   # legibility floor
+        # No chroma cap — gamut clamping handles out-of-gamut naturally
+
+        if mode == "triadic":
+            warm = oklch_to_hex(min(L * 0.9, 0.8), C, (H + 120) % 360)
+            cool = oklch_to_hex(L * 0.8, C * 0.95, (H + 240) % 360)
+            comp = oklch_to_hex(L * 0.7, C * 0.85, (H + 180) % 360)
+        elif mode == "analogous":
+            warm = oklch_to_hex(min(L * 0.95, 0.8), C, (H + 30) % 360)
+            cool = oklch_to_hex(L * 0.85, C * 0.95, (H + 60) % 360)
+            comp = oklch_to_hex(L * 0.75, C * 0.9, (H + 330) % 360)
+        elif mode == "square":
+            warm = oklch_to_hex(min(L * 0.9, 0.8), C, (H + 90) % 360)
+            cool = oklch_to_hex(L * 0.8, C * 0.95, (H + 180) % 360)
+            comp = oklch_to_hex(L * 0.7, C * 0.85, (H + 270) % 360)
+        elif mode == "complement":
+            warm = oklch_to_hex(min(L * 0.9, 0.8), C, (H + 180) % 360)
+            cool = oklch_to_hex(L * 0.7, C * 0.85, (H + 180) % 360)
+            comp = oklch_to_hex(L * 0.6, C * 0.6, H)
+        else:  # split
+            warm = oklch_to_hex(min(L * 0.9, 0.8), C, (H + 150) % 360)
+            cool = oklch_to_hex(L * 0.8, C * 0.95, (H + 210) % 360)
+            comp = oklch_to_hex(L * 0.7, C * 0.85, (H + 180) % 360)
+
+        return {"accent": hex_color, "warm": warm, "cool": cool, "comp": comp}
+
+    def get_steering(self):
+        """Scan .kiro/steering/ and return list of files with their inclusion mode."""
+        steering_dir = PORTAL_ROOT / ".kiro" / "steering"
+        if not steering_dir.exists():
+            return []
+        files = []
+        for f in sorted(steering_dir.glob("*.md")):
+            try:
+                text = f.read_text(encoding="utf-8")[:500]
+                inclusion = "manual"
+                if text.startswith("---"):
+                    end = text.index("---", 3)
+                    front = text[3:end]
+                    for line in front.strip().splitlines():
+                        if line.startswith("inclusion:"):
+                            inclusion = line.split(":", 1)[1].strip()
+                files.append({"name": f.stem, "inclusion": inclusion})
+            except Exception:
+                continue
+        return files
 
     def _is_session_locked(self, session_id):
         """Check if a session lock file is held by a running process (Windows)."""
@@ -879,6 +1140,21 @@ class HyperagentAPI:
         except Exception:
             return ""
 
+    def rename_session(self, session_id, new_title):
+        """Rename a session by updating the custom title in preferences."""
+        if not session_id or not new_title:
+            return False
+        try:
+            prefs = self._acp._load_prefs()
+            titles = prefs.get("sessionTitles", {})
+            titles[session_id] = new_title.strip()[:60]
+            prefs["sessionTitles"] = titles
+            self._acp._save_prefs(prefs)
+            return True
+        except Exception as e:
+            _log(f"rename_session error: {e}")
+            return False
+
     def load_session(self, session_id):
         """Load an existing session by ID."""
         threading.Thread(
@@ -931,8 +1207,6 @@ class HyperagentAPI:
                     line = line.strip()
                     if not line:
                         continue
-                    if '"ToolResults"' in line[:50] or '"ToolUse"' in line[:50]:
-                        continue
                     try:
                         entry = json.loads(line)
                     except json.JSONDecodeError:
@@ -946,10 +1220,55 @@ class HyperagentAPI:
                                 messages.append({"role": "user", "text": c["data"]})
                                 break
                     elif kind == "AssistantMessage":
+                        # Extract text content
+                        text_parts = []
+                        tools = []
                         for c in content:
                             if c.get("kind") == "text" and c.get("data"):
-                                messages.append({"role": "agent", "text": c["data"]})
-                                break
+                                text_parts.append(c["data"])
+                            elif c.get("kind") == "toolUse":
+                                td = c.get("data", {})
+                                tool_name = td.get("name", "unknown")
+                                tool_input = td.get("input", {})
+                                # Detect skill activation: read targeting a SKILL.md
+                                skill_match = None
+                                if tool_name == "read":
+                                    # Extract paths from operations array
+                                    ops = tool_input.get("operations", [])
+                                    for op in ops:
+                                        p = op.get("path", "")
+                                        if p:
+                                            skill_match = _SKILL_MD_PATTERN.search(p)
+                                            if skill_match:
+                                                break
+                                    # Fallback: check raw path field
+                                    if not skill_match:
+                                        p = tool_input.get("path", "")
+                                        if p:
+                                            skill_match = _SKILL_MD_PATTERN.search(p)
+                                if skill_match:
+                                    skill_key = skill_match.group(1)
+                                    meta = _SKILL_CACHE.get(skill_key, {"name": skill_key, "description": ""})
+                                    tools.append({
+                                        "role": "skill",
+                                        "name": meta.get("name", skill_key),
+                                        "description": meta.get("description", ""),
+                                    })
+                                else:
+                                    tools.append({
+                                        "role": "tool",
+                                        "name": tool_name,
+                                        "toolUseId": td.get("toolUseId", ""),
+                                    })
+                        # Emit text first (if any non-empty), then tool calls
+                        combined_text = "".join(text_parts).strip()
+                        if combined_text:
+                            messages.append({"role": "agent", "text": combined_text})
+                        for t in tools:
+                            messages.append(t)
+                    elif kind == "ToolResults":
+                        # Mark tool results (not rendered, but could enrich tool cards)
+                        pass
             return messages
         except Exception as e:
             _log(f"get_session_history error: {e}")

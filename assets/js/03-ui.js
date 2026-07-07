@@ -2,7 +2,29 @@
 
 function send() {
   var text = input.value.trim();
-  if (!text || state !== 'ready') return;
+  if (!text) return;
+  // If currently prompting, cancel first then send (interrupt)
+  if (state === 'prompting') {
+    input.value = '';
+    input.style.height = 'auto';
+    pywebview.api.cancel('interrupt');
+    // Queue the new prompt — poll until state becomes ready
+    var attempts = 0;
+    var pollReady = setInterval(function() {
+      attempts++;
+      if (state === 'ready') {
+        clearInterval(pollReady);
+        appendUser(text);
+        if (!sessionTitle) firstPrompt = text;
+        pywebview.api.send_prompt(text);
+      } else if (attempts > 40) {
+        // Safety: give up after ~2s
+        clearInterval(pollReady);
+      }
+    }, 50);
+    return;
+  }
+  if (state !== 'ready') return;
   if (!sessionTitle) firstPrompt = text;
   appendUser(text);
   input.value = '';
@@ -42,16 +64,36 @@ input.addEventListener('input', function() {
 });
 
 // Message copy (delegated)
+function copyFallback(text) {
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+}
 msgs.addEventListener('click', function(e) {
   if (!e.target.classList.contains('msg-copy')) return;
   var msg = e.target.closest('.msg-agent');
   if (!msg) return;
   var text = msg._rawText || msg.textContent.replace(/^Copy/, '').trim();
-  navigator.clipboard.writeText(text).then(function() {
-    e.target.textContent = 'Copied';
-    e.target.classList.add('copied');
-    setTimeout(function() { e.target.textContent = 'Copy'; e.target.classList.remove('copied'); }, 1200);
-  });
+  var btn = e.target;
+  function onSuccess() {
+    btn.textContent = 'Copied';
+    btn.classList.add('copied');
+    setTimeout(function() { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1200);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(onSuccess).catch(function() {
+      copyFallback(text);
+      onSuccess();
+    });
+  } else {
+    copyFallback(text);
+    onSuccess();
+  }
 });
 
 // ---- Keyboard shortcut overlay ----
@@ -175,6 +217,25 @@ function showWelcome() {
 
 // Show welcome on load if empty
 showWelcome();
+
+// Show steering files included in session
+function showSteering() {
+  if (!window.pywebview || !window.pywebview.api) {
+    window.addEventListener('pywebviewready', showSteering);
+    return;
+  }
+  pywebview.api.get_steering().then(function(files) {
+    if (!files || !files.length) return;
+    var auto = files.filter(function(f) { return f.inclusion === 'auto'; });
+    if (!auto.length) return;
+    var el = document.createElement('div');
+    el.className = 'steering-card';
+    el.innerHTML = '<span class="steering-label">steering</span>'
+      + '<span class="steering-files">' + auto.map(function(f) { return f.name; }).join(' · ') + '</span>';
+    msgs.appendChild(el);
+  });
+}
+showSteering();
 
 // Wire buttons
 sendBtn.addEventListener('click', send);

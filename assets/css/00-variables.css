@@ -20,6 +20,15 @@
   --warm:          #ffb000;
   --comp:          #ff3333;
   --cool:          #00cccc;
+
+  /* Semantic color roles — state communication, independent of palette aesthetic */
+  --success:        #00ff41;
+  --warning:        #ffb000;
+  --error:          #ff3333;
+  --info:           #00cccc;
+  --highlight:      var(--accent);
+  --surface-active: var(--accent-glow);
+
   --font:          'Departure Mono', 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Courier New', monospace;
   --ease:          cubic-bezier(0.4, 0, 0.2, 1);
 }

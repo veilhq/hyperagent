@@ -86,4 +86,5 @@
 }
 #cancel-btn:hover { background: var(--comp); color: var(--bg); }
 .prompting #cancel-btn { display: block; }
-.prompting #send-btn { display: none; }
+.prompting #send-btn { border-color: var(--warm); color: var(--warm); }
+.prompting #send-btn:hover { background: var(--warm); color: var(--bg); }

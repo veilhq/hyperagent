@@ -102,3 +102,52 @@
   color: var(--warm);
   margin-left: 0.4rem;
 }
+
+/* Context menu */
+.session-ctx-menu {
+  position: fixed;
+  z-index: 9000;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  padding: 0.3rem 0;
+  min-width: 120px;
+  display: none;
+}
+.session-ctx-menu.visible { display: block; }
+.session-ctx-menu-item {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.65rem;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.session-ctx-menu-item:hover {
+  background: var(--accent-glow);
+  color: var(--text-bright);
+}
+.session-ctx-menu-item.danger:hover {
+  background: rgba(255, 51, 51, 0.1);
+  color: var(--comp);
+}
+.session-ctx-menu-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 0.25rem 0;
+}
+
+/* Inline rename input */
+.session-item-title.renaming { display: none; }
+.session-rename-input {
+  font-family: var(--font);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-bright);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  padding: 0.1rem 0.3rem;
+  flex: 1;
+  min-width: 0;
+  outline: none;
+}

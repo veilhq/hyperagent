@@ -45,6 +45,20 @@ function applyAccent(palette) {
     root.setProperty('--warm', palette.warm);
     root.setProperty('--cool', palette.cool);
     root.setProperty('--comp', palette.comp);
+    // Apply semantic overrides from presets, or reset to defaults
+    if (palette.semantics) {
+      if (palette.semantics.success) root.setProperty('--success', palette.semantics.success);
+      if (palette.semantics.warning) root.setProperty('--warning', palette.semantics.warning);
+      if (palette.semantics.error) root.setProperty('--error', palette.semantics.error);
+      if (palette.semantics.info) root.setProperty('--info', palette.semantics.info);
+    } else {
+      root.setProperty('--success', '#00ff41');
+      root.setProperty('--warning', '#ffb000');
+      root.setProperty('--error', '#ff3333');
+      root.setProperty('--info', '#00cccc');
+    }
+    root.setProperty('--highlight', 'var(--accent)');
+    root.setProperty('--surface-active', 'var(--accent-glow)');
   }
   // Dynamic cursors synced to accent
   var ec = encodeURIComponent(hex);

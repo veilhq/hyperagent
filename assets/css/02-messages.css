@@ -257,31 +257,15 @@
   to   { opacity: 1; }
 }
 
-/* ---- Thinking indicator (CRT scan line) ---- */
+/* ---- Thinking indicator (dither canvas) ---- */
 .thinking-bar {
   display: none;
-  height: 4px;
+  width: 100%;
+  height: 8px;
   border-top: 1px solid var(--border);
   background: var(--bg);
-  position: relative;
-  overflow: hidden;
 }
 .thinking-bar.active { display: block; }
-.thinking-bar::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 40%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  box-shadow: 0 0 8px var(--accent), 0 0 2px var(--accent);
-  animation: crtScan 0.8s var(--ease) infinite alternate;
-}
-@keyframes crtScan {
-  0%   { left: -40%; }
-  100% { left: 100%; }
-}
 
 /* ---- Welcome state ---- */
 .welcome {
@@ -315,3 +299,29 @@
   transition: border-color 0.15s var(--ease), color 0.15s var(--ease);
 }
 .welcome-chip:hover { border-color: var(--accent); color: var(--text-bright); }
+
+
+/* ---- Steering card (context files included) ---- */
+.steering-card {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.6rem;
+  margin: 0.2rem 0;
+  font-size: 0.55rem;
+  animation: fadeSlideIn 0.3s var(--ease);
+}
+.steering-label {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.steering-files {
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
