@@ -77,8 +77,7 @@ function renderMarkdown(text) {
 
   // ASCII emotes — wrap known emotes in glow span (skip if inside code/pre)
   var emotes = [
-    '\\[\\+1\\]', '\\(b\\^_\\^\\)b', 'roger',
-    '\\[done\\]', '\\[ok\\]',
+    '\\[\\+1\\]', '\\(-_-\\)b', '\\[✓\\]',
     '\\\\o/',
     '\\(\\._.\\)', '\\(\\?_\\?\\)',
     '\\(￣\\^￣\\)ゞ'
