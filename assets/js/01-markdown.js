@@ -75,5 +75,18 @@ function renderMarkdown(text) {
   // Paragraphs (double newlines)
   html = html.replace(/\n\n/g, '</p><p>');
 
+  // ASCII emotes — wrap known emotes in glow span (skip if inside code/pre)
+  var emotes = [
+    '\\[\\+1\\]', '\\(b\\^_\\^\\)b', 'roger',
+    '\\[done\\]', '\\[ok\\]',
+    '\\\\o/',
+    '\\(\\._.\\)', '\\(\\?_\\?\\)',
+    '\\(￣\\^￣\\)ゞ'
+  ];
+  var emotePattern = new RegExp('(?<![\\w<])(' + emotes.join('|') + ')(?![\\w>])', 'g');
+  html = html.replace(emotePattern, function(m) {
+    return '<span class="emote">' + m + '</span>';
+  });
+
   return html;
 }

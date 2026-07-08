@@ -301,6 +301,19 @@
 .welcome-chip:hover { border-color: var(--accent); color: var(--text-bright); }
 
 
+/* ---- ASCII emote glow (palette color cycling) ---- */
+.emote {
+  display: inline-block;
+  animation: emote-glow 8s infinite ease-in-out;
+}
+@keyframes emote-glow {
+  0%, 100% { color: var(--accent); text-shadow: 0 0 6px var(--accent), 0 0 12px var(--accent-glow); }
+  25%      { color: var(--warm);   text-shadow: 0 0 6px var(--warm),   0 0 12px var(--warm); }
+  50%      { color: var(--cool);   text-shadow: 0 0 6px var(--cool),   0 0 12px var(--cool); }
+  75%      { color: var(--comp);   text-shadow: 0 0 6px var(--comp),   0 0 12px var(--comp); }
+}
+
+
 /* ---- Steering card (context files included) ---- */
 .steering-card {
   align-self: flex-start;

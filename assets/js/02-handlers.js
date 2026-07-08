@@ -276,6 +276,8 @@ window.__acpUpdate = function(update) {
       }
       var card = document.createElement('div');
       var toolName = toolNameMap[update.toolCallId] || update.title || update.toolCallId;
+      // Fade thinking bar color based on tool category
+      setThinkingColorForTool(toolName);
       card.className = 'tool-card running show-label tc-' + toolGroup(toolName);
       card.id = 'tool-' + update.toolCallId;
       var icon = toolIcon(toolName);
@@ -400,6 +402,8 @@ window.__acpTurnEnd = function(data) {
   // Remove streaming cursors
   msgs.querySelectorAll('.streaming-cursor').forEach(function(el) { el.remove(); });
   collapseToolRow();
+  // Reset thinking bar color to accent
+  resetThinkingColor();
 
   // Clear skill badges from topbar
   // (Skills persist for the session — only clear on new session)
@@ -527,6 +531,53 @@ var thinkingCtx = thinkingBar.getContext('2d');
 var thinkingRaf = null;
 var thinkingTime = 0;
 
+// --- Thinking bar color fade state ---
+// Current RGB (what's actually rendered) and target RGB (what we're fading toward)
+// Initialized to 0 — showThinking() seeds from live --accent before first frame
+var thinkColorR = 0, thinkColorG = 0, thinkColorB = 0;
+var thinkTargetR = 0, thinkTargetG = 0, thinkTargetB = 0;
+var thinkColorSeeded = false;
+var thinkLerpSpeed = 0.04; // ~25 frames to fully transition at 60fps
+
+function hexToRgbArr(hex) {
+  hex = hex.trim();
+  if (hex[0] === '#') hex = hex.slice(1);
+  return [parseInt(hex.slice(0,2),16), parseInt(hex.slice(2,4),16), parseInt(hex.slice(4,6),16)];
+}
+
+function setThinkingTargetColor(hex) {
+  var rgb = hexToRgbArr(hex);
+  thinkTargetR = rgb[0]; thinkTargetG = rgb[1]; thinkTargetB = rgb[2];
+}
+
+function resetThinkingColor() {
+  var accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#00ff41';
+  setThinkingTargetColor(accent);
+}
+
+// Classify tool into color category and set target
+function setThinkingColorForTool(name) {
+  var n = (name || '').toLowerCase();
+  var root = getComputedStyle(document.documentElement);
+  // Read tools — cool (cyan)
+  if (n.indexOf('read') > -1 || n.indexOf('grep') > -1 || n.indexOf('glob') > -1 ||
+      n.indexOf('search') > -1 || n.indexOf('code') > -1 || n.indexOf('web_fetch') > -1 ||
+      n.indexOf('web_search') > -1 || n.indexOf('knowledge') > -1 || n.indexOf('get_') > -1 ||
+      n.indexOf('list_') > -1 || n.indexOf('introspect') > -1) {
+    setThinkingTargetColor(root.getPropertyValue('--cool').trim() || '#00cccc');
+  }
+  // Write tools — warm (amber)
+  else if (n.indexOf('write') > -1 || n.indexOf('shell') > -1 || n.indexOf('aws') > -1 ||
+           n.indexOf('create') > -1 || n.indexOf('update') > -1 || n.indexOf('move_') > -1 ||
+           n.indexOf('delete') > -1 || n.indexOf('add_tag') > -1 || n.indexOf('migrate') > -1) {
+    setThinkingTargetColor(root.getPropertyValue('--warm').trim() || '#ffb000');
+  }
+  // Default — accent
+  else {
+    setThinkingTargetColor(root.getPropertyValue('--accent').trim() || '#00ff41');
+  }
+}
+
 // Bayer 8x8 ordered dither matrix (normalized 0-1)
 var bayerMatrix = [
   [ 0, 32,  8, 40,  2, 34, 10, 42],
@@ -552,8 +603,11 @@ function thinkingDitherFrame() {
     return;
   }
 
-  var accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#00ff41';
-  var r = parseInt(accent.slice(1,3),16), g = parseInt(accent.slice(3,5),16), b = parseInt(accent.slice(5,7),16);
+  // Lerp current color toward target
+  thinkColorR += (thinkTargetR - thinkColorR) * thinkLerpSpeed;
+  thinkColorG += (thinkTargetG - thinkColorG) * thinkLerpSpeed;
+  thinkColorB += (thinkTargetB - thinkColorB) * thinkLerpSpeed;
+  var r = Math.round(thinkColorR), g = Math.round(thinkColorG), b = Math.round(thinkColorB);
 
   var t = thinkingTime;
   var cell = 2;
@@ -607,6 +661,14 @@ function thinkingDitherFrame() {
 
 function showThinking() {
   thinkingBar.classList.add('active');
+  // Seed thinking color from live accent on first activation
+  if (!thinkColorSeeded) {
+    var accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#00ff41';
+    var rgb = hexToRgbArr(accent);
+    thinkColorR = rgb[0]; thinkColorG = rgb[1]; thinkColorB = rgb[2];
+    thinkTargetR = rgb[0]; thinkTargetG = rgb[1]; thinkTargetB = rgb[2];
+    thinkColorSeeded = true;
+  }
   // Size canvas to actual pixel dimensions
   thinkingBar.width = thinkingBar.offsetWidth;
   thinkingBar.height = thinkingBar.offsetHeight;
