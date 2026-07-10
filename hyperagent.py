@@ -792,18 +792,42 @@ class HyperagentAPI:
             theme_mode = data.get("mode", "custom")
             gradient_map = data.get("gradientMap")
 
-            # Preset mode: return the preset palette directly
-            if theme_mode == "preset" and gradient_map and gradient_map in self.GRADIENT_MAPS:
-                preset = self.GRADIENT_MAPS[gradient_map]
-                return {
-                    "accent": preset["accent"],
-                    "warm": preset["warm"],
-                    "cool": preset["cool"],
-                    "comp": preset["comp"],
-                    "semantics": preset.get("semantics"),
-                    "mode": "preset",
-                    "gradientMap": gradient_map,
-                }
+            # Preset mode: prefer embedded palette colors in theme-defaults.json
+            # (written by Hypervisor's save_theme_defaults for cross-app portability)
+            if theme_mode == "preset" and gradient_map:
+                # Check if palette is embedded directly in theme-defaults.json
+                if data.get("warm") and data.get("cool") and data.get("comp"):
+                    return {
+                        "accent": data.get("accent", "#00ff41"),
+                        "warm": data["warm"],
+                        "cool": data["cool"],
+                        "comp": data["comp"],
+                        "semantics": data.get("semantics"),
+                        "mode": "preset",
+                        "gradientMap": gradient_map,
+                    }
+
+                # Fallback: look up by key in built-in maps
+                preset = self.GRADIENT_MAPS.get(gradient_map)
+                if not preset:
+                    # Check user gradient maps in preferences.json
+                    prefs_file = HYPERVISOR_DIR / "preferences.json"
+                    if prefs_file.exists():
+                        try:
+                            prefs = json.loads(prefs_file.read_text(encoding="utf-8"))
+                            preset = prefs.get("userGradientMaps", {}).get(gradient_map)
+                        except (json.JSONDecodeError, OSError):
+                            pass
+                if preset:
+                    return {
+                        "accent": preset["accent"],
+                        "warm": preset["warm"],
+                        "cool": preset["cool"],
+                        "comp": preset["comp"],
+                        "semantics": preset.get("semantics"),
+                        "mode": "preset",
+                        "gradientMap": gradient_map,
+                    }
 
             # Custom mode: derive via OKLCH
             accent = data.get("accent", "#00ff41")
