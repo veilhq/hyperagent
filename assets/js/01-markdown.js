@@ -80,7 +80,9 @@ function renderMarkdown(text) {
     '\\[\\+1\\]', '\\(-_-\\)b', '\\[✓\\]',
     '\\\\o/',
     '\\(\\._.\\)', '\\(\\?_\\?\\)',
-    '\\(￣\\^￣\\)ゞ'
+    '\\(￣\\^￣\\)ゞ',
+    '\\(\\s+-_-\\)旦~',
+    '\\(\\._\\. \\)'
   ];
   var emotePattern = new RegExp('(?<![\\w<])(' + emotes.join('|') + ')(?![\\w>])', 'g');
   html = html.replace(emotePattern, function(m) {

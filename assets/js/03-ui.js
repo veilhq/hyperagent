@@ -192,17 +192,30 @@ function clearHighlights() {
 }
 
 // ---- Welcome state ----
+var welcomeGreetings = [
+  'How can I help?',
+  'Hello, Operator.',
+  'Ready when you are.',
+  'What are we building?',
+  'Standing by.',
+  'All systems go.',
+  'What\'s on your mind?',
+  'Let\'s get to work.',
+  'Good to see you, V.',
+  'What\'s the job?'
+];
+
 var welcomePrompts = [
-  'Summarize my recent work items',
-  'What should I work on next?',
-  'Review my open PRs'
+  'What\'s in flight right now?',
+  'Let\'s review a PR.',
+  'Run a health check.'
 ];
 
 function showWelcome() {
   var w = document.createElement('div');
   w.className = 'welcome';
   w.innerHTML = '<svg class="welcome-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108.28 108.28" fill="currentColor"><path d="M107.94,71.76l-35.71-35.71-.04-.04h-34.8c-.63,0-1.14-.51-1.14-1.14V1.14c0-.63-.51-1.14-1.14-1.14H1.14C.51,0,0,.51,0,1.14v34.58c0,.3.12.59.33.8l33.56,33.56c.72.72.21,1.94-.8,1.94H1.14c-.63,0-1.14.51-1.14,1.14v33.98c0,.63.51,1.14,1.14,1.14h33.98c.63,0,1.14-.51,1.14-1.14v-33.73c0-.63.51-1.14,1.14-1.14h33.48c.63,0,1.14.51,1.14,1.14v33.73c0,.63.51,1.14,1.14,1.14h33.98c.63,0,1.14-.51,1.14-1.14v-34.58c0-.3-.12-.59-.33-.8Z"/><path d="M72.67,18.01l7.88,3.11c2.6,1.03,4.66,3.08,5.68,5.68l3.11,7.87c.18.45.82.45,1,0l3.11-7.87c1.03-2.6,3.08-4.66,5.68-5.68l7.88-3.11c.45-.18.45-.82,0-1l-7.88-3.11c-2.6-1.03-4.66-3.08-5.68-5.68l-3.11-7.87c-.18-.45-.82-.45-1,0l-3.11,7.87c-1.03,2.6-3.08,4.66-5.68,5.68l-7.88,3.11c-.45.18-.45.82,0,1Z"/></svg>'
-    + '<span class="welcome-text">How can I help?</span>'
+    + '<span class="welcome-text">' + welcomeGreetings[Math.floor(Math.random() * welcomeGreetings.length)] + '</span>'
     + '<div class="welcome-prompts"></div>';
   var chips = w.querySelector('.welcome-prompts');
   welcomePrompts.forEach(function(p) {
