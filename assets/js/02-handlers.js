@@ -525,19 +525,19 @@ window.__acpStateChange = function(data) {
   }
 };
 
-// --- CRT scan thinking indicator ---
+// --- CRT scan thinking indicator (WebGL2) ---
 var thinkingBar = document.getElementById('thinking-bar');
-var thinkingCtx = thinkingBar.getContext('2d');
+var thinkingGL = null;
+var thinkingProg = null;
 var thinkingRaf = null;
 var thinkingTime = 0;
+var thinkingVAO = null;
 
 // --- Thinking bar color fade state ---
-// Current RGB (what's actually rendered) and target RGB (what we're fading toward)
-// Initialized to 0 — showThinking() seeds from live --accent before first frame
 var thinkColorR = 0, thinkColorG = 0, thinkColorB = 0;
 var thinkTargetR = 0, thinkTargetG = 0, thinkTargetB = 0;
 var thinkColorSeeded = false;
-var thinkLerpSpeed = 0.04; // ~25 frames to fully transition at 60fps
+var thinkLerpSpeed = 0.04;
 
 function hexToRgbArr(hex) {
   hex = hex.trim();
@@ -555,47 +555,102 @@ function resetThinkingColor() {
   setThinkingTargetColor(accent);
 }
 
-// Classify tool into color category and set target
 function setThinkingColorForTool(name) {
   var n = (name || '').toLowerCase();
   var root = getComputedStyle(document.documentElement);
-  // Read tools — cool (cyan)
   if (n.indexOf('read') > -1 || n.indexOf('grep') > -1 || n.indexOf('glob') > -1 ||
       n.indexOf('search') > -1 || n.indexOf('code') > -1 || n.indexOf('web_fetch') > -1 ||
       n.indexOf('web_search') > -1 || n.indexOf('knowledge') > -1 || n.indexOf('get_') > -1 ||
       n.indexOf('list_') > -1 || n.indexOf('introspect') > -1) {
     setThinkingTargetColor(root.getPropertyValue('--cool').trim() || '#00cccc');
-  }
-  // Write tools — warm (amber)
-  else if (n.indexOf('write') > -1 || n.indexOf('shell') > -1 || n.indexOf('aws') > -1 ||
+  } else if (n.indexOf('write') > -1 || n.indexOf('shell') > -1 || n.indexOf('aws') > -1 ||
            n.indexOf('create') > -1 || n.indexOf('update') > -1 || n.indexOf('move_') > -1 ||
            n.indexOf('delete') > -1 || n.indexOf('add_tag') > -1 || n.indexOf('migrate') > -1) {
     setThinkingTargetColor(root.getPropertyValue('--warm').trim() || '#ffb000');
-  }
-  // Default — accent
-  else {
+  } else {
     setThinkingTargetColor(root.getPropertyValue('--accent').trim() || '#00ff41');
   }
 }
 
-// Bayer 8x8 ordered dither matrix (normalized 0-1)
-var bayerMatrix = [
-  [ 0, 32,  8, 40,  2, 34, 10, 42],
-  [48, 16, 56, 24, 50, 18, 58, 26],
-  [12, 44,  4, 36, 14, 46,  6, 38],
-  [60, 28, 52, 20, 62, 30, 54, 22],
-  [ 3, 35, 11, 43,  1, 33,  9, 41],
-  [51, 19, 59, 27, 49, 17, 57, 25],
-  [15, 47,  7, 39, 13, 45,  5, 37],
-  [63, 31, 55, 23, 61, 29, 53, 21]
-];
-for (var bi = 0; bi < 8; bi++) {
-  for (var bj = 0; bj < 8; bj++) {
-    bayerMatrix[bi][bj] /= 64;
+var THINKING_VERT = '#version 300 es\nvoid main(){float x=float(gl_VertexID%2)*4.0-1.0;float y=float(gl_VertexID/2)*4.0-1.0;gl_Position=vec4(x,y,0,1);}';
+
+var THINKING_FRAG = [
+  '#version 300 es',
+  'precision highp float;',
+  'uniform vec2 u_resolution;',
+  'uniform float u_time;',
+  'uniform vec3 u_color;',
+  'out vec4 fragColor;',
+  '',
+  'float bayer8(vec2 pos) {',
+  '    int m[64] = int[64](',
+  '         0, 32,  8, 40,  2, 34, 10, 42,',
+  '        48, 16, 56, 24, 50, 18, 58, 26,',
+  '        12, 44,  4, 36, 14, 46,  6, 38,',
+  '        60, 28, 52, 20, 62, 30, 54, 22,',
+  '         3, 35, 11, 43,  1, 33,  9, 41,',
+  '        51, 19, 59, 27, 49, 17, 57, 25,',
+  '        15, 47,  7, 39, 13, 45,  5, 37,',
+  '        63, 31, 55, 23, 61, 29, 53, 21',
+  '    );',
+  '    ivec2 p = ivec2(mod(pos, 8.0));',
+  '    return float(m[p.x + p.y * 8]) / 64.0;',
+  '}',
+  '',
+  'void main() {',
+  '    float t = u_time;',
+  '    float cell = 2.0;',
+  '    vec2 cellUv = floor(gl_FragCoord.xy / cell) * cell;',
+  '    float cx = u_resolution.x * 0.5 + sin(t * 0.4) * u_resolution.x * 0.3;',
+  '    float cy = u_resolution.y * 0.5 + cos(t * 0.3) * u_resolution.y * 0.3;',
+  '    float dx = (cellUv.x - cx) / u_resolution.x;',
+  '    float dy = (cellUv.y - cy) / u_resolution.y;',
+  '    float dist = sqrt(dx*dx + dy*dy);',
+  '    float g1 = 0.5 + 0.5 * sin(dist * 6.0 - t * 0.8);',
+  '    float g2 = 0.5 + 0.5 * sin((cellUv.x + cellUv.y) * 0.0032 + t * 0.5);',
+  '    float g3 = 0.5 + 0.5 * cos((cellUv.y - cellUv.x) * 0.0041 - t * 0.3);',
+  '    float val = g1 * 0.5 + g2 * 0.25 + g3 * 0.25;',
+  '    val = val * val;',
+  '    float threshold = bayer8(gl_FragCoord.xy / cell);',
+  '    if (val < threshold) { fragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }',
+  '    fragColor = vec4(u_color * 0.78, 1.0);',
+  '}'
+].join('\n');
+
+function initThinkingGL() {
+  if (thinkingGL) return true;
+  thinkingGL = thinkingBar.getContext('webgl2', { alpha: false, antialias: false });
+  if (!thinkingGL) return false;
+  var gl = thinkingGL;
+  // Compile
+  var vs = gl.createShader(gl.VERTEX_SHADER);
+  gl.shaderSource(vs, THINKING_VERT);
+  gl.compileShader(vs);
+  var fs = gl.createShader(gl.FRAGMENT_SHADER);
+  gl.shaderSource(fs, THINKING_FRAG);
+  gl.compileShader(fs);
+  if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
+    console.error('[thinking-bar] frag:', gl.getShaderInfoLog(fs));
+    thinkingGL = null; return false;
   }
+  thinkingProg = gl.createProgram();
+  gl.attachShader(thinkingProg, vs);
+  gl.attachShader(thinkingProg, fs);
+  gl.linkProgram(thinkingProg);
+  if (!gl.getProgramParameter(thinkingProg, gl.LINK_STATUS)) {
+    console.error('[thinking-bar] link:', gl.getProgramInfoLog(thinkingProg));
+    thinkingGL = null; return false;
+  }
+  gl.deleteShader(vs);
+  gl.deleteShader(fs);
+  thinkingVAO = gl.createVertexArray();
+  gl.bindVertexArray(thinkingVAO);
+  return true;
 }
 
 function thinkingDitherFrame() {
+  if (!thinkingGL) return;
+  var gl = thinkingGL;
   var w = thinkingBar.width;
   var h = thinkingBar.height;
   if (w === 0 || h === 0) {
@@ -603,57 +658,17 @@ function thinkingDitherFrame() {
     return;
   }
 
-  // Lerp current color toward target
+  // Lerp color
   thinkColorR += (thinkTargetR - thinkColorR) * thinkLerpSpeed;
   thinkColorG += (thinkTargetG - thinkColorG) * thinkLerpSpeed;
   thinkColorB += (thinkTargetB - thinkColorB) * thinkLerpSpeed;
-  var r = Math.round(thinkColorR), g = Math.round(thinkColorG), b = Math.round(thinkColorB);
 
-  var t = thinkingTime;
-  var cell = 2;
-  var imgData = thinkingCtx.createImageData(w, h);
-  var data = imgData.data;
-
-  var cols = Math.ceil(w / cell);
-  var rows = Math.ceil(h / cell);
-
-  for (var row = 0; row < rows; row++) {
-    for (var col = 0; col < cols; col++) {
-      var px = col * cell;
-      var py = row * cell;
-
-      var cx = w * 0.5 + Math.sin(t * 0.4) * w * 0.3;
-      var cy = h * 0.5 + Math.cos(t * 0.3) * h * 0.3;
-      var dx = (px - cx) / w;
-      var dy = (py - cy) / h;
-      var dist = Math.sqrt(dx * dx + dy * dy);
-
-      var g1 = 0.5 + 0.5 * Math.sin(dist * 6 - t * 0.8);
-      var g2 = 0.5 + 0.5 * Math.sin((px + py) * 0.0032 + t * 0.5);
-      var g3 = 0.5 + 0.5 * Math.cos((py - px) * 0.0041 - t * 0.3);
-      var val = (g1 * 0.5 + g2 * 0.25 + g3 * 0.25);
-      val = val * val;
-
-      var threshold = bayerMatrix[row & 7][col & 7];
-      var on = val > threshold;
-
-      for (var sy = 0; sy < cell && py + sy < h; sy++) {
-        for (var sx = 0; sx < cell && px + sx < w; sx++) {
-          var idx = ((py + sy) * w + (px + sx)) * 4;
-          if (on) {
-            data[idx] = r;
-            data[idx + 1] = g;
-            data[idx + 2] = b;
-            data[idx + 3] = 200;
-          }
-        }
-      }
-    }
-  }
-
-  thinkingCtx.fillStyle = '#000000';
-  thinkingCtx.fillRect(0, 0, w, h);
-  thinkingCtx.putImageData(imgData, 0, 0);
+  gl.viewport(0, 0, w, h);
+  gl.useProgram(thinkingProg);
+  gl.uniform2f(gl.getUniformLocation(thinkingProg, 'u_resolution'), w, h);
+  gl.uniform1f(gl.getUniformLocation(thinkingProg, 'u_time'), thinkingTime);
+  gl.uniform3f(gl.getUniformLocation(thinkingProg, 'u_color'), thinkColorR/255, thinkColorG/255, thinkColorB/255);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
 
   thinkingTime += 0.05;
   thinkingRaf = requestAnimationFrame(thinkingDitherFrame);
@@ -661,7 +676,6 @@ function thinkingDitherFrame() {
 
 function showThinking() {
   thinkingBar.classList.add('active');
-  // Seed thinking color from live accent on first activation
   if (!thinkColorSeeded) {
     var accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#00ff41';
     var rgb = hexToRgbArr(accent);
@@ -669,11 +683,12 @@ function showThinking() {
     thinkTargetR = rgb[0]; thinkTargetG = rgb[1]; thinkTargetB = rgb[2];
     thinkColorSeeded = true;
   }
-  // Size canvas to actual pixel dimensions
   thinkingBar.width = thinkingBar.offsetWidth;
   thinkingBar.height = thinkingBar.offsetHeight;
   thinkingTime = Math.random() * 100;
-  if (!thinkingRaf) thinkingRaf = requestAnimationFrame(thinkingDitherFrame);
+  if (initThinkingGL()) {
+    if (!thinkingRaf) thinkingRaf = requestAnimationFrame(thinkingDitherFrame);
+  }
   // Show inline typing dots
   if (!document.getElementById('typing-indicator')) {
     var ti = document.createElement('div');
