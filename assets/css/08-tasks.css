@@ -1,0 +1,62 @@
+/* ===== Task Sidebar ===== */
+.task-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 280px;
+  height: 100vh;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  transform: translateX(100%);
+  transition: transform 0.2s ease;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.task-panel.visible {
+  transform: translateX(0);
+}
+.task-panel-header {
+  padding: 0.75rem 1rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+.task-panel-desc {
+  padding: 0.5rem 1rem;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+}
+.task-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem 0;
+}
+.task-panel-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.task-item {
+  padding: 0.4rem 1rem;
+  font-size: 0.72rem;
+  color: var(--text);
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.task-item.done {
+  color: var(--text-dim);
+  text-decoration: line-through;
+}
+.task-check {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.task-item.done .task-check {
+  color: var(--text-dim);
+}

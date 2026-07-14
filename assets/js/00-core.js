@@ -32,6 +32,59 @@ function updateCtxMeter(pct) {
 }
 window.updateCtxMeter = updateCtxMeter;
 
+// Session credits accumulator
+var sessionCredits = 0;
+var sessionTokensIn = 0;
+var sessionTokensOut = 0;
+var sessionTurns = 0;
+function updateSessionMetrics(metadata) {
+  if (!metadata) return;
+  sessionTurns++;
+  if (metadata.meteringUsage && metadata.meteringUsage.length) {
+    for (var i = 0; i < metadata.meteringUsage.length; i++) sessionCredits += metadata.meteringUsage[i].value;
+  } else if (metadata.creditsUsed) {
+    sessionCredits += parseFloat(metadata.creditsUsed) || 0;
+  }
+  if (metadata.inputTokens) sessionTokensIn += metadata.inputTokens;
+  if (metadata.outputTokens) sessionTokensOut += metadata.outputTokens;
+  updateStatusCenter();
+}
+function resetSessionMetrics() {
+  sessionCredits = 0; sessionTokensIn = 0; sessionTokensOut = 0; sessionTurns = 0;
+  updateStatusCenter();
+}
+function updateStatusCenter() {
+  var el = document.getElementById('status-credits');
+  if (el) el.textContent = sessionCredits > 0 ? sessionCredits.toFixed(2) + ' cr' : '';
+  var tel = document.getElementById('status-tokens');
+  if (tel) tel.textContent = (sessionTokensIn + sessionTokensOut) > 0 ? Math.round((sessionTokensIn + sessionTokensOut) / 1000) + 'k tok' : '';
+  var turns = document.getElementById('status-turns');
+  if (turns) turns.textContent = sessionTurns > 0 ? sessionTurns + ' turns' : '';
+}
+window.updateSessionMetrics = updateSessionMetrics;
+window.resetSessionMetrics = resetSessionMetrics;
+
+// Plan credits refresh
+function refreshPlanCredits() {
+  var btn = document.getElementById('plan-credits-refresh');
+  var label = document.getElementById('plan-credits-label');
+  if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.get_plan_usage) return;
+  if (btn) btn.classList.add('spinning');
+  pywebview.api.get_plan_usage().then(function(data) {
+    if (btn) btn.classList.remove('spinning');
+    if (!data || !data.ok) { if (label) label.textContent = '?'; return; }
+    if (label) {
+      label.textContent = data.used + ' / ' + data.total + ' cr';
+      label.className = 'plan-credits-label' + (data.used_pct >= 90 ? ' critical' : data.used_pct >= 70 ? ' warn' : '');
+      label.title = data.detail || '';
+    }
+  }).catch(function() {
+    if (btn) btn.classList.remove('spinning');
+    if (label) label.textContent = '?';
+  });
+}
+window.refreshPlanCredits = refreshPlanCredits;
+
 // Apply palette from hypervisor theme
 function applyAccent(palette) {
   var hex = typeof palette === 'string' ? palette : palette.accent;

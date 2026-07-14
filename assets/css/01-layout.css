@@ -100,3 +100,58 @@
   padding: 0.5rem 1.25rem;
 }
 .error-bar a { color: var(--bg); text-decoration: underline; }
+
+
+/* Status center */
+.status-center {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-left: auto;
+  margin-right: 0.5rem;
+}
+.status-center-item,
+.plan-credits-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--bg);
+  padding: 0.25rem 0.5rem;
+  white-space: nowrap;
+  line-height: 1;
+}
+.status-center-item { background: var(--comp); }
+.status-center-item:empty { display: none; }
+
+/* Plan credits widget */
+.plan-credits {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: 0.5rem;
+}
+.plan-credits-label { background: var(--accent); }
+.plan-credits-label:empty { display: none; }
+.plan-credits-label.warn { background: var(--warning); }
+.plan-credits-label.critical { background: var(--error); }
+.plan-credits-refresh {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: var(--cursor-pointer);
+  transition: color 0.15s, border-color 0.15s;
+}
+.plan-credits-refresh:hover {
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+.plan-credits-refresh.spinning {
+  animation: spin 0.6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }

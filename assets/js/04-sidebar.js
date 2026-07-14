@@ -154,6 +154,8 @@ function escapeHtml(str) {
 document.addEventListener('keydown', function(e) {
   // Ctrl+B: toggle sidebar
   if (e.ctrlKey && e.key === 'b') { e.preventDefault(); toggleSidebar(); }
+  // Ctrl+N: new session
+  if (e.ctrlKey && e.key === 'n') { e.preventDefault(); window.newSession(); }
   // f: toggle fullscreen (when not in input)
-  if (e.key === 'f' && document.activeElement.tagName !== 'TEXTAREA') { e.preventDefault(); pywebview.api.toggle_fullscreen(); }
+  if (e.key === 'f' && document.activeElement && document.activeElement.tagName !== 'TEXTAREA') { e.preventDefault(); pywebview.api.toggle_fullscreen(); }
 });

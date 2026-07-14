@@ -19,9 +19,18 @@
     <div class="skill-strip" id="skill-strip"></div>
     <span class="topbar-status">connecting</span>
     <span class="status-title" id="session-title"></span>
+    <div class="status-center" id="status-center">
+      <span class="status-center-item" id="status-turns"></span>
+      <span class="status-center-item" id="status-credits"></span>
+      <span class="status-center-item" id="status-tokens"></span>
+    </div>
     <div class="ctx-meter" id="ctx-meter" title="Context window usage">
       <span class="ctx-meter-label" id="ctx-label"></span>
       <div class="ctx-meter-bar"><div class="ctx-meter-fill" id="ctx-fill"></div></div>
+    </div>
+    <div class="plan-credits" id="plan-credits" title="Plan credits used this period">
+      <span class="plan-credits-label" id="plan-credits-label"></span>
+      <button class="plan-credits-refresh" id="plan-credits-refresh" onclick="refreshPlanCredits()" title="Refresh usage">&#x21bb;</button>
     </div>
   </div>
   <div class="error-bar"></div>

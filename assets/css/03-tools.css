@@ -159,3 +159,9 @@
   opacity: 0;
   animation: fadeSlideIn 0.3s var(--ease) forwards;
 }
+
+
+.tool-card.tc-subagent { border-color: var(--comp); }
+.tool-card.tc-subagent .tool-card-icon { color: var(--comp); }
+.tool-card.tc-tasks { border-color: var(--warm); }
+.tool-card.tc-tasks .tool-card-icon { color: var(--warm); }

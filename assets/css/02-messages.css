@@ -269,6 +269,7 @@
 
 /* ---- Welcome state ---- */
 .welcome {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -276,7 +277,19 @@
   flex: 1;
   gap: 0.75rem;
   color: var(--text-dim);
+  z-index: 1;
 }
+.welcome-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  opacity: 1;
+  transition: opacity 0.6s var(--ease);
+}
+.welcome-canvas.fade-out { opacity: 0; }
+#messages { position: relative; }
 .welcome-icon { width: 32px; height: 32px; color: var(--text-dim); opacity: 0; animation: fadeSlideIn 0.3s var(--ease) 0.1s forwards; }
 .welcome-text { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0; animation: fadeSlideIn 0.3s var(--ease) 0.2s forwards; }
 .welcome-prompts {

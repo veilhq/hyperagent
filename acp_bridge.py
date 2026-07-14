@@ -17,6 +17,29 @@ from pathlib import Path
 
 PORTAL_ROOT = Path(__file__).parent.parent.parent.resolve()
 LOG = Path(__file__).parent / "bridge.log"
+_LOG_MAX_BYTES = 1 * 1024 * 1024  # 1 MB
+
+
+def _truncate_log():
+    """Truncate log to last ~1 MB on startup."""
+    if not LOG.exists():
+        return
+    try:
+        size = LOG.stat().st_size
+        if size <= _LOG_MAX_BYTES:
+            return
+        data = LOG.read_bytes()
+        truncated = data[-_LOG_MAX_BYTES:]
+        nl = truncated.find(b"\n")
+        if nl >= 0:
+            truncated = truncated[nl + 1:]
+        LOG.write_bytes(b"[truncated on startup]\n" + truncated)
+    except OSError:
+        pass
+
+
+_truncate_log()
+
 
 def log(msg):
     with open(LOG, "a") as f:

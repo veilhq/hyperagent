@@ -40,6 +40,31 @@ ICON_FILE = HYPERVISOR_DIR / "assets" / "ha-box.ico"
 # ---------------------------------------------------------------------------
 
 _LOG_FILE = HYPERAGENT_DIR / "debug.log"
+_LOG_MAX_BYTES = 1 * 1024 * 1024  # 1 MB max before truncation
+
+
+def _truncate_log_on_startup():
+    """Truncate log file to last ~1 MB on startup to prevent unbounded growth."""
+    if not _LOG_FILE.exists():
+        return
+    size = _LOG_FILE.stat().st_size
+    if size <= _LOG_MAX_BYTES:
+        return
+    try:
+        data = _LOG_FILE.read_bytes()
+        # Keep the last 1 MB
+        truncated = data[-_LOG_MAX_BYTES:]
+        # Find first newline to avoid partial line at start
+        nl = truncated.find(b"\n")
+        if nl >= 0:
+            truncated = truncated[nl + 1:]
+        _LOG_FILE.write_bytes(b"[truncated on startup]\n" + truncated)
+    except OSError:
+        pass
+
+
+_truncate_log_on_startup()
+
 
 def _log(msg):
     with open(_LOG_FILE, "a", encoding="utf-8") as f:
@@ -187,6 +212,7 @@ class ACPClient:
         self._last_metadata = None
         self._active_prompt_id = None
         self._skill_tool_ids = set()  # tool call IDs for SKILL.md reads (suppressed from UI)
+        self._todo_tool_ids = set()  # tool call IDs for todo_list tools (pushed to task panel)
         self._cancelled = threading.Event()  # suppress session/update after cancel until next prompt
 
     def set_window(self, window):
@@ -425,6 +451,7 @@ class ACPClient:
             data["_metadata"] = self._last_metadata
             self._last_metadata = None
         self._skill_tool_ids.clear()
+        self._todo_tool_ids.clear()
         self._push_js("__acpTurnEnd", data)
         self._push_state()
 
@@ -467,6 +494,7 @@ class ACPClient:
             return
         self._session_id = None
         self._clear_session_id()
+        self._todo_tool_ids.clear()
         self._state = "ready"
         self._push_state()
         self._push_js("__acpNewSession", {})
@@ -542,10 +570,23 @@ class ACPClient:
                     self._push_js("__acpSkillActivation", meta)
                     self._skill_tool_ids.add(update.get("toolCallId", ""))
                     return  # suppress normal tool card
+                # Track todo_list tool calls for task panel
+                title = (update.get("title", "") or "").lower()
+                if "todo_list" in title:
+                    self._todo_tool_ids.add(update.get("toolCallId", ""))
             # Suppress tool_call_update for skill reads
             if su_type == "tool_call_update":
                 if update.get("toolCallId", "") in self._skill_tool_ids:
                     return  # suppress completion event for skill reads
+                # Intercept todo_list tool results for task panel
+                if update.get("toolCallId", "") in self._todo_tool_ids:
+                    output = update.get("output") or update.get("result")
+                    if output:
+                        try:
+                            parsed = json.loads(output) if isinstance(output, str) else output
+                            self._push_js("__acpTaskUpdate", parsed)
+                        except (json.JSONDecodeError, TypeError):
+                            pass
             self._push_js_throttled("__acpUpdate", update)
         elif method == "_kiro.dev/metadata":
             if self._cancelled.is_set():
@@ -744,6 +785,70 @@ class HyperagentAPI:
         if self._acp._window:
             self._acp._window.toggle_fullscreen()
 
+    def get_plan_usage(self):
+        """Run kiro-cli /usage command and parse plan credits percentage."""
+        import shutil
+        kiro = shutil.which("kiro-cli")
+        if not kiro:
+            fallback = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "bin" / "kiro-cli.exe"
+            kiro = str(fallback) if fallback.exists() else None
+        if not kiro:
+            return {"ok": False, "error": "kiro-cli not found"}
+
+        try:
+            si = subprocess.STARTUPINFO()
+            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            si.wShowWindow = subprocess.SW_HIDE
+            result = subprocess.run(
+                [kiro, "chat", "--no-interactive", "/usage"],
+                capture_output=True, text=True, timeout=20,
+                startupinfo=si,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+            )
+            # Output may be on stdout or stderr
+            output = (result.stdout or "") + (result.stderr or "")
+            # Strip ANSI escape codes
+            import re as _re
+            clean = _re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', output)
+            clean = _re.sub(r'\x1b\[\?[0-9;]*[a-zA-Z]', '', clean)
+
+            _log(f"plan_usage raw: {repr(clean[:300])}")
+
+            # Format 1: "Credits (USED of TOTAL covered in plan)"
+            credits_match = _re.search(r'\((\d+(?:\.\d+)?)\s+of\s+(\d+(?:\.\d+)?)\s+covered', clean)
+            if credits_match:
+                used = float(credits_match.group(1))
+                total = float(credits_match.group(2))
+                used_pct = int((used / total) * 100) if total > 0 else 0
+                # Extract reset date
+                reset_match = _re.search(r'resets?\s+on\s+([\d-]+)', clean)
+                reset_str = reset_match.group(1) if reset_match else ""
+                # Detect overage: "covered in plan" with used==total means at/over limit
+                at_cap = (used >= total) and ("covered in plan" in clean)
+                detail = f"{used:.1f} / {total:.0f} credits"
+                if reset_str:
+                    detail += f" | resets {reset_str}"
+                if at_cap:
+                    detail += " | at or over plan limit"
+                used_str = f"{used:.1f}" if used != int(used) else str(int(used))
+                if at_cap:
+                    used_str += "+"
+                total_str = str(int(total))
+                return {"ok": True, "used_pct": used_pct, "used": used_str, "total": total_str, "detail": detail, "at_cap": at_cap}
+
+            # Format 2: "███...██ XX% (resets on MM/DD)"
+            pct_match = _re.search(r'(\d+)%', clean)
+            if pct_match:
+                used_pct = int(pct_match.group(1))
+                detail = clean.strip().replace('\n', ' | ')[:200]
+                return {"ok": True, "used_pct": used_pct, "detail": detail}
+
+            return {"ok": False, "error": "Could not parse usage output"}
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "error": "Timed out"}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
     # --- Gradient map presets (mirrors theme.js GRADIENT_MAPS) ---
     GRADIENT_MAPS = {
         "phosphor": {"accent": "#00ff41", "warm": "#ffb000", "cool": "#00cccc", "comp": "#ff3333",
@@ -785,39 +890,19 @@ class HyperagentAPI:
     }
 
     def get_accent(self):
-        """Read theme from hypervisor's theme-defaults.json and return full palette."""
-        theme_file = HYPERVISOR_DIR / "theme-defaults.json"
+        """Read theme from hypervisor's preferences.json and return full palette."""
+        prefs_file = HYPERVISOR_DIR / "preferences.json"
         try:
-            data = json.loads(theme_file.read_text(encoding="utf-8"))
-            theme_mode = data.get("mode", "custom")
-            gradient_map = data.get("gradientMap")
+            data = json.loads(prefs_file.read_text(encoding="utf-8"))
+            theme_mode = data.get("hypervisor-theme-mode", "custom")
+            gradient_map = data.get("hypervisor-gradient-map", "")
 
-            # Preset mode: prefer embedded palette colors in theme-defaults.json
-            # (written by Hypervisor's save_theme_defaults for cross-app portability)
             if theme_mode == "preset" and gradient_map:
-                # Check if palette is embedded directly in theme-defaults.json
-                if data.get("warm") and data.get("cool") and data.get("comp"):
-                    return {
-                        "accent": data.get("accent", "#00ff41"),
-                        "warm": data["warm"],
-                        "cool": data["cool"],
-                        "comp": data["comp"],
-                        "semantics": data.get("semantics"),
-                        "mode": "preset",
-                        "gradientMap": gradient_map,
-                    }
-
-                # Fallback: look up by key in built-in maps
+                # Look up in built-in gradient maps
                 preset = self.GRADIENT_MAPS.get(gradient_map)
                 if not preset:
-                    # Check user gradient maps in preferences.json
-                    prefs_file = HYPERVISOR_DIR / "preferences.json"
-                    if prefs_file.exists():
-                        try:
-                            prefs = json.loads(prefs_file.read_text(encoding="utf-8"))
-                            preset = prefs.get("userGradientMaps", {}).get(gradient_map)
-                        except (json.JSONDecodeError, OSError):
-                            pass
+                    # Check user gradient maps
+                    preset = data.get("userGradientMaps", {}).get(gradient_map)
                 if preset:
                     return {
                         "accent": preset["accent"],
@@ -830,8 +915,8 @@ class HyperagentAPI:
                     }
 
             # Custom mode: derive via OKLCH
-            accent = data.get("accent", "#00ff41")
-            mode = data.get("paletteMode", "split")
+            accent = data.get("hypervisor-accent", "#00ff41")
+            mode = data.get("hypervisor-palette-mode", "split")
         except Exception:
             accent, mode = "#00ff41", "split"
         palette = self._build_palette_oklch(accent, mode)
@@ -1376,18 +1461,18 @@ def _apply_window_chrome(title: str, icon_path: str):
 
 
 def _start_theme_watcher(window, api):
-    """Poll theme-defaults.json for changes and push palette updates to frontend."""
-    theme_file = HYPERVISOR_DIR / "theme-defaults.json"
-    last_mtime = theme_file.stat().st_mtime if theme_file.exists() else 0
+    """Poll preferences.json for changes and push palette updates to frontend."""
+    prefs_file = HYPERVISOR_DIR / "preferences.json"
+    last_mtime = prefs_file.stat().st_mtime if prefs_file.exists() else 0
 
     def _watch():
         nonlocal last_mtime
         while True:
             time.sleep(2)
             try:
-                if not theme_file.exists():
+                if not prefs_file.exists():
                     continue
-                mtime = theme_file.stat().st_mtime
+                mtime = prefs_file.stat().st_mtime
                 if mtime != last_mtime:
                     last_mtime = mtime
                     palette = api.get_accent()
