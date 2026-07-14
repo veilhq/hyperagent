@@ -1,7 +1,6 @@
 /* ===== Hyperagent: Thinking Indicator (WebGL2 CRT Scan) ===== */
 
 // --- CRT scan thinking indicator (WebGL2) ---
-// Note: This file executes outside the main IIFE. DOM refs come from window.
 var thinkingBar = document.getElementById('thinking-bar');
 var thinkingGL = null;
 var thinkingProg = null;
@@ -175,8 +174,8 @@ function showThinking() {
     ti.id = 'typing-indicator';
     ti.className = 'typing-indicator';
     ti.innerHTML = '<span class="thinking-dot"></span>';
-    window.msgs.appendChild(ti);
-    window.scrollBottom();
+    msgs.appendChild(ti);
+    scrollBottom();
   }
 }
 

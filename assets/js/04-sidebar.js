@@ -130,9 +130,9 @@ function refreshSessions() {
 
 function loadSession(id) {
   // Block updates until history render completes
-  window._loadingHistory = true;
+  _loadingHistory = true;
   // Safety: reset flag if __acpSessionLoaded never fires (e.g. push_js error)
-  window._loadingHistoryTimeout = setTimeout(function() { window._loadingHistory = false; }, 10000);
+  _loadingHistoryTimeout = setTimeout(function() { _loadingHistory = false; }, 10000);
   pywebview.api.load_session(id);
   // Update active highlight
   sessionList.querySelectorAll('.session-item').forEach(function(el) {
@@ -155,7 +155,10 @@ document.addEventListener('keydown', function(e) {
   // Ctrl+B: toggle sidebar
   if (e.ctrlKey && e.key === 'b') { e.preventDefault(); toggleSidebar(); }
   // Ctrl+N: new session
-  if (e.ctrlKey && e.key === 'n') { e.preventDefault(); window.newSession(); }
+  if (e.ctrlKey && e.key === 'n') { e.preventDefault(); newSession(); }
   // f: toggle fullscreen (when not in input)
   if (e.key === 'f' && document.activeElement && document.activeElement.tagName !== 'TEXTAREA') { e.preventDefault(); pywebview.api.toggle_fullscreen(); }
 });
+
+// Expose for inline onclick in shell.html
+window.toggleSidebar = toggleSidebar;

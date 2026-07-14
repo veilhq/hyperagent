@@ -1,5 +1,4 @@
 /* ===== Hyperagent: Welcome Noise Field (WebGL2) ===== */
-// Note: This file executes outside the main IIFE. DOM refs come from window.
 
 // --- Welcome noise field (WebGL2) ---
 var welcomeCanvas = null;
@@ -97,8 +96,8 @@ function welcomeNoiseFrame() {
   if (!welcomeGL || !welcomeCanvas) return;
   var gl = welcomeGL;
   // Sync canvas backing store to container size (prevents stretch on resize)
-  var dw = window.msgs.clientWidth;
-  var dh = window.msgs.clientHeight;
+  var dw = msgs.clientWidth;
+  var dh = msgs.clientHeight;
   if (dw && dh && (welcomeCanvas.width !== dw || welcomeCanvas.height !== dh)) {
     welcomeCanvas.width = dw;
     welcomeCanvas.height = dh;
@@ -119,21 +118,20 @@ function welcomeNoiseFrame() {
 }
 
 function startWelcomeNoise() {
-  var w = window.msgs.querySelector('.welcome');
+  var w = msgs.querySelector('.welcome');
   if (!w) return;
   welcomeCanvas = document.createElement('canvas');
   welcomeCanvas.className = 'welcome-canvas';
   // Mount in #messages behind the welcome content
-  window.msgs.insertBefore(welcomeCanvas, window.msgs.firstChild);
+  msgs.insertBefore(welcomeCanvas, msgs.firstChild);
   // Size to the messages container
-  welcomeCanvas.width = window.msgs.clientWidth;
-  welcomeCanvas.height = window.msgs.clientHeight;
+  welcomeCanvas.width = msgs.clientWidth;
+  welcomeCanvas.height = msgs.clientHeight;
   welcomeTime = Math.random() * 1000;
   if (initWelcomeGL()) {
     welcomeRaf = requestAnimationFrame(welcomeNoiseFrame);
   }
 }
-window.startWelcomeNoise = startWelcomeNoise;
 
 function destroyWelcomeNoise() {
   if (welcomeRaf) { cancelAnimationFrame(welcomeRaf); welcomeRaf = null; }
@@ -150,4 +148,3 @@ function destroyWelcomeNoise() {
     welcomeCanvas = null;
   }
 }
-window.destroyWelcomeNoise = destroyWelcomeNoise;

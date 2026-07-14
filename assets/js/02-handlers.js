@@ -16,7 +16,7 @@ function msgTime() {
 
 function appendUser(text) {
   var w = msgs.querySelector('.welcome');
-  if (w) { if (window.destroyWelcomeNoise) destroyWelcomeNoise(); w.remove(); }
+  if (w) { destroyWelcomeNoise(); w.remove(); }
   var el = document.createElement('div');
   el.className = 'msg msg-user';
   el.innerHTML = '<span class="msg-meta"><span class="msg-role">Operator</span><span class="msg-time">' + msgTime() + '</span></span>';
@@ -242,7 +242,7 @@ window.__acpSkillActivation = function(data) {
 // --- ACP handlers (called from Python via evaluate_js) ---
 
 window.__acpUpdate = function(update) {
-  if (state === 'starting' || state !== 'prompting' || window._loadingHistory) return;
+  if (state === 'starting' || state !== 'prompting' || _loadingHistory) return;
   switch (update.sessionUpdate) {
     case 'agent_message_chunk':
       var ti = document.getElementById('typing-indicator');
@@ -390,8 +390,8 @@ window.__acpUpdate = function(update) {
           var toolLabel = tc._toolData && tc._toolData.name ? tc._toolData.name : 'Tool';
           errorBar.textContent = toolLabel + ' failed';
           errorBar.classList.add('visible');
-          if (window._toolFailTimer) clearTimeout(window._toolFailTimer);
-          window._toolFailTimer = setTimeout(function() {
+          if (_toolFailTimer) clearTimeout(_toolFailTimer);
+          _toolFailTimer = setTimeout(function() {
             // Only dismiss if it's still showing our tool failure message
             if (errorBar.textContent.indexOf('failed') > -1) errorBar.classList.remove('visible');
           }, 3000);
@@ -552,6 +552,7 @@ window.__acpAuthComplete = function() {
 };
 
 window.__acpNewSession = function() {
+  destroyWelcomeNoise();
   msgs.innerHTML = '';
   currentMsgEl = null;
   currentMsgText = '';
@@ -570,7 +571,7 @@ window.__acpNewSession = function() {
   updateCtxMeter(0);
   resetSessionMetrics();
   if (window.__acpTaskReset) window.__acpTaskReset();
-  if (window.showWelcome) showWelcome();
+  showWelcome();
 };
 
 window.__acpSessionTitle = function(data) {
@@ -583,8 +584,8 @@ window.__acpSessionTitle = function(data) {
 };
 
 window.__acpSessionLoaded = function(data) {
-  if (window._loadingHistoryTimeout) { clearTimeout(window._loadingHistoryTimeout); window._loadingHistoryTimeout = null; }
-  window._loadingHistory = true;
+  if (_loadingHistoryTimeout) { clearTimeout(_loadingHistoryTimeout); _loadingHistoryTimeout = null; }
+  _loadingHistory = true;
   msgs.classList.add('no-animate');
   msgs.innerHTML = '';
   currentMsgEl = null;
@@ -675,7 +676,7 @@ window.__acpSessionLoaded = function(data) {
       } else {
         msgs.scrollTop = msgs.scrollHeight;
         msgs.classList.remove('no-animate');
-        window._loadingHistory = false;
+        _loadingHistory = false;
         // If agent is already ready, dismiss splash; otherwise show waiting message
         if (state === 'ready') {
           var splash = document.getElementById('ha-splash');
@@ -694,6 +695,6 @@ window.__acpSessionLoaded = function(data) {
   } else {
     msgs.scrollTop = msgs.scrollHeight;
     msgs.classList.remove('no-animate');
-    window._loadingHistory = false;
+    _loadingHistory = false;
   }
 };

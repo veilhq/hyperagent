@@ -20,7 +20,9 @@ let toolCards = {};
 let currentToolRow = null;
 let sessionTitle = '';
 let firstPrompt = '';
-window._loadingHistory = false;
+var _loadingHistory = false;
+var _loadingHistoryTimeout = null;
+var _toolFailTimer = null;
 
 // Context meter update
 function updateCtxMeter(pct) {
@@ -30,7 +32,6 @@ function updateCtxMeter(pct) {
   ctxFill.style.width = p + '%';
   ctxFill.className = 'ctx-meter-fill' + (p >= 85 ? ' critical' : p >= 65 ? ' warn' : '');
 }
-window.updateCtxMeter = updateCtxMeter;
 
 // Session credits accumulator
 var sessionCredits = 0;
@@ -61,8 +62,6 @@ function updateStatusCenter() {
   var turns = document.getElementById('status-turns');
   if (turns) turns.textContent = sessionTurns > 0 ? sessionTurns + ' turns' : '';
 }
-window.updateSessionMetrics = updateSessionMetrics;
-window.resetSessionMetrics = resetSessionMetrics;
 
 // Plan credits refresh
 function refreshPlanCredits() {

@@ -227,7 +227,7 @@ function showWelcome() {
   });
   msgs.appendChild(w);
   // Defer noise start — 06-welcome.js may not have loaded yet at initial parse
-  setTimeout(function() { if (window.startWelcomeNoise) startWelcomeNoise(); }, 0);
+  setTimeout(function() { startWelcomeNoise(); }, 0);
 }
 
 // Show welcome on load if empty
@@ -256,14 +256,10 @@ showSteering();
 sendBtn.addEventListener('click', send);
 cancelBtn.addEventListener('click', cancel);
 
-// Expose globals for inline onclick handlers and post-IIFE modules
+// Expose globals needed by inline onclick handlers and pywebview bridge
 window.send = send;
 window.cancel = cancel;
 window.newSession = newSession;
-window.renderMarkdown = renderMarkdown;
-window.showWelcome = showWelcome;
-window.msgs = msgs;
-window.scrollBottom = scrollBottom;
 
 // --- Cursor companion box ---
 (function() {
@@ -288,7 +284,4 @@ window.scrollBottom = scrollBottom;
     box.classList.add('blink');
     setTimeout(function() { box.classList.remove('blink'); }, 350);
   });
-})();
-
-// Close IIFE
 })();
