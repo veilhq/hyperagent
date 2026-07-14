@@ -3,7 +3,7 @@
 "use strict";
 
 const $ = (s) => document.querySelector(s);
-const msgs = $('#messages');
+var msgs = $('#messages');
 const input = $('#input');
 const sendBtn = $('#send-btn');
 const cancelBtn = $('#cancel-btn');
@@ -13,13 +13,13 @@ const app = $('#app');
 const ctxLabel = $('#ctx-label');
 const ctxFill = $('#ctx-fill');
 
-let state = 'starting';
-let currentMsgEl = null;
-let currentMsgText = '';
-let toolCards = {};
-let currentToolRow = null;
-let sessionTitle = '';
-let firstPrompt = '';
+var state = 'starting';
+var currentMsgEl = null;
+var currentMsgText = '';
+var toolCards = {};
+var currentToolRow = null;
+var sessionTitle = '';
+var firstPrompt = '';
 var _loadingHistory = false;
 var _loadingHistoryTimeout = null;
 var _toolFailTimer = null;

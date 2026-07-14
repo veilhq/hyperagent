@@ -18,6 +18,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -664,6 +665,9 @@ class ACPClient:
     def _push_js(self, fn_name, data):
         if not self._window:
             return
+        # Include tab_id for frontend routing
+        if hasattr(self, '_tab_id') and self._tab_id:
+            data = {**data, '_tabId': self._tab_id} if isinstance(data, dict) else data
         payload = json.dumps(data).replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
         try:
             self._window.evaluate_js(
@@ -711,16 +715,277 @@ class ACPClient:
 
 
 # ---------------------------------------------------------------------------
+# ACPClientPool — manages multiple ACPClient instances for tabbed UI
+# ---------------------------------------------------------------------------
+
+class ACPClientPool:
+    """Manages multiple ACPClient instances keyed by tab ID."""
+
+    def __init__(self, max_tabs=5):
+        self._clients = {}  # {tab_id: ACPClient}
+        self._max_tabs = max_tabs
+        self._active_tab = None
+        self._window = None
+        self._lock = threading.Lock()
+
+    def set_window(self, window):
+        self._window = window
+        for client in self._clients.values():
+            client.set_window(window)
+
+    @property
+    def active_client(self):
+        """Return the ACPClient for the active tab, or None."""
+        return self._clients.get(self._active_tab)
+
+    def get_client(self, tab_id):
+        """Return ACPClient for a specific tab."""
+        return self._clients.get(tab_id)
+
+    def create_tab(self, tab_id=None):
+        """Create a new tab with its own ACPClient. Returns tab_id."""
+        with self._lock:
+            if len(self._clients) >= self._max_tabs:
+                if self._window:
+                    self._push_js("__acpError", {"error": f"Maximum {self._max_tabs} tabs allowed"})
+                return None
+            if tab_id is None:
+                tab_id = str(uuid.uuid4())[:8]
+            client = ACPClient()
+            client._tab_id = tab_id
+            client.set_window(self._window)
+            self._clients[tab_id] = client
+            if self._active_tab is None:
+                self._active_tab = tab_id
+            return tab_id
+
+    def close_tab(self, tab_id):
+        """Stop and remove a tab's client."""
+        with self._lock:
+            client = self._clients.pop(tab_id, None)
+            if client:
+                client.stop()
+            if self._active_tab == tab_id:
+                # Switch to another tab or None
+                self._active_tab = next(iter(self._clients), None)
+            return self._active_tab
+
+    def switch_tab(self, tab_id):
+        """Set the active tab."""
+        if tab_id in self._clients:
+            self._active_tab = tab_id
+            return True
+        return False
+
+    def start_tab(self, tab_id):
+        """Start the ACP process for a tab."""
+        client = self._clients.get(tab_id)
+        if client:
+            client.start_process()
+
+    def connect_tab(self, tab_id):
+        """Initialize ACP protocol for a tab."""
+        client = self._clients.get(tab_id)
+        if client:
+            client.connect()
+
+    def stop_all(self):
+        """Stop all clients."""
+        for client in self._clients.values():
+            client.stop()
+        self._clients.clear()
+
+    def get_tab_states(self):
+        """Return {tab_id: state} for all tabs."""
+        return {tid: c.state for tid, c in self._clients.items()}
+
+    def _push_js(self, fn_name, data):
+        """Push JS to window (pool-level messages)."""
+        if not self._window:
+            return
+        payload = json.dumps(data).replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
+        try:
+            self._window.evaluate_js(
+                f"if(window.{fn_name})window.{fn_name}(JSON.parse(`{payload}`))"
+            )
+        except Exception:
+            pass
+
+    # --- Tab persistence ---
+
+    def _load_prefs(self):
+        if PREFS_FILE.exists():
+            try:
+                return json.loads(PREFS_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        return {}
+
+    def _save_prefs(self, prefs):
+        PREFS_FILE.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
+
+    def save_tab_state(self):
+        """Persist current tab layout to preferences.json."""
+        prefs = self._load_prefs()
+        tab_list = []
+        for tab_id, client in self._clients.items():
+            tab_list.append({
+                "id": tab_id,
+                "session_id": client._session_id,
+                "title": getattr(client, '_tab_title', 'New Chat'),
+            })
+        prefs["tabs"] = tab_list
+        prefs["active_tab"] = self._active_tab
+        self._save_prefs(prefs)
+
+    def restore_tabs(self):
+        """Restore tabs from preferences.json. Returns list of tab_ids to start."""
+        prefs = self._load_prefs()
+        saved_tabs = prefs.get("tabs")
+        if not saved_tabs or not isinstance(saved_tabs, list):
+            return None  # No saved tabs — caller should create a fresh one
+        tab_ids = []
+        for tab_info in saved_tabs:
+            tab_id = tab_info.get("id")
+            if not tab_id:
+                continue
+            created = self.create_tab(tab_id=tab_id)
+            if created:
+                client = self._clients[created]
+                client._session_id = tab_info.get("session_id")
+                client._tab_title = tab_info.get("title", "New Chat")
+                tab_ids.append(created)
+        # Restore active tab
+        saved_active = prefs.get("active_tab")
+        if saved_active and saved_active in self._clients:
+            self._active_tab = saved_active
+        elif tab_ids:
+            self._active_tab = tab_ids[0]
+        return tab_ids if tab_ids else None
+
+
+# ---------------------------------------------------------------------------
 # PyWebView Bridge
 # ---------------------------------------------------------------------------
 
 class HyperagentAPI:
-    def __init__(self, acp_client):
-        self._acp = acp_client
+    def __init__(self, pool):
+        self._pool = pool
 
-    def send_prompt(self, text):
-        if text and text.strip():
-            threading.Thread(target=self._acp.prompt, args=(text.strip(),), daemon=True).start()
+    @property
+    def _acp(self):
+        """Backward compat: return active client."""
+        return self._pool.active_client
+
+    def send_prompt(self, text, tab_id=None):
+        client = self._pool.get_client(tab_id) if tab_id else self._pool.active_client
+        if client and text and text.strip():
+            threading.Thread(target=client.prompt, args=(text.strip(),), daemon=True).start()
+
+    def cancel(self, reason=None, tab_id=None):
+        client = self._pool.get_client(tab_id) if tab_id else self._pool.active_client
+        if client:
+            client.cancel(reason=reason)
+
+    def new_session(self, tab_id=None):
+        client = self._pool.get_client(tab_id) if tab_id else self._pool.active_client
+        if client:
+            threading.Thread(target=client.new_session, daemon=True).start()
+
+    def create_tab(self):
+        """Create a new tab, spawn its process, connect it."""
+        tab_id = self._pool.create_tab()
+        if not tab_id:
+            return None
+        def _start():
+            self._pool.start_tab(tab_id)
+            self._pool.connect_tab(tab_id)
+            self._pool.save_tab_state()
+        threading.Thread(target=_start, daemon=True).start()
+        return tab_id
+
+    def close_tab(self, tab_id):
+        """Close a tab and its process."""
+        new_active = self._pool.close_tab(tab_id)
+        self._pool.save_tab_state()
+        return new_active
+
+    def switch_tab(self, tab_id):
+        """Switch to a different tab."""
+        result = self._pool.switch_tab(tab_id)
+        if result:
+            self._pool.save_tab_state()
+        return result
+
+    def get_tabs(self):
+        """Return list of tabs with their states."""
+        states = self._pool.get_tab_states()
+        return {
+            "tabs": [{"id": tid, "state": st} for tid, st in states.items()],
+            "active": self._pool._active_tab
+        }
+
+    def open_session_in_tab(self, session_id):
+        """Create a new tab and load an existing session into it."""
+        # Guard: don't open a session that's already in another tab
+        for tab_id, client in self._pool._clients.items():
+            if client._session_id == session_id:
+                self._acp._push_js("__acpError", {
+                    "error": "Session already open in another tab"
+                })
+                return None
+        tab_id = self._pool.create_tab()
+        if not tab_id:
+            return None
+        def _start():
+            self._pool.start_tab(tab_id)
+            self._pool.connect_tab(tab_id)
+            # Once connected, load the session into this tab's client
+            client = self._pool.get_client(tab_id)
+            if client:
+                client._state = "starting"
+                client._push_state()
+                history = self.get_session_history(session_id)
+                client._push_js("__acpSessionLoaded", {"sessionId": session_id, "messages": history})
+
+                def on_load_result(result):
+                    if isinstance(result, dict) and "error" in result:
+                        err = result["error"]
+                        err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+                        logger.error("open_session_in_tab load failed: %s", result)
+                        client._push_js("__acpError", {"error": f"Failed to load session: {err_msg}"})
+                    else:
+                        client._session_id = session_id
+                        client._save_session_id(session_id)
+                    client._state = "ready"
+                    client._push_state()
+
+                def on_new_done(result):
+                    throwaway_id = result.get("sessionId") if isinstance(result, dict) else None
+                    if throwaway_id:
+                        client._owned_sessions.add(throwaway_id)
+                        # Clean up throwaway after load
+                        def on_load_and_clean(res):
+                            on_load_result(res)
+                            if throwaway_id:
+                                self._delete_session_files(throwaway_id)
+                        client._request("session/load", {
+                            "sessionId": session_id,
+                            "cwd": str(PORTAL_ROOT).replace("\\", "/"),
+                            "mcpServers": []
+                        }, on_load_and_clean)
+                    else:
+                        client._request("session/load", {
+                            "sessionId": session_id,
+                            "cwd": str(PORTAL_ROOT).replace("\\", "/"),
+                            "mcpServers": []
+                        }, on_load_result)
+
+                cwd = str(PORTAL_ROOT).replace("\\", "/")
+                client._request("session/new", {"cwd": cwd, "mcpServers": []}, on_new_done)
+            self._pool.save_tab_state()
+        threading.Thread(target=_start, daemon=True).start()
+        return tab_id
 
     def generate_title(self, user_message):
         """Generate a short session title from the user's first message."""
@@ -748,13 +1013,16 @@ class HyperagentAPI:
                     title = user_message[:30]
 
                 self._acp._push_js("__acpSessionTitle", {"title": title})
-                # Persist title for sidebar
+                # Persist title for sidebar and tab
+                if self._acp:
+                    self._acp._tab_title = title  # For tab persistence
                 if self._acp._session_id:
                     prefs = self._acp._load_prefs()
                     titles = prefs.get("sessionTitles", {})
                     titles[self._acp._session_id] = title
                     prefs["sessionTitles"] = titles
                     self._acp._save_prefs(prefs)
+                self._pool.save_tab_state()
             except Exception as e:
                 logger.error(f"generate_title error: {e}")
                 fallback = user_message[:30].strip()
@@ -763,17 +1031,15 @@ class HyperagentAPI:
                 self._acp._push_js("__acpSessionTitle", {"title": fallback})
         threading.Thread(target=_run, daemon=True).start()
 
-    def cancel(self, reason=None):
-        self._acp.cancel(reason=reason)
+    def reconnect(self, tab_id=None):
+        """Reconnect a specific tab (or active tab if no tab_id given)."""
+        client = self._pool.get_client(tab_id) if tab_id else self._pool.active_client
+        if client:
+            threading.Thread(target=client.start, daemon=True).start()
 
-    def new_session(self):
-        threading.Thread(target=self._acp.new_session, daemon=True).start()
-
-    def reconnect(self):
-        threading.Thread(target=self._acp.start, daemon=True).start()
-
-    def get_state(self):
-        return self._acp.state
+    def get_state(self, tab_id=None):
+        client = self._pool.get_client(tab_id) if tab_id else self._pool.active_client
+        return client.state if client else "stopped"
 
     def toggle_fullscreen(self):
         if self._acp._window:
@@ -1244,15 +1510,29 @@ class HyperagentAPI:
             return ""
 
     def rename_session(self, session_id, new_title):
-        """Rename a session by updating the custom title in preferences."""
-        if not session_id or not new_title:
+        """Rename a session by updating the custom title in preferences.
+        Also updates the tab title if the session belongs to a tab."""
+        if not new_title:
             return False
+        new_title = new_title.strip()[:60]
         try:
-            prefs = self._acp._load_prefs()
+            # If no session_id given, use active tab's session
+            if not session_id:
+                client = self._pool.active_client
+                session_id = client._session_id if client else None
+            if not session_id:
+                return False
+            prefs = self._pool._load_prefs()
             titles = prefs.get("sessionTitles", {})
-            titles[session_id] = new_title.strip()[:60]
+            titles[session_id] = new_title
             prefs["sessionTitles"] = titles
-            self._acp._save_prefs(prefs)
+            self._pool._save_prefs(prefs)
+            # Update tab title for any tab holding this session
+            for tab_id, client in self._pool._clients.items():
+                if client._session_id == session_id:
+                    client._tab_title = new_title
+                    client._push_js("__acpSessionTitle", {"title": new_title})
+            self._pool.save_tab_state()
             return True
         except Exception as e:
             logger.error(f"rename_session error: {e}")
@@ -1260,6 +1540,13 @@ class HyperagentAPI:
 
     def load_session(self, session_id):
         """Load an existing session by ID."""
+        # Guard: don't load a session that's already open in another tab
+        for tab_id, client in self._pool._clients.items():
+            if tab_id != self._pool._active_tab and client._session_id == session_id:
+                self._acp._push_js("__acpError", {
+                    "error": "Session already open in another tab"
+                })
+                return
         threading.Thread(
             target=self._load_session_async, args=(session_id,), daemon=True
         ).start()
@@ -1490,13 +1777,14 @@ def main():
                 for f in sessions_dir.glob(f"{sid}*"):
                     f.unlink(missing_ok=True)
 
-    acp = ACPClient()
-    api = HyperagentAPI(acp)
+    pool = ACPClientPool(max_tabs=5)
+    api = HyperagentAPI(pool)
+
+    # Always start fresh with a single tab (restoring multi-tab state is unreliable)
+    initial_tab = pool.create_tab()
+    pool.start_tab(initial_tab)
 
     icon_path = str(ICON_FILE) if ICON_FILE.exists() else None
-
-    # Spawn ACP subprocess and start reader BEFORE webview to avoid pipe issues
-    acp.start_process()
 
     window = webview.create_window(
         "Hyperagent",
@@ -1511,14 +1799,17 @@ def main():
     def on_start():
         time.sleep(1)
         _apply_window_chrome("Hyperagent", str(ICON_FILE))
-        acp.set_window(window)
+        pool.set_window(window)
         logger.info("on_start: window ready, connecting protocol")
-        acp.connect()
+        # Connect the initial tab
+        pool.connect_tab(initial_tab)
         # Start theme file watcher
         _start_theme_watcher(window, api)
 
     webview.start(on_start, icon=icon_path, debug=False)
-    acp.stop()
+    # Save tab state before exiting
+    pool.save_tab_state()
+    pool.stop_all()
 
 
 if __name__ == "__main__":

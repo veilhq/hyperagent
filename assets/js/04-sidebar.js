@@ -8,6 +8,8 @@ var ctxMenu = (function() {
   var menu = document.createElement('div');
   menu.className = 'session-ctx-menu';
   menu.innerHTML =
+    '<div class="session-ctx-menu-item" data-action="open-tab">Open in new tab</div>' +
+    '<div class="session-ctx-menu-sep"></div>' +
     '<div class="session-ctx-menu-item" data-action="rename">Rename</div>' +
     '<div class="session-ctx-menu-sep"></div>' +
     '<div class="session-ctx-menu-item danger" data-action="delete">Delete</div>';
@@ -19,6 +21,7 @@ var ctxMenu = (function() {
     var item = e.target.closest('.session-ctx-menu-item');
     if (!item) return;
     var action = item.getAttribute('data-action');
+    if (action === 'open-tab' && _target) openInNewTab(_target.id);
     if (action === 'rename' && _target) startRename(_target.id, _target.el);
     if (action === 'delete' && _target) deleteSession(_target.id, _target.el);
     hide();
@@ -114,7 +117,7 @@ function refreshSessions() {
         + '<button class="session-delete-btn" title="Delete">&times;</button>'
         + '</div>'
         + '<div class="session-item-meta">' + escapeHtml(s.age) + ' · ' + escapeHtml(s.msgs) + lockBadge + '</div>';
-      el.querySelector('.session-item-title').onclick = function() { loadSession(s.id); };
+      el.querySelector('.session-item-title').onclick = function() { if (s.locked && s.id !== data.active) return; loadSession(s.id); };
       el.querySelector('.session-delete-btn').onclick = function(e) { e.stopPropagation(); deleteSession(s.id, el); };
       // Right-click context menu
       el.addEventListener('contextmenu', function(e) {
@@ -137,6 +140,15 @@ function loadSession(id) {
   // Update active highlight
   sessionList.querySelectorAll('.session-item').forEach(function(el) {
     el.classList.toggle('active', false);
+  });
+}
+
+function openInNewTab(sessionId) {
+  if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.open_session_in_tab) return;
+  pywebview.api.open_session_in_tab(sessionId).then(function(tabId) {
+    if (!tabId) return; // error pushed from backend
+    _addTabToUI(tabId, 'Loading...');
+    switchTab(tabId);
   });
 }
 
