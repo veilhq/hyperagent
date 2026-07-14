@@ -8,8 +8,6 @@ var ctxMenu = (function() {
   var menu = document.createElement('div');
   menu.className = 'session-ctx-menu';
   menu.innerHTML =
-    '<div class="session-ctx-menu-item" data-action="open-tab">Open in new tab</div>' +
-    '<div class="session-ctx-menu-sep"></div>' +
     '<div class="session-ctx-menu-item" data-action="rename">Rename</div>' +
     '<div class="session-ctx-menu-sep"></div>' +
     '<div class="session-ctx-menu-item danger" data-action="delete">Delete</div>';
@@ -21,7 +19,6 @@ var ctxMenu = (function() {
     var item = e.target.closest('.session-ctx-menu-item');
     if (!item) return;
     var action = item.getAttribute('data-action');
-    if (action === 'open-tab' && _target) openInNewTab(_target.id);
     if (action === 'rename' && _target) startRename(_target.id, _target.el);
     if (action === 'delete' && _target) deleteSession(_target.id, _target.el);
     hide();
@@ -107,17 +104,26 @@ function refreshSessions() {
       sessionList.innerHTML = '<div style="padding:0.8rem 1rem;color:var(--text-dim);font-size:0.65rem;">No sessions</div>';
       return;
     }
+    // Get session IDs already open in tabs — skip those from the history list
+    var openIds = window._getOpenSessionIds ? window._getOpenSessionIds() : {};
+    var rendered = 0;
     data.sessions.forEach(function(s, i) {
+      // Skip sessions that are currently open as tabs
+      if (openIds[s.id]) return;
       var el = document.createElement('div');
-      el.className = 'session-item stagger-in' + (s.id === data.active ? ' active' : '');
+      el.className = 'session-item stagger-in';
       el.setAttribute('data-session-id', s.id);
-      var lockBadge = s.locked && s.id !== data.active ? '<span class="session-lock">IN USE</span>' : '';
+      var lockBadge = s.locked ? '<span class="session-lock">IN USE</span>' : '';
       el.innerHTML = '<div class="session-item-row">'
         + '<div class="session-item-title">' + escapeHtml(s.title) + '</div>'
         + '<button class="session-delete-btn" title="Delete">&times;</button>'
         + '</div>'
         + '<div class="session-item-meta">' + escapeHtml(s.age) + ' · ' + escapeHtml(s.msgs) + lockBadge + '</div>';
-      el.querySelector('.session-item-title').onclick = function() { if (s.locked && s.id !== data.active) return; loadSession(s.id); };
+      // Single click: open in a new tab
+      el.querySelector('.session-item-title').onclick = function() {
+        if (s.locked) return;
+        openInNewTab(s.id, s.title);
+      };
       el.querySelector('.session-delete-btn').onclick = function(e) { e.stopPropagation(); deleteSession(s.id, el); };
       // Right-click context menu
       el.addEventListener('contextmenu', function(e) {
@@ -126,30 +132,52 @@ function refreshSessions() {
         ctxMenu.show(e.clientX, e.clientY, s.id, el);
       });
       sessionList.appendChild(el);
-      setTimeout(function() { el.classList.remove('stagger-in'); el.classList.add('stagger-visible'); }, 30 + i * 40);
+      setTimeout(function() { el.classList.remove('stagger-in'); el.classList.add('stagger-visible'); }, 30 + rendered * 40);
+      rendered++;
     });
+    if (rendered === 0) {
+      sessionList.innerHTML = '<div style="padding:0.8rem 1rem;color:var(--text-dim);font-size:0.65rem;">All sessions open as tabs</div>';
+    }
   });
 }
 
 function loadSession(id) {
   // Block updates until history render completes
   _loadingHistory = true;
-  // Safety: reset flag if __acpSessionLoaded never fires (e.g. push_js error)
-  _loadingHistoryTimeout = setTimeout(function() { _loadingHistory = false; }, 10000);
+  // Capture the tab that initiated the load so the timeout resets the right state
+  var loadTabId = activeTabId;
+  _loadingHistoryTimeout = setTimeout(function() {
+    if (activeTabId === loadTabId) {
+      _loadingHistory = false;
+    } else if (loadTabId && tabs[loadTabId] && tabs[loadTabId].renderState) {
+      tabs[loadTabId].renderState._loadingHistory = false;
+    }
+  }, 10000);
   pywebview.api.load_session(id);
-  // Update active highlight
-  sessionList.querySelectorAll('.session-item').forEach(function(el) {
-    el.classList.toggle('active', false);
-  });
 }
 
-function openInNewTab(sessionId) {
+function openInNewTab(sessionId, title) {
   if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.open_session_in_tab) return;
   pywebview.api.open_session_in_tab(sessionId).then(function(tabId) {
     if (!tabId) return; // error pushed from backend
-    _addTabToUI(tabId, 'Loading...');
+    _addTabToUI(tabId, title || 'New Chat', sessionId);
     switchTab(tabId);
+    // Show loading splash immediately (don't wait for backend state push)
+    _showLoadingSplash();
+    // Refresh session list to remove the now-open session
+    refreshSessions();
   });
+}
+
+function _showLoadingSplash() {
+  if (document.getElementById('ha-splash')) return;
+  var splash = document.createElement('div');
+  splash.id = 'ha-splash';
+  splash.className = 'ha-splash';
+  splash.innerHTML = '<div class="ha-splash-flag"><svg class="ha-splash-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108.28 108.28" fill="currentColor"><path d="M107.94,71.76l-35.71-35.71-.04-.04h-34.8c-.63,0-1.14-.51-1.14-1.14V1.14c0-.63-.51-1.14-1.14-1.14H1.14C.51,0,0,.51,0,1.14v34.58c0,.3.12.59.33.8l33.56,33.56c.72.72.21,1.94-.8,1.94H1.14c-.63,0-1.14.51-1.14,1.14v33.98c0,.63.51,1.14,1.14,1.14h33.98c.63,0,1.14-.51,1.14-1.14v-33.73c0-.63.51-1.14,1.14-1.14h33.48c.63,0,1.14.51,1.14,1.14v33.73c0,.63.51,1.14,1.14,1.14h33.98c.63,0,1.14-.51,1.14-1.14v-34.58c0-.3-.12-.59-.33-.8Z"/><path d="M72.67,18.01l7.88,3.11c2.6,1.03,4.66,3.08,5.68,5.68l3.11,7.87c.18.45.82.45,1,0l3.11-7.87c1.03-2.6,3.08-4.66,5.68-5.68l7.88-3.11c.45-.18.45-.82,0-1l-7.88-3.11c-2.6-1.03-4.66-3.08-5.68-5.68l-3.11-7.87c-.18-.45-.82-.45-1,0l-3.11,7.87c-1.03,2.6-3.08,4.66-5.68,5.68l-7.88,3.11c-.45.18-.45.82,0,1Z"/></svg></div>'
+    + '<div class="ha-splash-loading">Loading session history</div>'
+    + '<div class="ha-splash-pct" id="ha-splash-pct">0%</div>';
+  document.body.appendChild(splash);
 }
 
 function deleteSession(id, el) {

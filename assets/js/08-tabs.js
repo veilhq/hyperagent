@@ -1,9 +1,9 @@
 /* ===== Hyperagent: Multi-Tab Architecture ===== */
 
 // --- Tab state ---
-var tabs = {};           // {tabId: {el, msgsEl, title, state, unread, renderState}}
+var tabs = {};           // {tabId: {el, msgsEl, title, sessionId, state, unread, renderState}}
 var activeTabId = null;
-var tabBarEl = null;
+var sidebarTabList = null;
 
 // --- Per-tab render state ---
 // These are the globals from 02-handlers.js that need isolation per tab.
@@ -20,7 +20,15 @@ function _newRenderState() {
     toolNameMap: {},
     sessionTitle: '',
     firstPrompt: '',
-    activeSkills: {}
+    activeSkills: {},
+    // Task panel state (per-tab)
+    taskList: [],
+    taskDescription: '',
+    taskPanelVisible: false,
+    taskPanelCollapsed: false,
+    // History loading state (per-tab)
+    _loadingHistory: false,
+    _loadingHistoryTimeout: null
   };
 }
 
@@ -36,7 +44,15 @@ function _saveRenderState(tabId) {
     toolNameMap: toolNameMap,
     sessionTitle: sessionTitle,
     firstPrompt: firstPrompt,
-    activeSkills: activeSkills
+    activeSkills: activeSkills,
+    // Task panel state
+    taskList: taskList,
+    taskDescription: taskDescription,
+    taskPanelVisible: taskPanel ? taskPanel.classList.contains('visible') : false,
+    taskPanelCollapsed: taskPanel ? taskPanel.classList.contains('collapsed') : false,
+    // History loading state
+    _loadingHistory: _loadingHistory,
+    _loadingHistoryTimeout: _loadingHistoryTimeout
   };
 }
 
@@ -53,6 +69,28 @@ function _loadRenderState(tabId) {
   sessionTitle = rs.sessionTitle;
   firstPrompt = rs.firstPrompt;
   activeSkills = rs.activeSkills;
+  // Restore task data globals
+  taskList = rs.taskList;
+  taskDescription = rs.taskDescription;
+  // Restore history loading state
+  _loadingHistory = rs._loadingHistory;
+  _loadingHistoryTimeout = rs._loadingHistoryTimeout;
+}
+
+// Update task panel DOM to reflect the active tab's task state.
+// Called only on switchTab — NOT during background context swaps.
+function _syncTaskPanelToActiveTab() {
+  var rs = tabs[activeTabId] && tabs[activeTabId].renderState;
+  if (!rs) rs = _newRenderState();
+  if (taskPanel) {
+    if (rs.taskPanelVisible && rs.taskList.length) {
+      taskPanel.classList.add('visible');
+      taskPanel.classList.toggle('collapsed', rs.taskPanelCollapsed);
+      renderTasks();
+    } else {
+      taskPanel.classList.remove('visible');
+    }
+  }
 }
 
 // Execute a function with a specific tab's render context active,
@@ -77,17 +115,25 @@ function _withTabContext(tabId, fn) {
   state = prevState;
 }
 
-// --- Initialize tab bar UI ---
-(function initTabBar() {
-  tabBarEl = document.getElementById('tab-bar');
-
-  var addBtn = document.createElement('div');
-  addBtn.className = 'tab-add';
-  addBtn.textContent = '+';
-  addBtn.title = 'New tab (Ctrl+T)';
-  addBtn.addEventListener('click', createTab);
-  tabBarEl.appendChild(addBtn);
+// --- Initialize sidebar tab section ---
+(function initTabSection() {
+  sidebarTabList = document.getElementById('sidebar-tab-list');
+  var addBtn = document.getElementById('sidebar-tab-add');
+  if (addBtn) addBtn.addEventListener('click', createTab);
 })();
+
+// --- Tab count badge ---
+function _updateTabBadge() {
+  var count = Object.keys(tabs).length;
+  var badge = document.getElementById('sidebar-toggle-badge');
+  if (!badge) return;
+  if (count > 1) {
+    badge.textContent = String(count);
+    badge.classList.add('visible');
+  } else {
+    badge.classList.remove('visible');
+  }
+}
 
 // --- Tab management ---
 
@@ -100,49 +146,48 @@ function createTab() {
   });
 }
 
-function _addTabToUI(tabId, title) {
+function _addTabToUI(tabId, title, sessionId) {
   // Create per-tab messages container
   var msgsContainer = document.createElement('div');
   msgsContainer.className = 'tab-messages';
   msgsContainer.id = 'messages-' + tabId;
   msgsContainer.style.display = 'none';
-  // Insert after the existing #messages div in main-layout
+  // Insert into main-layout
   var mainLayout = document.querySelector('.main-layout');
   mainLayout.appendChild(msgsContainer);
 
-  // Create tab element
+  // Create sidebar tab item
   var tabEl = document.createElement('div');
-  tabEl.className = 'tab-item';
+  tabEl.className = 'sidebar-tab-item';
   tabEl.setAttribute('data-tab-id', tabId);
-  tabEl.innerHTML = '<span class="tab-title">' + _escTabHtml(title || 'New Chat') + '</span>'
-    + '<span class="tab-indicator"></span>'
-    + '<span class="tab-close">&times;</span>';
+  tabEl.innerHTML = '<span class="sidebar-tab-item-indicator"></span>'
+    + '<span class="sidebar-tab-item-title">' + _escTabHtml(title || 'New Chat') + '</span>'
+    + '<button class="sidebar-tab-item-close" title="Close tab">&times;</button>';
 
-  tabEl.querySelector('.tab-title').addEventListener('click', function() {
+  tabEl.querySelector('.sidebar-tab-item-title').addEventListener('click', function() {
     switchTab(tabId);
   });
-  tabEl.querySelector('.tab-close').addEventListener('click', function(e) {
+  tabEl.querySelector('.sidebar-tab-item-close').addEventListener('click', function(e) {
     e.stopPropagation();
     closeTab(tabId);
   });
 
-  // Insert before the [+] button
-  var addBtn = tabBarEl.querySelector('.tab-add');
-  tabBarEl.insertBefore(tabEl, addBtn);
+  sidebarTabList.appendChild(tabEl);
 
   tabs[tabId] = {
     el: tabEl,
     msgsEl: msgsContainer,
     title: title || 'New Chat',
+    sessionId: sessionId || null,
     state: 'starting',
     unread: false,
     renderState: _newRenderState()
   };
 
-  _updateTabBarVisibility();
+  _updateTabBadge();
   _makeTabTitleEditable(tabEl, tabId);
-  // Show welcome in new tab
-  _showWelcomeInTab(msgsContainer);
+  // Show welcome in new tab (skip if loading an existing session)
+  if (!sessionId) _showWelcomeInTab(msgsContainer);
 }
 
 function switchTab(tabId) {
@@ -159,14 +204,26 @@ function switchTab(tabId) {
   activeTabId = tabId;
   tabs[tabId].msgsEl.style.display = '';
   tabs[tabId].el.classList.remove('unread');
+  tabs[tabId].el.classList.remove('done');
   tabs[tabId].el.classList.add('active');
   tabs[tabId].unread = false;
 
   // Load the new tab's render state
   _loadRenderState(tabId);
 
+  // Sync task panel DOM to the new active tab's task state
+  _syncTaskPanelToActiveTab();
+
   // Swap the global `msgs` reference to point to this tab's container
   msgs = tabs[tabId].msgsEl;
+
+  // Flush any pending stream buffer immediately so the user sees complete content
+  // rather than watching a delayed drain animation catch up
+  if (streamBuffer.length) {
+    flushStream();
+    // Save the flushed state back
+    _saveRenderState(tabId);
+  }
 
   // Update the global `state` variable to match this tab's state
   // This is critical — send() and cancel() check this global
@@ -174,7 +231,7 @@ function switchTab(tabId) {
   state = tabState;
   statusEl.textContent = tabState;
   statusEl.className = 'topbar-status ' + tabState;
-  sendBtn.disabled = (tabState !== 'ready' && tabState !== 'prompting');
+  sendBtn.disabled = (tabState !== 'ready' && tabState !== 'prompting') || _loadingHistory;
   app.classList.toggle('prompting', tabState === 'prompting');
 
   // Tell backend
@@ -187,6 +244,13 @@ function switchTab(tabId) {
     showThinking();
   } else {
     hideThinking();
+  }
+
+  // Update topbar title for this tab
+  var titleEl = document.getElementById('session-title');
+  if (titleEl) {
+    titleEl.textContent = tabs[tabId].title || '';
+    titleEl.classList.toggle('has-title', !!tabs[tabId].title);
   }
 
   // Scroll to bottom
@@ -215,12 +279,7 @@ function closeTab(tabId) {
     if (remaining.length) switchTab(remaining[remaining.length - 1]);
   }
 
-  _updateTabBarVisibility();
-}
-
-function _updateTabBarVisibility() {
-  var count = Object.keys(tabs).length;
-  tabBarEl.classList.toggle('single-tab', count <= 1);
+  _updateTabBadge();
 }
 
 function _escTabHtml(str) {
@@ -243,6 +302,20 @@ function _showWelcomeInTab(container) {
   });
   container.appendChild(w);
 }
+
+// --- Get open session IDs (for sidebar filtering) ---
+function _getOpenSessionIds() {
+  var ids = {};
+  var tabIds = Object.keys(tabs);
+  for (var i = 0; i < tabIds.length; i++) {
+    var sid = tabs[tabIds[i]].sessionId;
+    if (sid) ids[sid] = true;
+  }
+  return ids;
+}
+
+// Expose for 04-sidebar.js
+window._getOpenSessionIds = _getOpenSessionIds;
 
 // --- Route events by tabId ---
 // Wrap the original handlers to dispatch to correct tab container
@@ -273,12 +346,44 @@ function _markUnread(data) {
   }
 }
 
+// Helper: mark a background tab as "execution complete" (! indicator)
+function _markDone(data) {
+  if (!data || !data._tabId) return;
+  if (data._tabId === activeTabId) return;
+  var tab = tabs[data._tabId];
+  if (tab) {
+    tab.unread = true;
+    tab.el.classList.remove('unread');
+    tab.el.classList.add('done');
+  }
+}
+
+// Helper: show a transient toast notification
+var _toastEl = null;
+var _toastTimer = null;
+function _showToast(message) {
+  if (!_toastEl) {
+    _toastEl = document.createElement('div');
+    _toastEl.className = 'ha-toast';
+    document.body.appendChild(_toastEl);
+  }
+  _toastEl.innerHTML = '<span class="ha-toast-accent">&#9670;</span> ' + _escTabHtml(message);
+  // Reset animation
+  _toastEl.classList.remove('visible');
+  void _toastEl.offsetWidth;
+  _toastEl.classList.add('visible');
+  if (_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(function() {
+    _toastEl.classList.remove('visible');
+  }, 3000);
+}
+
 // Wrap __acpUpdate: route to correct tab's messages container
 window.__acpUpdate = function(update) {
   var tabId = update && update._tabId;
 
-  // Update tab indicator state
-  if (tabId && tabs[tabId]) {
+  // Update tab indicator state — only if tab is actually prompting
+  if (tabId && tabs[tabId] && tabs[tabId].state === 'prompting') {
     tabs[tabId].el.classList.add('prompting');
   }
 
@@ -305,7 +410,9 @@ window.__acpTurnEnd = function(data) {
   if (_isActiveTab(data)) {
     if (_origAcpTurnEnd) _origAcpTurnEnd(data);
   } else if (tabId && tabs[tabId]) {
-    _markUnread(data);
+    // Background tab execution complete — mark as done and show toast
+    _markDone(data);
+    _showToast('Execution complete: ' + (tabs[tabId].title || 'Tab'));
     _withTabContext(tabId, function() {
       if (_origAcpTurnEnd) _origAcpTurnEnd(data);
     });
@@ -348,11 +455,11 @@ window.__acpNewSession = function(data) {
 
 window.__acpSessionTitle = function(data) {
   var tabId = data && data._tabId;
-  // Update tab title in the tab bar
+  // Update sidebar tab title
   if (tabId && tabs[tabId]) {
     var title = data.title || 'New Chat';
     tabs[tabId].title = title;
-    var titleEl = tabs[tabId].el.querySelector('.tab-title');
+    var titleEl = tabs[tabId].el.querySelector('.sidebar-tab-item-title');
     if (titleEl) titleEl.textContent = title;
   }
   if (!_isActiveTab(data)) return;
@@ -360,14 +467,31 @@ window.__acpSessionTitle = function(data) {
 };
 
 window.__acpSessionLoaded = function(data) {
+  var tabId = data && data._tabId;
+  // Track session ID on the tab
+  if (tabId && tabs[tabId] && data && data.sessionId) {
+    tabs[tabId].sessionId = data.sessionId;
+  }
   if (_isActiveTab(data)) {
     if (_origAcpSessionLoaded) _origAcpSessionLoaded(data);
+    // Sync derived title to sidebar tab ONLY if tab has no real title yet
+    if (tabId && tabs[tabId] && sessionTitle && tabs[tabId].title === 'New Chat') {
+      tabs[tabId].title = sessionTitle;
+      var titleEl = tabs[tabId].el.querySelector('.sidebar-tab-item-title');
+      if (titleEl) titleEl.textContent = sessionTitle;
+    }
   } else {
-    var tabId = data && data._tabId;
     if (tabId && tabs[tabId]) {
       _withTabContext(tabId, function() {
         if (_origAcpSessionLoaded) _origAcpSessionLoaded(data);
       });
+      // Sync derived title only if tab has no real title yet
+      var rs = tabs[tabId].renderState;
+      if (rs && rs.sessionTitle && tabs[tabId].title === 'New Chat') {
+        tabs[tabId].title = rs.sessionTitle;
+        var bgTitleEl = tabs[tabId].el.querySelector('.sidebar-tab-item-title');
+        if (bgTitleEl) bgTitleEl.textContent = rs.sessionTitle;
+      }
     }
   }
 };
@@ -390,8 +514,35 @@ window.__acpError = function(data) {
   if (_origAcpError) _origAcpError(data);
 };
 
-// --- Keyboard shortcut: Ctrl+T for new tab ---
+// --- Task panel: tab-routed wrappers ---
+var _origAcpTaskUpdate = window.__acpTaskUpdate;
+var _origAcpTaskReset = window.__acpTaskReset;
+
+window.__acpTaskUpdate = function(data) {
+  var tabId = data && data._tabId;
+  if (_isActiveTab(data)) {
+    if (_origAcpTaskUpdate) _origAcpTaskUpdate(data);
+  } else if (tabId && tabs[tabId]) {
+    _withTabContext(tabId, function() {
+      if (_origAcpTaskUpdate) _origAcpTaskUpdate(data);
+    });
+  }
+};
+
+window.__acpTaskReset = function(data) {
+  var tabId = data && data._tabId;
+  if (_isActiveTab(data)) {
+    if (_origAcpTaskReset) _origAcpTaskReset(data);
+  } else if (tabId && tabs[tabId]) {
+    _withTabContext(tabId, function() {
+      if (_origAcpTaskReset) _origAcpTaskReset(data);
+    });
+  }
+};
+
+// --- Keyboard shortcuts ---
 document.addEventListener('keydown', function(e) {
+  // Ctrl+T: new tab
   if (e.ctrlKey && e.key === 't') {
     e.preventDefault();
     createTab();
@@ -428,10 +579,29 @@ function _registerInitialTab(tabId) {
   // The original #messages div becomes this tab's container
   var originalMsgs = document.getElementById('messages');
 
+  // Create sidebar tab item for initial tab
+  var tabEl = document.createElement('div');
+  tabEl.className = 'sidebar-tab-item active';
+  tabEl.setAttribute('data-tab-id', tabId);
+  tabEl.innerHTML = '<span class="sidebar-tab-item-indicator"></span>'
+    + '<span class="sidebar-tab-item-title">New Chat</span>'
+    + '<button class="sidebar-tab-item-close" title="Close tab">&times;</button>';
+
+  tabEl.querySelector('.sidebar-tab-item-title').addEventListener('click', function() {
+    switchTab(tabId);
+  });
+  tabEl.querySelector('.sidebar-tab-item-close').addEventListener('click', function(e) {
+    e.stopPropagation();
+    closeTab(tabId);
+  });
+
+  sidebarTabList.appendChild(tabEl);
+
   tabs[tabId] = {
-    el: null,  // will create tab element
+    el: tabEl,
     msgsEl: originalMsgs,
     title: 'New Chat',
+    sessionId: null,
     state: 'starting',
     unread: false,
     renderState: _newRenderState()
@@ -439,27 +609,7 @@ function _registerInitialTab(tabId) {
   activeTabId = tabId;
   // msgs is already pointing to originalMsgs from 00-core.js init
 
-  // Create tab bar item for initial tab
-  var tabEl = document.createElement('div');
-  tabEl.className = 'tab-item active';
-  tabEl.setAttribute('data-tab-id', tabId);
-  tabEl.innerHTML = '<span class="tab-title">New Chat</span>'
-    + '<span class="tab-indicator"></span>'
-    + '<span class="tab-close">&times;</span>';
-
-  tabEl.querySelector('.tab-title').addEventListener('click', function() {
-    switchTab(tabId);
-  });
-  tabEl.querySelector('.tab-close').addEventListener('click', function(e) {
-    e.stopPropagation();
-    closeTab(tabId);
-  });
-
-  var addBtn = tabBarEl.querySelector('.tab-add');
-  tabBarEl.insertBefore(tabEl, addBtn);
-  tabs[tabId].el = tabEl;
-
-  _updateTabBarVisibility();
+  _updateTabBadge();
   _makeTabTitleEditable(tabEl, tabId);
 }
 
@@ -470,62 +620,36 @@ window.switchTab = switchTab;
 
 // --- Tab title editing (double-click to rename) ---
 function _makeTabTitleEditable(tabEl, tabId) {
-  var titleEl = tabEl.querySelector('.tab-title');
+  var titleEl = tabEl.querySelector('.sidebar-tab-item-title');
   if (!titleEl) return;
   titleEl.addEventListener('dblclick', function(e) {
     e.stopPropagation();
     var current = tabs[tabId] ? tabs[tabId].title : titleEl.textContent;
-    var input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'tab-rename-input';
-    input.value = current;
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = 'sidebar-tab-rename-input';
+    inp.value = current;
     titleEl.style.display = 'none';
-    tabEl.insertBefore(input, titleEl.nextSibling);
-    input.focus();
-    input.select();
+    tabEl.insertBefore(inp, titleEl.nextSibling);
+    inp.focus();
+    inp.select();
 
     function commit() {
-      var newTitle = input.value.trim() || current;
+      var newTitle = inp.value.trim() || current;
       titleEl.textContent = newTitle;
       titleEl.style.display = '';
-      if (input.parentNode) input.parentNode.removeChild(input);
+      if (inp.parentNode) inp.parentNode.removeChild(inp);
       if (tabs[tabId]) tabs[tabId].title = newTitle;
-      // Persist via rename_session if we have a session
+      // Persist via rename_session
       if (window.pywebview && window.pywebview.api && window.pywebview.api.rename_session) {
-        var client = tabs[tabId];
-        // The backend tracks session<->tab, rename propagates to preferences
         pywebview.api.rename_session(null, newTitle);
-      }
-      // Save tab state
-      if (window.pywebview && window.pywebview.api && window.pywebview.api.switch_tab) {
-        // Trigger a save by switching to self (no-op on backend but saves state)
       }
     }
 
-    input.addEventListener('keydown', function(ev) {
+    inp.addEventListener('keydown', function(ev) {
       if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
-      if (ev.key === 'Escape') { ev.preventDefault(); titleEl.style.display = ''; if (input.parentNode) input.parentNode.removeChild(input); }
+      if (ev.key === 'Escape') { ev.preventDefault(); titleEl.style.display = ''; if (inp.parentNode) inp.parentNode.removeChild(inp); }
     });
-    input.addEventListener('blur', commit);
+    inp.addEventListener('blur', commit);
   });
 }
-
-// --- Handle restored tabs from backend ---
-window.__acpTabRestored = function(data) {
-  if (!data || !data.tabId) return;
-  var tabId = data.tabId;
-  var title = data.title || 'New Chat';
-  var isActive = data.active;
-
-  if (!_initialTabRegistered) {
-    // First restored tab replaces the default #messages
-    _registerInitialTab(tabId);
-    tabs[tabId].title = title;
-    var titleEl = tabs[tabId].el.querySelector('.tab-title');
-    if (titleEl) titleEl.textContent = title;
-  } else if (!tabs[tabId]) {
-    // Additional restored tabs
-    _addTabToUI(tabId, title);
-    if (isActive) switchTab(tabId);
-  }
-};

@@ -334,6 +334,11 @@ class ACPClient:
             logger.debug(f"on_init called: {str(result)[:100]}")
             # Don't create a session yet — show welcome screen immediately.
             # A session is created lazily on first prompt or sidebar load.
+            if getattr(self, '_suppress_init_ready', False):
+                # Tab is loading a session — don't push ready yet
+                self._suppress_init_ready = False
+                logger.debug("on_init: suppressed ready (session load pending)")
+                return
             self._state = "ready"
             self._push_state()
 
@@ -825,43 +830,18 @@ class ACPClientPool:
         PREFS_FILE.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
 
     def save_tab_state(self):
-        """Persist current tab layout to preferences.json."""
+        """Persist session titles for sidebar display. Does NOT save tab layout."""
         prefs = self._load_prefs()
-        tab_list = []
-        for tab_id, client in self._clients.items():
-            tab_list.append({
-                "id": tab_id,
-                "session_id": client._session_id,
-                "title": getattr(client, '_tab_title', 'New Chat'),
-            })
-        prefs["tabs"] = tab_list
-        prefs["active_tab"] = self._active_tab
+        # Save session titles so they appear in the sidebar after restart
+        titles = prefs.get("sessionTitles", {})
+        for client in self._clients.values():
+            if client._session_id and hasattr(client, '_tab_title'):
+                titles[client._session_id] = client._tab_title
+        prefs["sessionTitles"] = titles
+        # Clear any stale tab layout from older versions
+        prefs.pop("tabs", None)
+        prefs.pop("active_tab", None)
         self._save_prefs(prefs)
-
-    def restore_tabs(self):
-        """Restore tabs from preferences.json. Returns list of tab_ids to start."""
-        prefs = self._load_prefs()
-        saved_tabs = prefs.get("tabs")
-        if not saved_tabs or not isinstance(saved_tabs, list):
-            return None  # No saved tabs — caller should create a fresh one
-        tab_ids = []
-        for tab_info in saved_tabs:
-            tab_id = tab_info.get("id")
-            if not tab_id:
-                continue
-            created = self.create_tab(tab_id=tab_id)
-            if created:
-                client = self._clients[created]
-                client._session_id = tab_info.get("session_id")
-                client._tab_title = tab_info.get("title", "New Chat")
-                tab_ids.append(created)
-        # Restore active tab
-        saved_active = prefs.get("active_tab")
-        if saved_active and saved_active in self._clients:
-            self._active_tab = saved_active
-        elif tab_ids:
-            self._active_tab = tab_ids[0]
-        return tab_ids if tab_ids else None
 
 
 # ---------------------------------------------------------------------------
@@ -939,9 +919,13 @@ class HyperagentAPI:
             return None
         def _start():
             self._pool.start_tab(tab_id)
+            # Suppress the automatic ready state from _initialize's on_init callback.
+            # We'll manually transition to ready after session/load completes.
+            client = self._pool.get_client(tab_id)
+            if client:
+                client._suppress_init_ready = True
             self._pool.connect_tab(tab_id)
             # Once connected, load the session into this tab's client
-            client = self._pool.get_client(tab_id)
             if client:
                 client._state = "starting"
                 client._push_state()
@@ -1400,8 +1384,8 @@ class HyperagentAPI:
             pid = int(data.get("pid", 0))
             if pid == 0:
                 return False
-            # Don't mark our own kiro-cli's sessions as locked
-            if pid == self._get_own_kiro_pid():
+            # Don't mark sessions owned by ANY of our tabs as locked
+            if pid in self._get_own_kiro_pids():
                 return False
             import ctypes
             kernel32 = ctypes.windll.kernel32
@@ -1414,23 +1398,27 @@ class HyperagentAPI:
         except Exception:
             return False
 
-    def _get_own_kiro_pid(self):
-        """Get the PID of our kiro-cli process from any owned session lock."""
+    def _get_own_kiro_pids(self):
+        """Get PIDs of all kiro-cli processes owned by any tab in our pool."""
+        pids = set()
         try:
-            sessions_to_check = self._acp._owned_sessions.copy()
-            if self._acp._session_id:
-                sessions_to_check.add(self._acp._session_id)
             sessions_dir = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "sessions" / "cli"
+            # Collect session IDs from ALL pool clients
+            sessions_to_check = set()
+            for client in self._pool._clients.values():
+                sessions_to_check.update(client._owned_sessions)
+                if client._session_id:
+                    sessions_to_check.add(client._session_id)
             for sid in sessions_to_check:
                 lock_file = sessions_dir / f"{sid}.lock"
                 if lock_file.exists():
                     data = json.loads(lock_file.read_text(encoding="utf-8"))
                     pid = int(data.get("pid", 0))
                     if pid:
-                        return pid
+                        pids.add(pid)
         except Exception:
             pass
-        return None
+        return pids
 
     def list_sessions(self):
         """List sessions by reading metadata directly from the filesystem."""
@@ -1765,6 +1753,115 @@ def _start_theme_watcher(window, api):
     threading.Thread(target=_watch, daemon=True).start()
 
 
+def _cleanup_stale_locks(sessions_dir):
+    """Remove lock files whose owning kiro-cli process is orphaned (parent bridge dead).
+
+    After a force-close, kiro-cli survives as an orphan (CREATE_NEW_PROCESS_GROUP).
+    We detect this by checking if the locking process's parent is still alive.
+    If not, we terminate the orphan and remove the lock.
+    """
+    if not sessions_dir or not sessions_dir.exists():
+        return
+    import ctypes
+    kernel32 = ctypes.windll.kernel32
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    PROCESS_TERMINATE = 0x0001
+    cleaned = 0
+
+    # Get our own PID to avoid killing our own future kiro-cli processes
+    my_pid = os.getpid()
+
+    for lock_file in sessions_dir.glob("*.lock"):
+        try:
+            data = json.loads(lock_file.read_text(encoding="utf-8"))
+            pid = int(data.get("pid", 0))
+            if pid == 0:
+                lock_file.unlink(missing_ok=True)
+                cleaned += 1
+                continue
+
+            # Check if process is alive
+            handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+            if not handle:
+                # Process is dead — stale lock
+                lock_file.unlink(missing_ok=True)
+                cleaned += 1
+                logger.info("startup: removed stale lock %s (pid %d dead)", lock_file.name, pid)
+                continue
+            kernel32.CloseHandle(handle)
+
+            # Process is alive — check if it's orphaned (parent is dead)
+            ppid = _get_parent_pid(pid)
+            if ppid is not None and ppid != my_pid:
+                # Check if parent is alive
+                parent_handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, ppid)
+                if parent_handle:
+                    kernel32.CloseHandle(parent_handle)
+                    # Parent is alive — this session belongs to another running instance
+                    continue
+                else:
+                    # Parent is dead — orphaned kiro-cli, terminate it
+                    term_handle = kernel32.OpenProcess(PROCESS_TERMINATE, False, pid)
+                    if term_handle:
+                        kernel32.TerminateProcess(term_handle, 1)
+                        kernel32.CloseHandle(term_handle)
+                        logger.info("startup: terminated orphaned kiro-cli pid %d (parent %d dead)", pid, ppid)
+                    lock_file.unlink(missing_ok=True)
+                    cleaned += 1
+        except Exception:
+            # If we can't read/parse the lock file, remove it
+            try:
+                lock_file.unlink(missing_ok=True)
+                cleaned += 1
+            except Exception:
+                pass
+    if cleaned:
+        logger.info("startup: cleaned %d stale lock file(s)", cleaned)
+
+
+def _get_parent_pid(pid):
+    """Get the parent PID of a process on Windows using toolhelp32 snapshot."""
+    try:
+        import ctypes
+        import ctypes.wintypes
+
+        TH32CS_SNAPPROCESS = 0x00000002
+
+        class PROCESSENTRY32(ctypes.Structure):
+            _fields_ = [
+                ("dwSize", ctypes.wintypes.DWORD),
+                ("cntUsage", ctypes.wintypes.DWORD),
+                ("th32ProcessID", ctypes.wintypes.DWORD),
+                ("th32DefaultHeapID", ctypes.POINTER(ctypes.c_ulong)),
+                ("th32ModuleID", ctypes.wintypes.DWORD),
+                ("cntThreads", ctypes.wintypes.DWORD),
+                ("th32ParentProcessID", ctypes.wintypes.DWORD),
+                ("pcPriClassBase", ctypes.c_long),
+                ("dwFlags", ctypes.wintypes.DWORD),
+                ("szExeFile", ctypes.c_char * 260),
+            ]
+
+        kernel32 = ctypes.windll.kernel32
+        snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+        if snapshot == -1:
+            return None
+        try:
+            entry = PROCESSENTRY32()
+            entry.dwSize = ctypes.sizeof(PROCESSENTRY32)
+            if not kernel32.Process32First(snapshot, ctypes.byref(entry)):
+                return None
+            while True:
+                if entry.th32ProcessID == pid:
+                    return entry.th32ParentProcessID
+                if not kernel32.Process32Next(snapshot, ctypes.byref(entry)):
+                    break
+        finally:
+            kernel32.CloseHandle(snapshot)
+    except Exception:
+        pass
+    return None
+
+
 def main():
     logger.info("main() starting")
 
@@ -1776,6 +1873,24 @@ def main():
                 sid = jsonl.stem
                 for f in sessions_dir.glob(f"{sid}*"):
                     f.unlink(missing_ok=True)
+
+    # Clear stale tab/session associations from preferences (prevents "IN USE" ghost state)
+    if PREFS_FILE.exists():
+        try:
+            prefs = json.loads(PREFS_FILE.read_text(encoding="utf-8"))
+            changed = False
+            for key in ("tabs", "active_tab"):
+                if key in prefs:
+                    del prefs[key]
+                    changed = True
+            if changed:
+                PREFS_FILE.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
+                logger.info("startup: cleared stale tab associations from preferences")
+        except Exception:
+            pass
+
+    # Clean up orphaned lock files from force-closed sessions
+    _cleanup_stale_locks(sessions_dir)
 
     pool = ACPClientPool(max_tabs=5)
     api = HyperagentAPI(pool)

@@ -21,6 +21,7 @@
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
+  position: relative;
   transition: border-color 0.2s var(--ease), color 0.2s var(--ease);
 }
 .input-icon-btn:hover { border-color: var(--accent); color: var(--text-bright); }

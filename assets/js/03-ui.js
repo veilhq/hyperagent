@@ -25,6 +25,7 @@ function send() {
     return;
   }
   if (state !== 'ready') return;
+  if (_loadingHistory) return;
   if (!sessionTitle) firstPrompt = text;
   appendUser(text);
   input.value = '';

@@ -482,7 +482,7 @@ window.__acpStateChange = function(data) {
   state = data.state;
   statusEl.textContent = state;
   statusEl.className = 'topbar-status ' + state;
-  sendBtn.disabled = (state !== 'ready' && state !== 'prompting');
+  sendBtn.disabled = (state !== 'ready' && state !== 'prompting') || _loadingHistory;
   app.classList.toggle('prompting', state === 'prompting');
 
   // Thinking indicator
@@ -503,12 +503,20 @@ window.__acpStateChange = function(data) {
     document.body.appendChild(splash);
   }
 
-  // Dismiss splash on ready
+  // Dismiss splash on ready — but only if history has finished loading.
+  // If history is still rendering, the renderChunk completion will dismiss it.
   if (state === 'ready') {
-    var splash = document.getElementById('ha-splash');
-    if (splash) {
-      splash.classList.add('hidden');
-      setTimeout(function() { if (splash.parentNode) splash.parentNode.removeChild(splash); }, 700);
+    if (!_loadingHistory) {
+      var splash = document.getElementById('ha-splash');
+      if (splash) {
+        splash.classList.add('hidden');
+        setTimeout(function() { if (splash.parentNode) splash.parentNode.removeChild(splash); }, 700);
+      }
+    } else {
+      // Agent is ready but history still rendering — update splash text.
+      // renderChunk's completion path will dismiss when done.
+      var loadingEl2 = document.querySelector('.ha-splash-loading');
+      if (loadingEl2) loadingEl2.textContent = 'Rendering history';
     }
   }
 
@@ -612,8 +620,13 @@ window.__acpSessionLoaded = function(data) {
     var pctEl = document.getElementById('ha-splash-pct');
     var total = messages.length;
     var idx = 0;
+    // Detect if we're rendering into a hidden container (background tab).
+    // If so, render all messages synchronously — rAF won't fire for hidden elements
+    // and the context swap in _withTabContext won't persist across async callbacks.
+    var isBackground = (msgs.style.display === 'none');
     function renderChunk() {
-      var end = Math.min(idx + 5, total);
+      var chunkSize = isBackground ? total : 5;
+      var end = Math.min(idx + chunkSize, total);
       while (idx < end) {
         var m = messages[idx];
         var el = document.createElement('div');
@@ -631,15 +644,17 @@ window.__acpSessionLoaded = function(data) {
           sCard.innerHTML = '<span class="skill-card-name">&#9670; ' + m.name + '</span>'
             + (m.description ? '<span class="skill-card-desc">' + m.description + '</span>' : '');
           msgs.appendChild(sCard);
-          // Topbar badge (deduplicate)
-          var sStrip = getSkillStrip();
-          if (!activeSkills[m.name] && sStrip) {
-            var sBadge = document.createElement('span');
-            sBadge.className = 'skill-badge';
-            sBadge.innerHTML = '<span class="skill-badge-icon">&#9670;</span>' + m.name;
-            sBadge.title = m.description || '';
-            sStrip.appendChild(sBadge);
-            activeSkills[m.name] = sBadge;
+          // Topbar badge (deduplicate — only if active tab)
+          if (!isBackground) {
+            var sStrip = getSkillStrip();
+            if (!activeSkills[m.name] && sStrip) {
+              var sBadge = document.createElement('span');
+              sBadge.className = 'skill-badge';
+              sBadge.innerHTML = '<span class="skill-badge-icon">&#9670;</span>' + m.name;
+              sBadge.title = m.description || '';
+              sStrip.appendChild(sBadge);
+              activeSkills[m.name] = sBadge;
+            }
           }
           idx++;
           continue;
@@ -670,20 +685,37 @@ window.__acpSessionLoaded = function(data) {
         msgs.appendChild(el);
         idx++;
       }
-      if (pctEl) pctEl.textContent = Math.round((idx / total) * 100) + '%';
+      if (pctEl && !isBackground) pctEl.textContent = Math.round((idx / total) * 100) + '%';
       if (idx < total) {
-        requestAnimationFrame(renderChunk);
+        if (isBackground) {
+          // Synchronous: continue immediately (no rAF for hidden containers)
+          renderChunk();
+        } else {
+          requestAnimationFrame(renderChunk);
+        }
       } else {
         msgs.scrollTop = msgs.scrollHeight;
         msgs.classList.remove('no-animate');
         _loadingHistory = false;
-        // If agent is already ready, dismiss splash; otherwise show waiting message
+        // Re-enable send button now that history is done loading
         if (state === 'ready') {
-          var splash = document.getElementById('ha-splash');
-          if (splash) {
-            splash.classList.add('hidden');
-            setTimeout(function() { if (splash.parentNode) splash.parentNode.removeChild(splash); }, 700);
-          }
+          sendBtn.disabled = false;
+        }
+        // If agent is already ready, show brief 'waiting' then dismiss.
+        // If not ready, show 'Waiting for agent start' until state changes.
+        if (state === 'ready') {
+          // Agent was already ready — show the waiting message briefly so the
+          // user sees the full loading sequence, then dismiss.
+          var loadingEl = document.querySelector('.ha-splash-loading');
+          if (loadingEl) loadingEl.textContent = 'Waiting for agent start';
+          if (pctEl) pctEl.innerHTML = '<div class="ha-splash-blink"></div>';
+          setTimeout(function() {
+            var splash = document.getElementById('ha-splash');
+            if (splash) {
+              splash.classList.add('hidden');
+              setTimeout(function() { if (splash.parentNode) splash.parentNode.removeChild(splash); }, 700);
+            }
+          }, 800);
         } else {
           var loadingEl = document.querySelector('.ha-splash-loading');
           if (loadingEl) loadingEl.textContent = 'Waiting for agent start';
