@@ -115,9 +115,13 @@ No runtime file serving — the entire UI is a single inline HTML string passed 
 │   ├── js/
 │   │   ├── 00-core.js         ← IIFE open, DOM refs, state, accent sync
 │   │   ├── 01-markdown.js     ← Lightweight markdown→HTML renderer
-│   │   ├── 02-handlers.js     ← ACP event handlers, tool cards, thinking indicator
-│   │   ├── 03-ui.js           ← Send, cancel, shortcuts, search, IIFE close
-│   │   └── 04-sidebar.js      ← Session list management (outside IIFE)
+│   │   ├── 02-handlers.js     ← ACP event handlers, tool cards, stream buffer
+│   │   ├── 03-ui.js           ← Send, cancel, shortcuts, search, welcome
+│   │   ├── 04-sidebar.js      ← Session list management
+│   │   ├── 05-thinking.js     ← WebGL2 thinking bar indicator
+│   │   ├── 06-welcome.js      ← WebGL2 welcome noise field
+│   │   ├── 07-tasks.js        ← Task sidebar panel
+│   │   └── zz-close.js        ← IIFE close
 │   └── (icons: .ico, .png, .svg)
 └── .gitignore
 ```
