@@ -36,39 +36,13 @@ PREFS_FILE = HYPERAGENT_DIR / "preferences.json"
 ICON_FILE = HYPERVISOR_DIR / "assets" / "ha-box.ico"
 
 # ---------------------------------------------------------------------------
-# Debug log
+# Structured logging (shared ecosystem logger)
 # ---------------------------------------------------------------------------
 
-_LOG_FILE = HYPERAGENT_DIR / "debug.log"
-_LOG_MAX_BYTES = 1 * 1024 * 1024  # 1 MB max before truncation
+sys.path.insert(0, str(HYPERSPACE_ROOT))
+from hyper_logging import setup_logger  # noqa: E402
 
-
-def _truncate_log_on_startup():
-    """Truncate log file to last ~1 MB on startup to prevent unbounded growth."""
-    if not _LOG_FILE.exists():
-        return
-    size = _LOG_FILE.stat().st_size
-    if size <= _LOG_MAX_BYTES:
-        return
-    try:
-        data = _LOG_FILE.read_bytes()
-        # Keep the last 1 MB
-        truncated = data[-_LOG_MAX_BYTES:]
-        # Find first newline to avoid partial line at start
-        nl = truncated.find(b"\n")
-        if nl >= 0:
-            truncated = truncated[nl + 1:]
-        _LOG_FILE.write_bytes(b"[truncated on startup]\n" + truncated)
-    except OSError:
-        pass
-
-
-_truncate_log_on_startup()
-
-
-def _log(msg):
-    with open(_LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(f"{time.time():.3f} {msg}\n")
+logger = setup_logger("hyperagent")
 
 
 # ---------------------------------------------------------------------------
@@ -126,14 +100,14 @@ def _check_auth():
         )
         return r.returncode == 0 and "Logged in" in r.stdout
     except Exception as e:
-        _log(f"_check_auth error: {e}")
+        logger.error(f"_check_auth error: {e}")
         return False
 
 
 def _do_login(window=None):
     """Run device-flow login. Pushes URL to frontend if window available.
     Returns True on success."""
-    _log("_do_login: starting device flow")
+    logger.info("_do_login: starting device flow")
     try:
         si = subprocess.STARTUPINFO()
         si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
@@ -150,7 +124,7 @@ def _do_login(window=None):
             line = proc.stdout.readline()
             if not line:
                 break
-            _log(f"_do_login output: {line.strip()}")
+            logger.info(f"_do_login output: {line.strip()}")
             # Look for URL in output (kiro-cli prints the verification URI)
             if not url_pushed and ("http" in line.lower()):
                 # Extract URL
@@ -167,27 +141,27 @@ def _do_login(window=None):
                         pass
         proc.wait(timeout=120)
         success = proc.returncode == 0
-        _log(f"_do_login: exit={proc.returncode}")
+        logger.info(f"_do_login: exit={proc.returncode}")
         return success
     except Exception as e:
-        _log(f"_do_login error: {e}")
+        logger.error(f"_do_login error: {e}")
         return False
 
 
 def _do_login_visible():
     """Run 'kiro-cli login' in a visible console so interactive prompts (AWS SSO, etc.) work.
     Blocks until the process exits. Returns True on success."""
-    _log("_do_login_visible: spawning visible console")
+    logger.info("_do_login_visible: spawning visible console")
     try:
         proc = subprocess.Popen(
             ["kiro-cli", "login", "--license", "pro"],
             creationflags=subprocess.CREATE_NEW_CONSOLE,
         )
         proc.wait(timeout=120)
-        _log(f"_do_login_visible: exit={proc.returncode}")
+        logger.info(f"_do_login_visible: exit={proc.returncode}")
         return proc.returncode == 0
     except Exception as e:
-        _log(f"_do_login_visible error: {e}")
+        logger.error(f"_do_login_visible error: {e}")
         return False
 
 
@@ -230,12 +204,12 @@ class ACPClient:
         # This prevents kiro-cli from hanging/crashing inside the bridge due to
         # expired AWS credentials that need interactive login.
         if not _check_auth():
-            _log("start_process: not authenticated, triggering visible login")
+            logger.warning("start_process: not authenticated, triggering visible login")
             if self._window:
                 self._push_js("__acpAuthRequired", {"url": None})
             success = _do_login_visible()
             if not success or not _check_auth():
-                _log("start_process: login failed")
+                logger.error("start_process: login failed")
                 self._state = "crashed"
                 if self._window:
                     self._push_js("__acpError", {"error": "Login failed — complete login in the console window, then click Reconnect"})
@@ -249,7 +223,7 @@ class ACPClient:
         self._server_sock.bind(("127.0.0.1", 0))
         self._server_sock.listen(1)
         port = self._server_sock.getsockname()[1]
-        _log(f"start_process: listening on port {port}")
+        logger.info(f"start_process: listening on port {port}")
 
         bridge = str(HYPERAGENT_DIR / "acp_bridge.py")
         si = subprocess.STARTUPINFO()
@@ -260,16 +234,16 @@ class ACPClient:
             startupinfo=si,
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
         )
-        _log(f"start_process: bridge pid={self._process.pid}")
+        logger.info(f"start_process: bridge pid={self._process.pid}")
 
         # Accept connection from bridge
         self._server_sock.settimeout(10)
         try:
             self._socket, _ = self._server_sock.accept()
             self._sockfile = self._socket.makefile("rwb")
-            _log("start_process: bridge connected")
+            logger.info("start_process: bridge connected")
         except socket.timeout:
-            _log("start_process: bridge connection timeout")
+            logger.error("start_process: bridge connection timeout")
             self._state = "crashed"
             return
 
@@ -332,9 +306,9 @@ class ACPClient:
         try:
             self._sockfile.write(data.encode())
             self._sockfile.flush()
-            _log(f"sent: id={msg.get('id')} method={msg.get('method','')}")
+            logger.debug(f"sent: id={msg.get('id')} method={msg.get('method','')}")
         except (BrokenPipeError, OSError) as e:
-            _log(f"send error: {e}")
+            logger.error(f"send error: {e}")
 
     def _request(self, method, params=None, callback=None):
         rid = self._next_id()
@@ -356,7 +330,7 @@ class ACPClient:
 
     def _initialize(self):
         def on_init(result):
-            _log(f"on_init called: {str(result)[:100]}")
+            logger.debug(f"on_init called: {str(result)[:100]}")
             # Don't create a session yet — show welcome screen immediately.
             # A session is created lazily on first prompt or sidebar load.
             self._state = "ready"
@@ -376,7 +350,7 @@ class ACPClient:
         }, self._on_session)
 
     def _on_session(self, result):
-        _log(f"_on_session: {result}")
+        logger.info(f"_on_session: {result}")
         if isinstance(result, dict) and "sessionId" in result:
             self._session_id = result["sessionId"]
             self._owned_sessions.add(self._session_id)
@@ -385,7 +359,7 @@ class ACPClient:
         elif isinstance(result, dict) and "error" in result:
             err = result["error"]
             err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
-            _log(f"_on_session error, creating new: {err_msg}")
+            logger.warning(f"_on_session error, creating new: {err_msg}")
             self._push_js("__acpError", {"error": f"Session load failed ({err_msg}), creating new session", "source": "jsonrpc"})
             # session/load failed — create new
             self._new_session()
@@ -405,7 +379,7 @@ class ACPClient:
             self._push_state()
             def on_lazy_session(result):
                 # Extract session ID without pushing "ready" state to frontend
-                _log(f"on_lazy_session: {result}")
+                logger.debug(f"on_lazy_session: {result}")
                 if isinstance(result, dict) and "sessionId" in result:
                     self._session_id = result["sessionId"]
                     self._owned_sessions.add(self._session_id)
@@ -438,7 +412,7 @@ class ACPClient:
 
     def _on_prompt_done(self, result):
         elapsed = round(time.time() - getattr(self, '_prompt_start', time.time()), 1)
-        _log(f"prompt_done: {json.dumps(result)[:500]}")
+        logger.debug(f"prompt_done: {json.dumps(result)[:500]}")
         self._state = "ready"
         data = result or {}
         data["_elapsed"] = elapsed
@@ -457,7 +431,7 @@ class ACPClient:
 
     def cancel(self, reason=None):
         reason = reason or "user"
-        _log(f"cancel() called: reason={reason} state={self._state} session={self._session_id}")
+        logger.info(f"cancel() called: reason={reason} state={self._state} session={self._session_id}")
         if self._state == "prompting" and self._session_id:
             self._cancelled.set()
             # Remove the pending callback for the active prompt so
@@ -465,16 +439,16 @@ class ACPClient:
             prompt_id = self._active_prompt_id
             if prompt_id is not None:
                 self._pending.pop(prompt_id, None)
-                _log(f"cancel: popped pending id={prompt_id}")
+                logger.info(f"cancel: popped pending id={prompt_id}")
             self._active_prompt_id = None
             # Send both cancellation mechanisms:
             # 1. session/cancel (ACP notification — must NOT have an id)
             self._notify("session/cancel", {"sessionId": self._session_id})
-            _log("cancel: sent session/cancel (notification)")
+            logger.info("cancel: sent session/cancel (notification)")
             # 2. $/cancel_request (ACP generic per-request cancellation, targets the prompt)
             if prompt_id is not None:
                 self._notify("$/cancel_request", {"requestId": prompt_id})
-                _log(f"cancel: sent $/cancel_request for id={prompt_id}")
+                logger.info(f"cancel: sent $/cancel_request for id={prompt_id}")
             self._state = "ready"
             self._skill_tool_ids.clear()
             # Include elapsed time and any metadata we have
@@ -485,9 +459,9 @@ class ACPClient:
                 self._last_metadata = None
             self._push_js("__acpTurnEnd", cancel_data)
             self._push_state()
-            _log("cancel: pushed state=ready to frontend")
+            logger.info("cancel: pushed state=ready to frontend")
         else:
-            _log(f"cancel: SKIPPED (state={self._state}, session={self._session_id})")
+            logger.warning(f"cancel: SKIPPED (state={self._state}, session={self._session_id})")
 
     def new_session(self):
         if self._state not in ("ready",):
@@ -511,13 +485,13 @@ class ACPClient:
                 if line.strip():
                     try:
                         msg = json.loads(line)
-                        _log(f"recv: id={msg.get('id')} method={msg.get('method','')}")
+                        logger.debug(f"recv: id={msg.get('id')} method={msg.get('method','')}")
                         self._dispatch(msg)
                     except json.JSONDecodeError as e:
-                        _log(f"JSON decode error: {e}")
+                        logger.error(f"JSON decode error: {e}")
         except Exception as e:
-            _log(f"reader exception: {e}")
-        _log(f"reader exited, state={self._state}")
+            logger.error(f"reader exception: {e}")
+        logger.info(f"reader exited, state={self._state}")
         if self._state not in ("stopped",):
             self._state = "crashed"
             self._push_state()
@@ -546,21 +520,21 @@ class ACPClient:
         method = msg.get("method", "")
         if method == "_bridge/stderr":
             text = msg.get("params", {}).get("text", "")
-            _log(f"kiro-cli stderr: {text}")
+            logger.info(f"kiro-cli stderr: {text}")
             self._push_js("__acpError", {"error": text, "source": "stderr"})
             return
         if method == "session/update":
             # Suppress all session updates after cancel until next prompt
             if self._cancelled.is_set():
-                _log("session/update SUPPRESSED (cancelled)")
+                logger.warning("session/update SUPPRESSED (cancelled)")
                 return
             update = msg.get("params", {}).get("update", {})
             su_type = update.get("sessionUpdate", "unknown")
             if su_type != "agent_message_chunk":
-                _log(f"session_update: type={su_type} id={update.get('toolCallId','')[:20]} title={update.get('title','')}")
+                logger.debug(f"session_update: type={su_type} id={update.get('toolCallId','')[:20]} title={update.get('title','')}")
             # Detect skill activation: a tool_call reading a SKILL.md file
             if su_type == "tool_call":
-                _log(f"tool_call_full: {json.dumps(update)[:800]}")
+                logger.debug(f"tool_call_full: {json.dumps(update)[:800]}")
                 skill_name = self._detect_skill_activation(update)
                 if skill_name:
                     if skill_name == "_unknown":
@@ -578,19 +552,19 @@ class ACPClient:
                 title = (update.get("title", "") or "").lower()
                 if "todo_list" in tool_name_meta or "todo_list" in title:
                     self._todo_tool_ids.add(update.get("toolCallId", ""))
-                    _log(f"todo_list tracked: {update.get('toolCallId', '')}")
+                    logger.debug(f"todo_list tracked: {update.get('toolCallId', '')}")
                     # Push task update immediately from rawInput
                     raw_input = update.get("rawInput")
                     if raw_input and isinstance(raw_input, dict) and raw_input.get("command"):
                         self._push_js("__acpTaskUpdate", raw_input)
-                        _log(f"todo_list pushed: {json.dumps(raw_input)[:300]}")
+                        logger.debug(f"todo_list pushed: {json.dumps(raw_input)[:300]}")
             # Suppress tool_call_update for skill reads
             if su_type == "tool_call_update":
                 if update.get("toolCallId", "") in self._skill_tool_ids:
                     return  # suppress completion event for skill reads
                 # Intercept todo_list tool results for task panel
                 if update.get("toolCallId", "") in self._todo_tool_ids:
-                    _log(f"todo_list result: {json.dumps(update)[:600]}")
+                    logger.debug(f"todo_list result: {json.dumps(update)[:600]}")
                     # Try multiple possible output field names
                     output = update.get("output") or update.get("result") or update.get("content")
                     # Also check rawInput for the command/args that were sent
@@ -606,19 +580,19 @@ class ACPClient:
                         payload = raw_input if isinstance(raw_input, dict) else None
                     if payload:
                         self._push_js("__acpTaskUpdate", payload)
-                        _log(f"todo_list pushed to frontend: {json.dumps(payload)[:300]}")
+                        logger.debug(f"todo_list pushed to frontend: {json.dumps(payload)[:300]}")
             self._push_js_throttled("__acpUpdate", update)
         elif method == "_kiro.dev/metadata":
             if self._cancelled.is_set():
                 return
             params = msg.get("params", {})
-            _log(f"metadata: {json.dumps(params)[:500]}")
+            logger.debug(f"metadata: {json.dumps(params)[:500]}")
             self._last_metadata = params
         elif method == "_kiro.dev/session/update":
             if self._cancelled.is_set():
                 return
             params = msg.get("params", {})
-            _log(f"session_update_dev: {json.dumps(params)[:500]}")
+            logger.debug(f"session_update_dev: {json.dumps(params)[:500]}")
             # Push tool name hint to frontend for icon resolution
             update = params.get("update", {})
             if update.get("sessionUpdate") == "tool_call_chunk":
@@ -695,9 +669,9 @@ class ACPClient:
             self._window.evaluate_js(
                 f"if(window.{fn_name})window.{fn_name}(JSON.parse(`{payload}`))"
             )
-            _log(f"push_js OK: {fn_name}")
+            logger.debug(f"push_js OK: {fn_name}")
         except Exception as e:
-            _log(f"push_js FAIL: {fn_name} -> {e}")
+            logger.error(f"push_js FAIL: {fn_name} -> {e}")
 
     def _push_js_throttled(self, fn_name, data):
         now = time.time()
@@ -782,7 +756,7 @@ class HyperagentAPI:
                     prefs["sessionTitles"] = titles
                     self._acp._save_prefs(prefs)
             except Exception as e:
-                _log(f"generate_title error: {e}")
+                logger.error(f"generate_title error: {e}")
                 fallback = user_message[:30].strip()
                 if len(user_message) > 30:
                     fallback += '...'
@@ -832,7 +806,7 @@ class HyperagentAPI:
             clean = _re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', output)
             clean = _re.sub(r'\x1b\[\?[0-9;]*[a-zA-Z]', '', clean)
 
-            _log(f"plan_usage raw: {repr(clean[:300])}")
+            logger.debug(f"plan_usage raw: {repr(clean[:300])}")
 
             # Format 1: "Credits (USED of TOTAL covered in plan)"
             credits_match = _re.search(r'\((\d+(?:\.\d+)?)\s+of\s+(\d+(?:\.\d+)?)\s+covered', clean)
@@ -1244,7 +1218,7 @@ class HyperagentAPI:
                     s["title"] = saved_titles[s["id"]]
             return {"sessions": sessions, "active": self._acp._session_id}
         except Exception as e:
-            _log(f"list_sessions error: {e}")
+            logger.error(f"list_sessions error: {e}")
             return {"sessions": [], "active": None}
 
     @staticmethod
@@ -1281,7 +1255,7 @@ class HyperagentAPI:
             self._acp._save_prefs(prefs)
             return True
         except Exception as e:
-            _log(f"rename_session error: {e}")
+            logger.error(f"rename_session error: {e}")
             return False
 
     def load_session(self, session_id):
@@ -1400,7 +1374,7 @@ class HyperagentAPI:
                         pass
             return messages
         except Exception as e:
-            _log(f"get_session_history error: {e}")
+            logger.error(f"get_session_history error: {e}")
             return []
 
     def _load_session_async(self, session_id):
@@ -1417,7 +1391,7 @@ class HyperagentAPI:
             if isinstance(result, dict) and "error" in result:
                 err = result["error"]
                 err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
-                _log(f"sidebar load failed: {result}")
+                logger.error(f"sidebar load failed: {result}")
                 self._acp._push_js("__acpError", {"error": f"Failed to load session: {err_msg}", "source": "jsonrpc"})
             else:
                 self._acp._session_id = session_id
@@ -1505,7 +1479,7 @@ def _start_theme_watcher(window, api):
 
 
 def main():
-    _log("main() starting")
+    logger.info("main() starting")
 
     # Clean up empty sessions (0 messages) left over from session switching
     sessions_dir = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "sessions" / "cli"
@@ -1538,7 +1512,7 @@ def main():
         time.sleep(1)
         _apply_window_chrome("Hyperagent", str(ICON_FILE))
         acp.set_window(window)
-        _log("on_start: window ready, connecting protocol")
+        logger.info("on_start: window ready, connecting protocol")
         acp.connect()
         # Start theme file watcher
         _start_theme_watcher(window, api)

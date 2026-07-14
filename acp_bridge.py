@@ -16,34 +16,16 @@ import time
 from pathlib import Path
 
 PORTAL_ROOT = Path(__file__).parent.parent.parent.resolve()
-LOG = Path(__file__).parent / "bridge.log"
-_LOG_MAX_BYTES = 1 * 1024 * 1024  # 1 MB
+HYPERSPACE_ROOT = Path(__file__).parent.parent.resolve()
 
+# ---------------------------------------------------------------------------
+# Structured logging (shared ecosystem logger)
+# ---------------------------------------------------------------------------
 
-def _truncate_log():
-    """Truncate log to last ~1 MB on startup."""
-    if not LOG.exists():
-        return
-    try:
-        size = LOG.stat().st_size
-        if size <= _LOG_MAX_BYTES:
-            return
-        data = LOG.read_bytes()
-        truncated = data[-_LOG_MAX_BYTES:]
-        nl = truncated.find(b"\n")
-        if nl >= 0:
-            truncated = truncated[nl + 1:]
-        LOG.write_bytes(b"[truncated on startup]\n" + truncated)
-    except OSError:
-        pass
+sys.path.insert(0, str(HYPERSPACE_ROOT))
+from hyper_logging import setup_logger  # noqa: E402
 
-
-_truncate_log()
-
-
-def log(msg):
-    with open(LOG, "a") as f:
-        f.write(f"{time.time():.3f} {msg}\n")
+logger = setup_logger("bridge")
 
 
 def find_kiro():
@@ -58,7 +40,10 @@ def main():
     port = int(sys.argv[1])
     kiro = find_kiro()
     if not kiro:
+        logger.error("kiro-cli not found")
         sys.exit(1)
+
+    logger.info("starting: port=%d kiro=%s", port, kiro)
 
     # Spawn kiro-cli
     si = subprocess.STARTUPINFO()
@@ -74,10 +59,14 @@ def main():
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
     )
 
+    logger.info("kiro-cli spawned: pid=%d", proc.pid)
+
     # Connect to parent
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect(("127.0.0.1", port))
     sf = sock.makefile("rwb")
+
+    logger.info("connected to parent on port %d", port)
 
     # Relay: kiro stdout → socket
     def relay_stdout():
@@ -85,16 +74,16 @@ def main():
             while True:
                 line = proc.stdout.readline()
                 if not line:
-                    log("relay_stdout: EOF from kiro")
+                    logger.info("relay_stdout: EOF from kiro")
                     break
                 if line.strip():
                     sf.write(line)
                     sf.flush()
-                    log(f"relay_stdout: forwarded {len(line)}b")
+                    logger.debug("relay_stdout: forwarded %db", len(line))
         except Exception as e:
-            log(f"relay_stdout error: {e}")
+            logger.error("relay_stdout error: %s", e)
         sock.close()
-        log("relay_stdout: socket closed")
+        logger.info("relay_stdout: socket closed")
 
     # Relay: socket → kiro stdin
     def relay_stdin():
@@ -102,15 +91,15 @@ def main():
             while True:
                 line = sf.readline()
                 if not line:
-                    log("relay_stdin: EOF from socket")
+                    logger.info("relay_stdin: EOF from socket")
                     break
                 proc.stdin.write(line)
                 proc.stdin.flush()
-                log(f"relay_stdin: forwarded {len(line)}b")
+                logger.debug("relay_stdin: forwarded %db", len(line))
         except Exception as e:
-            log(f"relay_stdin error: {e}")
+            logger.error("relay_stdin error: %s", e)
         proc.terminate()
-        log("relay_stdin: process terminated")
+        logger.info("relay_stdin: process terminated")
 
     # Forward stderr to parent as JSON-RPC notifications
     def relay_stderr():
@@ -121,7 +110,7 @@ def main():
                     break
                 text = line.decode("utf-8", errors="replace").rstrip()
                 if text:
-                    log(f"stderr: {text}")
+                    logger.debug("stderr: %s", text)
                     msg = json.dumps({"jsonrpc": "2.0", "method": "_bridge/stderr", "params": {"text": text}}) + "\n"
                     try:
                         sf.write(msg.encode())
@@ -129,7 +118,7 @@ def main():
                     except Exception:
                         pass
         except Exception as e:
-            log(f"relay_stderr error: {e}")
+            logger.error("relay_stderr error: %s", e)
 
     threading.Thread(target=relay_stdout, daemon=True).start()
     threading.Thread(target=relay_stderr, daemon=True).start()
