@@ -571,22 +571,42 @@ class ACPClient:
                     self._skill_tool_ids.add(update.get("toolCallId", ""))
                     return  # suppress normal tool card
                 # Track todo_list tool calls for task panel
+                tool_name_meta = ""
+                meta_block = update.get("_meta", {})
+                if isinstance(meta_block, dict):
+                    tool_name_meta = (meta_block.get("kiro", {}).get("toolName", "") or "").lower()
                 title = (update.get("title", "") or "").lower()
-                if "todo_list" in title:
+                if "todo_list" in tool_name_meta or "todo_list" in title:
                     self._todo_tool_ids.add(update.get("toolCallId", ""))
+                    _log(f"todo_list tracked: {update.get('toolCallId', '')}")
+                    # Push task update immediately from rawInput
+                    raw_input = update.get("rawInput")
+                    if raw_input and isinstance(raw_input, dict) and raw_input.get("command"):
+                        self._push_js("__acpTaskUpdate", raw_input)
+                        _log(f"todo_list pushed: {json.dumps(raw_input)[:300]}")
             # Suppress tool_call_update for skill reads
             if su_type == "tool_call_update":
                 if update.get("toolCallId", "") in self._skill_tool_ids:
                     return  # suppress completion event for skill reads
                 # Intercept todo_list tool results for task panel
                 if update.get("toolCallId", "") in self._todo_tool_ids:
-                    output = update.get("output") or update.get("result")
+                    _log(f"todo_list result: {json.dumps(update)[:600]}")
+                    # Try multiple possible output field names
+                    output = update.get("output") or update.get("result") or update.get("content")
+                    # Also check rawInput for the command/args that were sent
+                    raw_input = update.get("rawInput")
+                    payload = None
                     if output:
                         try:
-                            parsed = json.loads(output) if isinstance(output, str) else output
-                            self._push_js("__acpTaskUpdate", parsed)
+                            payload = json.loads(output) if isinstance(output, str) else output
                         except (json.JSONDecodeError, TypeError):
                             pass
+                    if not payload and raw_input:
+                        # Use the input args directly (contains command, tasks, etc.)
+                        payload = raw_input if isinstance(raw_input, dict) else None
+                    if payload:
+                        self._push_js("__acpTaskUpdate", payload)
+                        _log(f"todo_list pushed to frontend: {json.dumps(payload)[:300]}")
             self._push_js_throttled("__acpUpdate", update)
         elif method == "_kiro.dev/metadata":
             if self._cancelled.is_set():

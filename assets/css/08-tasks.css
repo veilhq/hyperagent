@@ -1,40 +1,68 @@
-/* ===== Task Sidebar ===== */
+/* ===== Task Panel (floating accordion) ===== */
 .task-panel {
   position: fixed;
-  top: 0;
-  right: 0;
-  width: 280px;
-  height: 100vh;
+  top: 2.2rem;
+  right: 0.75rem;
+  width: 260px;
+  max-height: 50vh;
   background: var(--bg);
-  border-left: 1px solid var(--border);
-  transform: translateX(100%);
-  transition: transform 0.2s ease;
-  z-index: 80;
+  border: 1px solid var(--border);
+  z-index: 90;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  transform: translateX(20px);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.25s ease, opacity 0.25s ease;
 }
 .task-panel.visible {
   transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
 }
 .task-panel-header {
-  padding: 0.75rem 1rem;
-  font-size: 0.7rem;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.6rem;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-muted);
   border-bottom: 1px solid var(--border);
+  cursor: var(--cursor-pointer);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+}
+.task-panel-header::after {
+  content: '\25B4';
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  transition: transform 0.2s ease;
+}
+.task-panel.collapsed .task-panel-header::after {
+  transform: rotate(180deg);
 }
 .task-panel-desc {
-  padding: 0.5rem 1rem;
-  font-size: 0.7rem;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.6rem;
   color: var(--text-dim);
   border-bottom: 1px solid var(--border);
 }
 .task-panel-body {
   flex: 1;
   overflow-y: auto;
-  padding: 0.5rem 0;
+  overflow-x: hidden;
+  padding: 0.3rem 0;
+  max-height: 40vh;
+  transition: max-height 0.25s ease, padding 0.25s ease;
+}
+.task-panel.collapsed .task-panel-body {
+  max-height: 0;
+  padding: 0;
+  overflow: hidden;
 }
 .task-panel-list {
   list-style: none;
@@ -42,12 +70,13 @@
   padding: 0;
 }
 .task-item {
-  padding: 0.4rem 1rem;
-  font-size: 0.72rem;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.6rem;
   color: var(--text);
   display: flex;
   align-items: flex-start;
-  gap: 0.5rem;
+  gap: 0.4rem;
+  transition: background 0.4s ease, color 0.3s ease, transform 0.2s ease;
 }
 .task-item.done {
   color: var(--text-dim);
@@ -56,7 +85,16 @@
 .task-check {
   color: var(--accent);
   flex-shrink: 0;
+  transition: color 0.3s ease, transform 0.2s ease;
 }
 .task-item.done .task-check {
   color: var(--text-dim);
+}
+.task-item.just-done {
+  background: var(--accent-glow);
+  transform: translateX(3px);
+}
+.task-item.just-done .task-check {
+  color: var(--accent);
+  transform: scale(1.3);
 }
