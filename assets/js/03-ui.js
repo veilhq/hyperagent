@@ -65,16 +65,6 @@ input.addEventListener('input', function() {
 });
 
 // Message copy (delegated)
-function copyFallback(text) {
-  var ta = document.createElement('textarea');
-  ta.value = text;
-  ta.style.position = 'fixed';
-  ta.style.left = '-9999px';
-  document.body.appendChild(ta);
-  ta.select();
-  document.execCommand('copy');
-  document.body.removeChild(ta);
-}
 msgs.addEventListener('click', function(e) {
   if (!e.target.classList.contains('msg-copy')) return;
   var msg = e.target.closest('.msg-agent');
@@ -86,14 +76,12 @@ msgs.addEventListener('click', function(e) {
     btn.classList.add('copied');
     setTimeout(function() { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1200);
   }
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(onSuccess).catch(function() {
-      copyFallback(text);
-      onSuccess();
+  if (window.pywebview && pywebview.api && pywebview.api.copy_to_clipboard) {
+    pywebview.api.copy_to_clipboard(text).then(function(ok) {
+      if (ok) onSuccess();
     });
-  } else {
-    copyFallback(text);
-    onSuccess();
+  } else if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(onSuccess).catch(function() { onSuccess(); });
   }
 });
 

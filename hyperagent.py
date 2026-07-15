@@ -1029,6 +1029,20 @@ class HyperagentAPI:
         if self._acp._window:
             self._acp._window.toggle_fullscreen()
 
+    def copy_to_clipboard(self, text):
+        """Write text to the system clipboard via pyperclip."""
+        try:
+            import subprocess
+            process = subprocess.Popen(
+                ["powershell", "-Command", "Set-Clipboard", "-Value", "$input"],
+                stdin=subprocess.PIPE,
+            )
+            process.communicate(input=text.encode("utf-8"))
+            return True
+        except Exception as e:
+            logger.warning("clipboard write failed: %s", e)
+            return False
+
     def get_plan_usage(self):
         """Run kiro-cli /usage command and parse plan credits percentage."""
         import shutil

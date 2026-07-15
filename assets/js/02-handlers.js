@@ -680,7 +680,8 @@ window.__acpSessionLoaded = function(data) {
           continue;
         } else {
           el.className = 'msg msg-agent';
-          el.innerHTML = '<span class="msg-meta"><span class="msg-role">Agent</span></span>' + renderMarkdown(m.text);
+          el._rawText = m.text;
+          el.innerHTML = '<span class="msg-meta"><span class="msg-role">Agent</span></span>' + renderMarkdown(m.text) + '<button class="msg-copy">Copy</button>';
         }
         msgs.appendChild(el);
         idx++;

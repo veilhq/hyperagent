@@ -9,6 +9,8 @@
 
 /* Sidebar */
 .sidebar {
+  position: relative;
+  z-index: 1;
   width: 0;
   overflow: hidden;
   border-right: 1px solid var(--border);
