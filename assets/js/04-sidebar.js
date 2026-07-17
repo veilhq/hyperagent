@@ -194,10 +194,10 @@ function escapeHtml(str) {
 document.addEventListener('keydown', function(e) {
   // Ctrl+B: toggle sidebar
   if (e.ctrlKey && e.key === 'b') { e.preventDefault(); toggleSidebar(); }
-  // Ctrl+N: new session
-  if (e.ctrlKey && e.key === 'n') { e.preventDefault(); newSession(); }
-  // f: toggle fullscreen (when not in input)
-  if (e.key === 'f' && document.activeElement && document.activeElement.tagName !== 'TEXTAREA') { e.preventDefault(); pywebview.api.toggle_fullscreen(); }
+  // Ctrl+N: new tab (was in-place newSession; tabs are the primary UX now)
+  if (e.ctrlKey && e.key === 'n') { e.preventDefault(); if (typeof createTab === 'function') createTab(); else newSession(); }
+  // f: toggle fullscreen (when not in input, and no modifier — avoid clashing with Ctrl+F search)
+  if (e.key === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey && document.activeElement && document.activeElement.tagName !== 'TEXTAREA') { e.preventDefault(); pywebview.api.toggle_fullscreen(); }
 });
 
 // Expose for inline onclick in shell.html

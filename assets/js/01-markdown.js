@@ -10,7 +10,14 @@ function renderMarkdown(text) {
   // Code blocks (fenced)
   html = html.replace(/```(\w*)\n([\s\S]*?)```/g, function(_, lang, code) {
     var label = lang ? '<span class="code-lang">' + lang + '</span>' : '';
-    return '<div class="code-block">' + label + '<pre><code>' + code.trimEnd() + '</code></pre></div>';
+    var body = code.trimEnd();
+    // Stash raw code (base64) on the button so the copy handler doesn't
+    // have to re-decode HTML entities from the DOM.
+    var raw;
+    try { raw = btoa(unescape(encodeURIComponent(body))); } catch (_e) { raw = ''; }
+    return '<div class="code-block">' + label
+      + '<button class="code-copy" data-code="' + raw + '">Copy</button>'
+      + '<pre><code>' + body + '</code></pre></div>';
   });
 
   // Inline code (protect from further transforms)

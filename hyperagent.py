@@ -41,9 +41,26 @@ ICON_FILE = HYPERVISOR_DIR / "assets" / "ha-box.ico"
 # ---------------------------------------------------------------------------
 
 sys.path.insert(0, str(HYPERSPACE_ROOT))
-from hyper_logging import setup_logger  # noqa: E402
+from hyper_logging import setup_logger, TRACE  # noqa: E402
 
-logger = setup_logger("hyperagent")
+# Log level is env-configurable. Default is INFO — the lifecycle timeline.
+# Set HYPERAGENT_LOG_LEVEL=DEBUG for tool call details and metadata pushes.
+# Set HYPERAGENT_LOG_LEVEL=TRACE for wire-protocol replay (every JSON-RPC frame).
+import logging as _logging
+_LEVEL_MAP = {
+    "TRACE": TRACE,
+    "DEBUG": _logging.DEBUG,
+    "INFO": _logging.INFO,
+    "WARNING": _logging.WARNING,
+    "ERROR": _logging.ERROR,
+}
+_env_level = os.environ.get("HYPERAGENT_LOG_LEVEL", "INFO").upper()
+_log_level = _LEVEL_MAP.get(_env_level, _logging.INFO)
+logger = setup_logger("hyperagent", level=_log_level)
+# Ensure the file handler also honors the requested level (setup_logger only
+# applies level on first call; on hot-reload the existing handler wins).
+for _h in logger.handlers:
+    _h.setLevel(_log_level)
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +206,14 @@ class ACPClient:
         self._skill_tool_ids = set()  # tool call IDs for SKILL.md reads (suppressed from UI)
         self._todo_tool_ids = set()  # tool call IDs for todo_list tools (pushed to task panel)
         self._cancelled = threading.Event()  # suppress session/update after cancel until next prompt
+        self._prompt_start = None  # timing anchor for prompt duration logs
+
+    def _tab_ctx(self):
+        """Return '[tab=abcdef]' prefix for logs. Empty string if no tab_id assigned."""
+        tid = getattr(self, "_tab_id", None)
+        if not tid:
+            return ""
+        return f"[tab={str(tid)[:6]}] "
 
     def set_window(self, window):
         self._window = window
@@ -205,12 +230,12 @@ class ACPClient:
         # This prevents kiro-cli from hanging/crashing inside the bridge due to
         # expired AWS credentials that need interactive login.
         if not _check_auth():
-            logger.warning("start_process: not authenticated, triggering visible login")
+            logger.warning("%sstart_process: not authenticated, triggering visible login", self._tab_ctx())
             if self._window:
                 self._push_js("__acpAuthRequired", {"url": None})
             success = _do_login_visible()
             if not success or not _check_auth():
-                logger.error("start_process: login failed")
+                logger.error("%sstart_process: login failed", self._tab_ctx())
                 self._state = "crashed"
                 if self._window:
                     self._push_js("__acpError", {"error": "Login failed — complete login in the console window, then click Reconnect"})
@@ -224,7 +249,7 @@ class ACPClient:
         self._server_sock.bind(("127.0.0.1", 0))
         self._server_sock.listen(1)
         port = self._server_sock.getsockname()[1]
-        logger.info(f"start_process: listening on port {port}")
+        logger.info("%sstart_process: bridge listening on port %d", self._tab_ctx(), port)
 
         bridge = str(HYPERAGENT_DIR / "acp_bridge.py")
         si = subprocess.STARTUPINFO()
@@ -235,16 +260,16 @@ class ACPClient:
             startupinfo=si,
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
         )
-        logger.info(f"start_process: bridge pid={self._process.pid}")
+        logger.debug("%sstart_process: bridge pid=%d", self._tab_ctx(), self._process.pid)
 
         # Accept connection from bridge
         self._server_sock.settimeout(10)
         try:
             self._socket, _ = self._server_sock.accept()
             self._sockfile = self._socket.makefile("rwb")
-            logger.info("start_process: bridge connected")
+            logger.info("%sstart_process: bridge connected", self._tab_ctx())
         except socket.timeout:
-            logger.error("start_process: bridge connection timeout")
+            logger.error("%sstart_process: bridge connection timeout", self._tab_ctx())
             self._state = "crashed"
             return
 
@@ -307,9 +332,9 @@ class ACPClient:
         try:
             self._sockfile.write(data.encode())
             self._sockfile.flush()
-            logger.debug(f"sent: id={msg.get('id')} method={msg.get('method','')}")
+            logger.trace("%ssent: id=%s method=%s", self._tab_ctx(), msg.get('id'), msg.get('method',''))
         except (BrokenPipeError, OSError) as e:
-            logger.error(f"send error: {e}")
+            logger.error("%ssend error: %s", self._tab_ctx(), e)
 
     def _request(self, method, params=None, callback=None):
         rid = self._next_id()
@@ -331,13 +356,13 @@ class ACPClient:
 
     def _initialize(self):
         def on_init(result):
-            logger.debug(f"on_init called: {str(result)[:100]}")
+            logger.trace("%son_init: %s", self._tab_ctx(), str(result)[:100])
             # Don't create a session yet — show welcome screen immediately.
             # A session is created lazily on first prompt or sidebar load.
             if getattr(self, '_suppress_init_ready', False):
                 # Tab is loading a session — don't push ready yet
                 self._suppress_init_ready = False
-                logger.debug("on_init: suppressed ready (session load pending)")
+                logger.debug("%son_init: suppressed ready (session load pending)", self._tab_ctx())
                 return
             self._state = "ready"
             self._push_state()
@@ -355,17 +380,23 @@ class ACPClient:
             "mcpServers": []
         }, self._on_session)
 
+    def _set_session_id(self, session_id):
+        """Assign session_id and notify the frontend so tabs[tabId].sessionId stays in sync."""
+        self._session_id = session_id
+        if session_id:
+            self._owned_sessions.add(session_id)
+            self._save_session_id(session_id)
+        self._push_js("__acpSessionIdChanged", {"sessionId": session_id})
+
     def _on_session(self, result):
-        logger.info(f"_on_session: {result}")
+        logger.debug("%s_on_session: %s", self._tab_ctx(), result)
         if isinstance(result, dict) and "sessionId" in result:
-            self._session_id = result["sessionId"]
-            self._owned_sessions.add(self._session_id)
-            self._save_session_id(self._session_id)
+            self._set_session_id(result["sessionId"])
             self._state = "ready"
         elif isinstance(result, dict) and "error" in result:
             err = result["error"]
             err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
-            logger.warning(f"_on_session error, creating new: {err_msg}")
+            logger.warning("%s_on_session error, creating new: %s", self._tab_ctx(), err_msg)
             self._push_js("__acpError", {"error": f"Session load failed ({err_msg}), creating new session", "source": "jsonrpc"})
             # session/load failed — create new
             self._new_session()
@@ -378,6 +409,7 @@ class ACPClient:
         if self._state != "ready":
             return
         self._cancelled.clear()  # clear cancel suppression for new prompt
+        logger.info("%sprompt: chars=%d lazy=%s", self._tab_ctx(), len(text), not self._session_id)
         # Lazy session creation: if no session exists yet, create one then prompt
         if not self._session_id:
             self._state = "prompting"
@@ -385,17 +417,16 @@ class ACPClient:
             self._push_state()
             def on_lazy_session(result):
                 # Extract session ID without pushing "ready" state to frontend
-                logger.debug(f"on_lazy_session: {result}")
+                logger.debug("%son_lazy_session: %s", self._tab_ctx(), result)
                 if isinstance(result, dict) and "sessionId" in result:
-                    self._session_id = result["sessionId"]
-                    self._owned_sessions.add(self._session_id)
-                    self._save_session_id(self._session_id)
+                    self._set_session_id(result["sessionId"])
                 elif isinstance(result, dict) and "error" in result:
                     err = result["error"]
                     err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
                     self._state = "ready"
                     self._push_state()
                     self._push_js("__acpError", {"error": f"Session creation failed: {err_msg}", "source": "jsonrpc"})
+                    logger.warning("%slazy session creation failed: %s", self._tab_ctx(), err_msg)
                     return
                 # Now send the actual prompt
                 if self._session_id:
@@ -418,7 +449,11 @@ class ACPClient:
 
     def _on_prompt_done(self, result):
         elapsed = round(time.time() - getattr(self, '_prompt_start', time.time()), 1)
-        logger.debug(f"prompt_done: {json.dumps(result)[:500]}")
+        stop_reason = ""
+        if isinstance(result, dict):
+            stop_reason = result.get("stopReason") or result.get("stop_reason") or ""
+        logger.info("%sprompt done: %.1fs%s", self._tab_ctx(), elapsed, f" reason={stop_reason}" if stop_reason else "")
+        logger.trace("%sprompt_done raw: %s", self._tab_ctx(), json.dumps(result)[:500])
         self._state = "ready"
         data = result or {}
         data["_elapsed"] = elapsed
@@ -427,6 +462,7 @@ class ACPClient:
             err = result["error"]
             err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
             self._push_js("__acpError", {"error": f"Prompt failed: {err_msg}", "source": "jsonrpc"})
+            logger.warning("%sprompt failed: %s", self._tab_ctx(), err_msg)
         if hasattr(self, '_last_metadata') and self._last_metadata:
             data["_metadata"] = self._last_metadata
             self._last_metadata = None
@@ -437,7 +473,7 @@ class ACPClient:
 
     def cancel(self, reason=None):
         reason = reason or "user"
-        logger.info(f"cancel() called: reason={reason} state={self._state} session={self._session_id}")
+        logger.info("%scancel: reason=%s state=%s", self._tab_ctx(), reason, self._state)
         if self._state == "prompting" and self._session_id:
             self._cancelled.set()
             # Remove the pending callback for the active prompt so
@@ -445,16 +481,14 @@ class ACPClient:
             prompt_id = self._active_prompt_id
             if prompt_id is not None:
                 self._pending.pop(prompt_id, None)
-                logger.info(f"cancel: popped pending id={prompt_id}")
+                logger.debug("%scancel: dropped pending id=%s", self._tab_ctx(), prompt_id)
             self._active_prompt_id = None
             # Send both cancellation mechanisms:
             # 1. session/cancel (ACP notification — must NOT have an id)
             self._notify("session/cancel", {"sessionId": self._session_id})
-            logger.info("cancel: sent session/cancel (notification)")
             # 2. $/cancel_request (ACP generic per-request cancellation, targets the prompt)
             if prompt_id is not None:
                 self._notify("$/cancel_request", {"requestId": prompt_id})
-                logger.info(f"cancel: sent $/cancel_request for id={prompt_id}")
             self._state = "ready"
             self._skill_tool_ids.clear()
             # Include elapsed time and any metadata we have
@@ -465,18 +499,19 @@ class ACPClient:
                 self._last_metadata = None
             self._push_js("__acpTurnEnd", cancel_data)
             self._push_state()
-            logger.info("cancel: pushed state=ready to frontend")
         else:
-            logger.warning(f"cancel: SKIPPED (state={self._state}, session={self._session_id})")
+            logger.warning("%scancel: SKIPPED (state=%s, session=%s)", self._tab_ctx(), self._state, self._session_id)
 
     def new_session(self):
         if self._state not in ("ready",):
             return
+        logger.info("%snew_session (in-place reset)", self._tab_ctx())
         self._session_id = None
         self._clear_session_id()
         self._todo_tool_ids.clear()
         self._state = "ready"
         self._push_state()
+        self._push_js("__acpSessionIdChanged", {"sessionId": None})
         self._push_js("__acpNewSession", {})
 
     # --- Stdout reader ---
@@ -491,13 +526,13 @@ class ACPClient:
                 if line.strip():
                     try:
                         msg = json.loads(line)
-                        logger.debug(f"recv: id={msg.get('id')} method={msg.get('method','')}")
+                        logger.trace("%srecv: id=%s method=%s", self._tab_ctx(), msg.get('id'), msg.get('method',''))
                         self._dispatch(msg)
                     except json.JSONDecodeError as e:
-                        logger.error(f"JSON decode error: {e}")
+                        logger.error("%sJSON decode error: %s", self._tab_ctx(), e)
         except Exception as e:
-            logger.error(f"reader exception: {e}")
-        logger.info(f"reader exited, state={self._state}")
+            logger.error("%sreader exception: %s", self._tab_ctx(), e)
+        logger.info("%sreader exited, state=%s", self._tab_ctx(), self._state)
         if self._state not in ("stopped",):
             self._state = "crashed"
             self._push_state()
@@ -526,21 +561,34 @@ class ACPClient:
         method = msg.get("method", "")
         if method == "_bridge/stderr":
             text = msg.get("params", {}).get("text", "")
-            logger.info(f"kiro-cli stderr: {text}")
+            logger.warning("%skiro-cli stderr: %s", self._tab_ctx(), text)
             self._push_js("__acpError", {"error": text, "source": "stderr"})
+            return
+        if method == "_bridge/child_exited":
+            exit_code = msg.get("params", {}).get("exitCode")
+            logger.warning("%skiro-cli exited: code=%s (state was %s)", self._tab_ctx(), exit_code, self._state)
+            if self._state not in ("stopped", "crashed"):
+                self._state = "crashed"
+                self._push_state()
+                self._push_js("__acpError", {
+                    "error": f"kiro-cli exited (code={exit_code})",
+                    "source": "child_exited",
+                })
             return
         if method == "session/update":
             # Suppress all session updates after cancel until next prompt
             if self._cancelled.is_set():
-                logger.warning("session/update SUPPRESSED (cancelled)")
+                logger.debug("%ssession/update suppressed (cancelled)", self._tab_ctx())
                 return
             update = msg.get("params", {}).get("update", {})
             su_type = update.get("sessionUpdate", "unknown")
             if su_type != "agent_message_chunk":
-                logger.debug(f"session_update: type={su_type} id={update.get('toolCallId','')[:20]} title={update.get('title','')}")
+                logger.trace("%ssession_update: type=%s id=%s title=%s", self._tab_ctx(), su_type, update.get('toolCallId','')[:20], update.get('title',''))
             # Detect skill activation: a tool_call reading a SKILL.md file
             if su_type == "tool_call":
-                logger.debug(f"tool_call_full: {json.dumps(update)[:800]}")
+                # One INFO line per tool call is the useful signal; full JSON at TRACE.
+                logger.debug("%stool_call: %s (id=%s)", self._tab_ctx(), update.get('title','?'), update.get('toolCallId','')[:20])
+                logger.trace("%stool_call_full: %s", self._tab_ctx(), json.dumps(update)[:800])
                 skill_name = self._detect_skill_activation(update)
                 if skill_name:
                     if skill_name == "_unknown":
@@ -558,19 +606,17 @@ class ACPClient:
                 title = (update.get("title", "") or "").lower()
                 if "todo_list" in tool_name_meta or "todo_list" in title:
                     self._todo_tool_ids.add(update.get("toolCallId", ""))
-                    logger.debug(f"todo_list tracked: {update.get('toolCallId', '')}")
                     # Push task update immediately from rawInput
                     raw_input = update.get("rawInput")
                     if raw_input and isinstance(raw_input, dict) and raw_input.get("command"):
                         self._push_js("__acpTaskUpdate", raw_input)
-                        logger.debug(f"todo_list pushed: {json.dumps(raw_input)[:300]}")
+                        logger.trace("%stodo_list push (call): %s", self._tab_ctx(), json.dumps(raw_input)[:300])
             # Suppress tool_call_update for skill reads
             if su_type == "tool_call_update":
                 if update.get("toolCallId", "") in self._skill_tool_ids:
                     return  # suppress completion event for skill reads
                 # Intercept todo_list tool results for task panel
                 if update.get("toolCallId", "") in self._todo_tool_ids:
-                    logger.debug(f"todo_list result: {json.dumps(update)[:600]}")
                     # Try multiple possible output field names
                     output = update.get("output") or update.get("result") or update.get("content")
                     # Also check rawInput for the command/args that were sent
@@ -586,19 +632,19 @@ class ACPClient:
                         payload = raw_input if isinstance(raw_input, dict) else None
                     if payload:
                         self._push_js("__acpTaskUpdate", payload)
-                        logger.debug(f"todo_list pushed to frontend: {json.dumps(payload)[:300]}")
+                        logger.trace("%stodo_list push (result): %s", self._tab_ctx(), json.dumps(payload)[:300])
             self._push_js_throttled("__acpUpdate", update)
         elif method == "_kiro.dev/metadata":
             if self._cancelled.is_set():
                 return
             params = msg.get("params", {})
-            logger.debug(f"metadata: {json.dumps(params)[:500]}")
+            logger.trace("%smetadata: %s", self._tab_ctx(), json.dumps(params)[:500])
             self._last_metadata = params
         elif method == "_kiro.dev/session/update":
             if self._cancelled.is_set():
                 return
             params = msg.get("params", {})
-            logger.debug(f"session_update_dev: {json.dumps(params)[:500]}")
+            logger.trace("%ssession_update_dev: %s", self._tab_ctx(), json.dumps(params)[:500])
             # Push tool name hint to frontend for icon resolution
             update = params.get("update", {})
             if update.get("sessionUpdate") == "tool_call_chunk":
@@ -678,9 +724,9 @@ class ACPClient:
             self._window.evaluate_js(
                 f"if(window.{fn_name})window.{fn_name}(JSON.parse(`{payload}`))"
             )
-            logger.debug(f"push_js OK: {fn_name}")
+            logger.trace("%spush_js OK: %s", self._tab_ctx(), fn_name)
         except Exception as e:
-            logger.error(f"push_js FAIL: {fn_name} -> {e}")
+            logger.error("%spush_js FAIL: %s -> %s", self._tab_ctx(), fn_name, e)
 
     def _push_js_throttled(self, fn_name, data):
         now = time.time()
@@ -690,6 +736,13 @@ class ACPClient:
         self._push_js(fn_name, data)
 
     def _push_state(self):
+        # Log state transitions at INFO with tab context. This is the single
+        # source of truth for state changes on the wire; keeping it here
+        # avoids scattered "state=X" info logs.
+        prev = getattr(self, "_last_logged_state", None)
+        if self._state != prev:
+            logger.info("%sstate: %s -> %s", self._tab_ctx(), prev or "-", self._state)
+            self._last_logged_state = self._state
         self._push_js("__acpStateChange", {"state": self._state})
 
     # --- Session persistence ---
@@ -751,6 +804,7 @@ class ACPClientPool:
         """Create a new tab with its own ACPClient. Returns tab_id."""
         with self._lock:
             if len(self._clients) >= self._max_tabs:
+                logger.warning("create_tab: max tabs reached (%d)", self._max_tabs)
                 if self._window:
                     self._push_js("__acpError", {"error": f"Maximum {self._max_tabs} tabs allowed"})
                 return None
@@ -762,6 +816,7 @@ class ACPClientPool:
             self._clients[tab_id] = client
             if self._active_tab is None:
                 self._active_tab = tab_id
+            logger.info("create_tab: tab=%s (total=%d)", tab_id[:6], len(self._clients))
             return tab_id
 
     def close_tab(self, tab_id):
@@ -773,13 +828,21 @@ class ACPClientPool:
             if self._active_tab == tab_id:
                 # Switch to another tab or None
                 self._active_tab = next(iter(self._clients), None)
+            logger.info("close_tab: tab=%s remaining=%d active=%s",
+                        str(tab_id)[:6], len(self._clients),
+                        str(self._active_tab)[:6] if self._active_tab else "-")
             return self._active_tab
 
     def switch_tab(self, tab_id):
         """Set the active tab."""
         if tab_id in self._clients:
+            prev = self._active_tab
             self._active_tab = tab_id
+            if prev != tab_id:
+                logger.info("switch_tab: %s -> %s",
+                            str(prev)[:6] if prev else "-", str(tab_id)[:6])
             return True
+        logger.warning("switch_tab: unknown tab=%s", str(tab_id)[:6])
         return False
 
     def start_tab(self, tab_id):
@@ -907,9 +970,11 @@ class HyperagentAPI:
 
     def open_session_in_tab(self, session_id):
         """Create a new tab and load an existing session into it."""
+        logger.info("open_session_in_tab: session=%s", session_id[:8])
         # Guard: don't open a session that's already in another tab
         for tab_id, client in self._pool._clients.items():
             if client._session_id == session_id:
+                logger.warning("open_session_in_tab: session %s already in tab=%s", session_id[:8], tab_id[:6])
                 self._acp._push_js("__acpError", {
                     "error": "Session already open in another tab"
                 })
@@ -936,11 +1001,10 @@ class HyperagentAPI:
                     if isinstance(result, dict) and "error" in result:
                         err = result["error"]
                         err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
-                        logger.error("open_session_in_tab load failed: %s", result)
+                        logger.error("%sopen_session_in_tab load failed: %s", client._tab_ctx(), result)
                         client._push_js("__acpError", {"error": f"Failed to load session: {err_msg}"})
                     else:
-                        client._session_id = session_id
-                        client._save_session_id(session_id)
+                        client._set_session_id(session_id)
                     client._state = "ready"
                     client._push_state()
 
@@ -971,48 +1035,181 @@ class HyperagentAPI:
         threading.Thread(target=_start, daemon=True).start()
         return tab_id
 
-    def generate_title(self, user_message):
-        """Generate a short session title from the user's first message."""
+    def _heuristic_title(self, user_message):
+        """Fallback title: verb + noun from the first sentence. Used if AI call fails.
+
+        Best-effort — no NLP. Strips common filler prefixes ("can you", "please",
+        etc.), skips leading articles/pronouns, then keeps the first two
+        substantive words. Not perfect, but closer to the AI title shape than
+        a raw prompt snippet.
+        """
+        text = user_message.strip()
+        for sep in ['\n', '. ', '? ', '! ']:
+            if sep in text:
+                text = text[:text.index(sep)]
+                break
+        for prefix in ['can you ', 'could you ', 'please ', 'i want to ', 'i need to ', "let's ", 'help me ', 'i would like to ', 'would you ']:
+            if text.lower().startswith(prefix):
+                text = text[len(prefix):]
+                break
+        # Tokenize, drop articles/pronouns/filler that shouldn't lead a title.
+        _SKIP = {"a", "an", "the", "to", "i", "we", "you", "just", "also", "then", "and", "but"}
+        import re as _re
+        tokens = [t for t in _re.findall(r"[A-Za-z0-9']+", text) if t]
+        while tokens and tokens[0].lower() in _SKIP:
+            tokens = tokens[1:]
+        words = tokens[:2] if tokens else []
+        if words:
+            title = ' '.join(w[:1].upper() + w[1:].lower() for w in words)
+        else:
+            title = user_message.strip()[:30]
+        return title or user_message[:30]
+
+    def _ai_title(self, user_message):
+        """Ask kiro-cli for a descriptive 2-5 word title. Returns None on failure."""
+        import shutil
+        kiro = shutil.which("kiro-cli")
+        if not kiro:
+            fallback = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "bin" / "kiro-cli.exe"
+            kiro = str(fallback) if fallback.exists() else None
+        if not kiro:
+            logger.warning("_ai_title: kiro-cli not found, using heuristic")
+            return None
+
+        # Trim overlong input so the prompt stays cheap
+        snippet = user_message.strip()
+        if len(snippet) > 500:
+            snippet = snippet[:500] + '...'
+
+        prompt = (
+            "Summarize the following user request as a two-word title in "
+            "'Verb Noun' form (imperative verb + object noun). "
+            "Examples: 'Fix Migration', 'Review PR', 'Refactor Sidebar', "
+            "'Debug Deploy', 'Add Endpoint'. "
+            "Rules: exactly 2 words, title case, no punctuation, no quotes, "
+            "no trailing period, no articles (a/an/the). "
+            "Reply with ONLY the title text — no preamble, no explanation.\n\n"
+            "Request: " + snippet
+        )
+
+        try:
+            si = subprocess.STARTUPINFO()
+            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            si.wShowWindow = subprocess.SW_HIDE
+            # Force UTF-8 decoding — Windows default codepage mangles kiro-cli's
+            # unicode footer glyphs (▸ •) into mojibake that leaks into titles.
+            result = subprocess.run(
+                [kiro, "chat", "--no-interactive", prompt],
+                capture_output=True, text=True, timeout=60,
+                encoding="utf-8", errors="replace",
+                startupinfo=si,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+            )
+            output = (result.stdout or "") + "\n" + (result.stderr or "")
+            # Strip ANSI escape codes
+            import re as _re
+            clean = _re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', output)
+            clean = _re.sub(r'\x1b\[\?[0-9;]*[a-zA-Z]', '', clean)
+
+            # Lines to reject: kiro-cli metering footer, prompt markers, spinners,
+            # anything that clearly isn't the model's title reply.
+            _METER_MARKERS = (
+                'credits:', 'tokens:', 'time:', 'cost:', 'usage:', 'plan:',
+                'thinking', 'trust-all-tools', 'session id', 'model:',
+            )
+            _PREFIX_REJECT = ('>', '▸', '›', '[', '#', '$', '•', '·', '|')
+
+            def _looks_like_title(line):
+                s = line.strip()
+                if not s:
+                    return False
+                if s.startswith(_PREFIX_REJECT):
+                    return False
+                low = s.lower()
+                if any(m in low for m in _METER_MARKERS):
+                    return False
+                # Reject lines that are clearly log/status noise
+                if low.startswith(('info ', 'debug ', 'warn ', 'error ', '[info', '[debug', '[warn', '[error')):
+                    return False
+                return True
+
+            lines = [ln for ln in clean.splitlines() if ln.strip()]
+            # Walk from the bottom up — the model's final reply is the last
+            # substantive line before the metering footer. Reverse-iterate and
+            # take the first line that survives the reject filter.
+            candidate = None
+            for ln in reversed(lines):
+                if _looks_like_title(ln):
+                    candidate = ln.strip()
+                    break
+            if not candidate:
+                logger.warning("_ai_title: no candidate line found in output: %r", clean[:400])
+                return None
+
+            title = candidate.strip('`"\'*_ ').strip()
+            title = title.rstrip('.!?,;:')
+            words = title.split()
+            if not words:
+                return None
+            # Enforce verb+noun form: exactly 2 words. If the model returned
+            # more, keep the first two (usually verb + primary noun).
+            if len(words) > 2:
+                words = words[:2]
+            # Drop leading articles if the model slipped one in ("The Bug").
+            _ARTICLES = {"a", "an", "the"}
+            if len(words) == 2 and words[0].lower() in _ARTICLES:
+                words = words[1:]
+            title = ' '.join(w[:1].upper() + w[1:] for w in words if w)
+            if len(title) > 40:
+                title = title[:40].rstrip()
+            low = title.lower()
+            if any(bad in low for bad in ("error", "sorry", "cannot", "unable", "logged out")):
+                logger.warning("_ai_title: rejected suspicious response: %r", title)
+                return None
+            logger.info("_ai_title: generated %r", title)
+            return title or None
+        except subprocess.TimeoutExpired:
+            logger.warning("_ai_title: kiro-cli timeout")
+            return None
+        except Exception as e:
+            logger.error("_ai_title error: %s", e)
+            return None
+
+    def generate_title(self, user_message, tab_id=None):
+        """Generate a short session title from the user's first message.
+
+        Routes to the ACPClient owning `tab_id` so the title lands on the tab
+        that actually sent the prompt — not whichever tab happens to be active
+        by the time this async work completes (bug: user switches sessions
+        between send and turn-end and the wrong tab gets renamed).
+        """
+        # Resolve the target client up front, before any thread hop, so it
+        # can't drift as the user switches tabs.
+        client = self._pool.get_client(tab_id) if tab_id else self._pool.active_client
+        if client is None:
+            logger.warning("generate_title: no client for tab_id=%s", tab_id)
+            return
+
         def _run():
             try:
-                # Simple heuristic: use first sentence/line, cleaned up
-                text = user_message.strip()
-                # Take first line or first sentence
-                for sep in ['\n', '. ', '? ', '! ']:
-                    if sep in text:
-                        text = text[:text.index(sep)]
-                        break
-                # Remove common filler prefixes
-                for prefix in ['can you ', 'could you ', 'please ', 'i want to ', 'i need to ', "let's ", 'help me ']:
-                    if text.lower().startswith(prefix):
-                        text = text[len(prefix):]
-                        break
-                # Capitalize and truncate
-                title = text[:40].strip()
-                if len(user_message) > 40:
-                    title = title.rstrip('.!?, ') + '...'
-                if title:
-                    title = title[0].upper() + title[1:]
-                else:
-                    title = user_message[:30]
+                # Prefer an AI-generated 2-5 word title; fall back to heuristic
+                # if kiro-cli is unavailable, times out, or returns junk.
+                title = self._ai_title(user_message) or self._heuristic_title(user_message)
 
-                self._acp._push_js("__acpSessionTitle", {"title": title})
+                client._push_js("__acpSessionTitle", {"title": title})
                 # Persist title for sidebar and tab
-                if self._acp:
-                    self._acp._tab_title = title  # For tab persistence
-                if self._acp._session_id:
-                    prefs = self._acp._load_prefs()
+                client._tab_title = title  # For tab persistence
+                if client._session_id:
+                    prefs = client._load_prefs()
                     titles = prefs.get("sessionTitles", {})
-                    titles[self._acp._session_id] = title
+                    titles[client._session_id] = title
                     prefs["sessionTitles"] = titles
-                    self._acp._save_prefs(prefs)
+                    client._save_prefs(prefs)
                 self._pool.save_tab_state()
             except Exception as e:
                 logger.error(f"generate_title error: {e}")
-                fallback = user_message[:30].strip()
-                if len(user_message) > 30:
-                    fallback += '...'
-                self._acp._push_js("__acpSessionTitle", {"title": fallback})
+                fallback = self._heuristic_title(user_message)
+                client._push_js("__acpSessionTitle", {"title": fallback})
         threading.Thread(target=_run, daemon=True).start()
 
     def reconnect(self, tab_id=None):
@@ -1029,15 +1226,36 @@ class HyperagentAPI:
         if self._acp._window:
             self._acp._window.toggle_fullscreen()
 
+    def debug_log(self, message):
+        """Route a JS-side trace into the hyperagent log."""
+        try:
+            logger.info("JS: %s", message)
+        except Exception:
+            pass
+        return True
+
     def copy_to_clipboard(self, text):
-        """Write text to the system clipboard via pyperclip."""
+        """Write text to the system clipboard via Windows clip.exe.
+
+        clip.exe expects UTF-16LE on stdin. The previous PowerShell-based
+        implementation relied on the $input automatic variable, which is
+        only populated inside a real PowerShell pipeline — when invoked as
+        a subprocess with stdin=PIPE, $input is empty and the clipboard is
+        silently cleared. clip.exe is a straight stdin reader with no
+        pipeline semantics, so it Just Works.
+        """
+        logger.debug("copy_to_clipboard: invoked (%d chars)", len(text) if text else 0)
         try:
             import subprocess
             process = subprocess.Popen(
-                ["powershell", "-Command", "Set-Clipboard", "-Value", "$input"],
+                ["clip"],
                 stdin=subprocess.PIPE,
             )
-            process.communicate(input=text.encode("utf-8"))
+            process.communicate(input=text.encode("utf-16le"))
+            if process.returncode != 0:
+                logger.warning("clipboard write failed: clip.exe exited %d", process.returncode)
+                return False
+            logger.debug("clipboard write: %d chars", len(text))
             return True
         except Exception as e:
             logger.warning("clipboard write failed: %s", e)
@@ -1542,9 +1760,12 @@ class HyperagentAPI:
 
     def load_session(self, session_id):
         """Load an existing session by ID."""
+        logger.info("load_session: session=%s (into active tab=%s)",
+                    session_id[:8], str(self._pool._active_tab)[:6] if self._pool._active_tab else "-")
         # Guard: don't load a session that's already open in another tab
         for tab_id, client in self._pool._clients.items():
             if tab_id != self._pool._active_tab and client._session_id == session_id:
+                logger.warning("load_session: session %s already in tab=%s", session_id[:8], tab_id[:6])
                 self._acp._push_js("__acpError", {
                     "error": "Session already open in another tab"
                 })
@@ -1606,10 +1827,13 @@ class HyperagentAPI:
                     kind = entry.get("kind")
                     data = entry.get("data", {})
                     content = data.get("content", [])
+                    # Extract timestamp (unix seconds) from entry meta if present
+                    ts_meta = entry.get("meta") or data.get("meta") or {}
+                    ts = ts_meta.get("timestamp") if isinstance(ts_meta, dict) else None
                     if kind == "Prompt":
                         for c in content:
                             if c.get("kind") == "text" and c.get("data"):
-                                messages.append({"role": "user", "text": c["data"]})
+                                messages.append({"role": "user", "text": c["data"], "ts": ts})
                                 break
                     elif kind == "AssistantMessage":
                         # Extract text content
@@ -1655,7 +1879,7 @@ class HyperagentAPI:
                         # Emit text first (if any non-empty), then tool calls
                         combined_text = "".join(text_parts).strip()
                         if combined_text:
-                            messages.append({"role": "agent", "text": combined_text})
+                            messages.append({"role": "agent", "text": combined_text, "ts": ts})
                         for t in tools:
                             messages.append(t)
                     elif kind == "ToolResults":

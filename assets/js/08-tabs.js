@@ -139,10 +139,35 @@ function _updateTabBadge() {
 
 function createTab() {
   if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.create_tab) return;
+
+  // Reuse rule: only one live welcome allowed at a time. If any existing tab
+  // is still promptless (welcome node present, no messages sent), switch to
+  // it instead of spawning another empty tab. Prevents two welcome canvases
+  // racing for the singleton WebGL refs in 06-welcome.js.
+  var tabIds = Object.keys(tabs);
+  for (var i = 0; i < tabIds.length; i++) {
+    var t = tabs[tabIds[i]];
+    if (t && t.msgsEl && t.msgsEl.querySelector('.welcome')) {
+      switchTab(tabIds[i]);
+      return;
+    }
+  }
+
   pywebview.api.create_tab().then(function(tabId) {
     if (!tabId) return; // limit reached, error pushed from backend
     _addTabToUI(tabId, 'New Chat');
     switchTab(tabId);
+    // Mount the WebGL2 noise field behind the welcome. requestAnimationFrame
+    // ensures the tab's msgsEl has laid out (display swap from switchTab has
+    // taken effect) before we read its dimensions.
+    var host = tabs[tabId] && tabs[tabId].msgsEl;
+    if (host) {
+      requestAnimationFrame(function() {
+        if (typeof startWelcomeNoise === 'function' && host.querySelector('.welcome')) {
+          startWelcomeNoise(host);
+        }
+      });
+    }
   });
 }
 
@@ -259,6 +284,18 @@ function switchTab(tabId) {
 
 function closeTab(tabId) {
   if (!tabs[tabId]) return;
+  // Log who's calling us so we can catch phantom closes.
+  try {
+    var stack = (new Error('closeTab trace')).stack || '';
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.debug_log) {
+      window.pywebview.api.debug_log(
+        '[TAB-CLOSE] tabId=' + tabId +
+        ' activeTabId=' + activeTabId +
+        ' tabs=' + Object.keys(tabs).join(',') +
+        ' stack=' + stack.split('\n').slice(0, 4).join(' | ')
+      );
+    }
+  } catch (e) {}
   var tabIds = Object.keys(tabs);
   if (tabIds.length <= 1) return; // Don't close last tab
 
@@ -450,6 +487,18 @@ window.__acpNewSession = function(data) {
         if (_origAcpNewSession) _origAcpNewSession(data);
       });
     }
+  }
+};
+
+// Handle backend telling us a tab's session id changed (created lazily, loaded, or cleared).
+// Keeps tabs[tabId].sessionId in sync so the sidebar's "hide open sessions" filter works,
+// and refreshes the session list so the row disappears immediately.
+window.__acpSessionIdChanged = function(data) {
+  var tabId = data && data._tabId;
+  if (!tabId || !tabs[tabId]) return;
+  tabs[tabId].sessionId = data && data.sessionId ? data.sessionId : null;
+  if (typeof refreshSessions === 'function' && sidebar && sidebar.classList.contains('open')) {
+    refreshSessions();
   }
 };
 

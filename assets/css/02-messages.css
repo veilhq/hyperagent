@@ -52,8 +52,10 @@
 .msg-time {
   font-size: 0.55rem;
   color: var(--text-dim);
-  opacity: 0.6;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease);
 }
+.msg:hover .msg-time { opacity: 0.6; }
 
 /* ---- User messages (tighter) ---- */
 .msg-user {
@@ -181,6 +183,30 @@
 }
 .code-block:hover .code-lang { opacity: 1; }
 
+/* Code block copy button — sits to the left of the language label */
+.code-copy {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font: 0.55rem/1 var(--font);
+  padding: 0.2rem 0.4rem;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0;
+  z-index: 2;
+  transition: opacity 0.15s var(--ease), color 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+/* When a language label is present, shift copy button left so they don't overlap */
+.code-block .code-lang ~ .code-copy,
+.code-block:has(.code-lang) .code-copy { right: 3.2rem; }
+.code-block:hover .code-copy { opacity: 1; }
+.code-copy:hover { color: var(--accent); border-color: var(--accent); }
+.code-copy.copied { color: var(--accent); border-color: var(--accent); }
+
 /* ---- Tables ---- */
 .table-wrap {
   overflow-x: auto;
@@ -289,7 +315,7 @@
   transition: opacity 0.6s var(--ease);
 }
 .welcome-canvas.fade-out { opacity: 0; }
-#messages { position: relative; }
+#messages, .tab-messages { position: relative; }
 .welcome-icon { width: 32px; height: 32px; color: var(--text-dim); opacity: 0; animation: fadeSlideIn 0.3s var(--ease) 0.1s forwards; }
 .welcome-text { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0; animation: fadeSlideIn 0.3s var(--ease) 0.2s forwards; }
 .welcome-prompts {

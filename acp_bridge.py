@@ -23,9 +23,19 @@ HYPERSPACE_ROOT = Path(__file__).parent.parent.resolve()
 # ---------------------------------------------------------------------------
 
 sys.path.insert(0, str(HYPERSPACE_ROOT))
-from hyper_logging import setup_logger  # noqa: E402
+from hyper_logging import setup_logger, TRACE  # noqa: E402
 
-logger = setup_logger("bridge")
+# Bridge log level is env-configurable; INFO default keeps the log to lifecycle events.
+# Set HYPERAGENT_LOG_LEVEL=DEBUG or TRACE to enable relay byte counts.
+import logging as _logging
+import os as _os
+_LEVEL_MAP = {"TRACE": TRACE, "DEBUG": _logging.DEBUG, "INFO": _logging.INFO,
+              "WARNING": _logging.WARNING, "ERROR": _logging.ERROR}
+_env_level = _os.environ.get("HYPERAGENT_LOG_LEVEL", "INFO").upper()
+_log_level = _LEVEL_MAP.get(_env_level, _logging.INFO)
+logger = setup_logger("bridge", level=_log_level)
+for _h in logger.handlers:
+    _h.setLevel(_log_level)
 
 
 def find_kiro():
@@ -79,7 +89,7 @@ def main():
                 if line.strip():
                     sf.write(line)
                     sf.flush()
-                    logger.debug("relay_stdout: forwarded %db", len(line))
+                    logger.trace("relay_stdout: forwarded %db", len(line))
         except Exception as e:
             logger.error("relay_stdout error: %s", e)
         sock.close()
@@ -95,7 +105,7 @@ def main():
                     break
                 proc.stdin.write(line)
                 proc.stdin.flush()
-                logger.debug("relay_stdin: forwarded %db", len(line))
+                logger.trace("relay_stdin: forwarded %db", len(line))
         except Exception as e:
             logger.error("relay_stdin error: %s", e)
         proc.terminate()
@@ -120,6 +130,37 @@ def main():
         except Exception as e:
             logger.error("relay_stderr error: %s", e)
 
+    # Watchdog: proc.wait() reliably fires on child exit even when stdout/stderr
+    # pipes hang (Windows abnormal-exit case). Sends a notification to the parent
+    # so it can transition state to crashed without waiting for a failed write.
+    def watch_process():
+        try:
+            exit_code = proc.wait()
+            logger.info("watchdog: kiro-cli exited code=%s", exit_code)
+            msg = json.dumps({
+                "jsonrpc": "2.0",
+                "method": "_bridge/child_exited",
+                "params": {"exitCode": exit_code},
+            }) + "\n"
+            try:
+                sf.write(msg.encode())
+                sf.flush()
+            except Exception as e:
+                logger.debug("watchdog: notify failed (socket already closed?): %s", e)
+            # Force-close the socket to unwind any hanging readline calls
+            # on either side (parent's reader, our relay_stdin).
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except Exception:
+                pass
+            try:
+                sock.close()
+            except Exception:
+                pass
+        except Exception as e:
+            logger.error("watchdog error: %s", e)
+
+    threading.Thread(target=watch_process, daemon=True).start()
     threading.Thread(target=relay_stdout, daemon=True).start()
     threading.Thread(target=relay_stderr, daemon=True).start()
     relay_stdin()  # blocks until socket closes

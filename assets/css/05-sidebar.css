@@ -50,19 +50,6 @@
   color: var(--text-dim);
 }
 
-.sidebar-tab-add {
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  font-size: 0.85rem;
-  cursor: pointer;
-  padding: 0 0.3rem;
-  line-height: 1;
-  transition: color 0.15s var(--ease);
-}
-.sidebar-tab-add:hover { color: var(--accent); }
-
-/* --- Open Tab Items --- */
 .sidebar-tab-list {
   padding: 0 0 0.4rem;
 }

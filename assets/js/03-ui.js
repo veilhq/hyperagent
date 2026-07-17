@@ -64,8 +64,10 @@ input.addEventListener('input', function() {
   this.style.height = Math.min(this.scrollHeight, 180) + 'px';
 });
 
-// Message copy (delegated)
-msgs.addEventListener('click', function(e) {
+// Message copy (delegated) — attached to document so it catches clicks in
+// any per-tab messages container (08-tabs.js creates a new #messages-{tabId}
+// div per tab; only the first tab reuses the original #messages).
+document.addEventListener('click', function(e) {
   if (!e.target.classList.contains('msg-copy')) return;
   var msg = e.target.closest('.msg-agent');
   if (!msg) return;
@@ -85,6 +87,33 @@ msgs.addEventListener('click', function(e) {
   }
 });
 
+// Code block copy (delegated)
+document.addEventListener('click', function(e) {
+  if (!e.target.classList.contains('code-copy')) return;
+  e.stopPropagation();
+  var btn = e.target;
+  var text = '';
+  var encoded = btn.getAttribute('data-code') || '';
+  if (encoded) {
+    try { text = decodeURIComponent(escape(atob(encoded))); } catch (_e) { text = ''; }
+  }
+  if (!text) {
+    // Fallback: read from the sibling <pre><code>
+    var pre = btn.parentNode && btn.parentNode.querySelector('pre code');
+    if (pre) text = pre.textContent;
+  }
+  function onSuccess() {
+    btn.textContent = 'Copied';
+    btn.classList.add('copied');
+    setTimeout(function() { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1200);
+  }
+  if (window.pywebview && pywebview.api && pywebview.api.copy_to_clipboard) {
+    pywebview.api.copy_to_clipboard(text).then(function(ok) { if (ok) onSuccess(); });
+  } else if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(onSuccess).catch(onSuccess);
+  }
+});
+
 // ---- Keyboard shortcut overlay ----
 var shortcutsVisible = false;
 var shortcutsEl = null;
@@ -99,7 +128,9 @@ function toggleShortcuts() {
       + sc('/', 'Focus input')
       + sc('?', 'Toggle shortcuts')
       + sc('Ctrl+B', 'Toggle sidebar')
-      + sc('Ctrl+N', 'New session')
+      + sc('Ctrl+N', 'New tab')
+      + sc('Ctrl+T', 'New tab')
+      + sc('Ctrl+W', 'Close tab')
       + sc('Ctrl+F', 'Search messages')
       + sc('Esc', 'Cancel / close')
       + sc('Enter', 'Send message')

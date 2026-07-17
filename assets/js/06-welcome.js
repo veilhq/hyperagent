@@ -7,6 +7,7 @@ var welcomeProg = null;
 var welcomeRaf = null;
 var welcomeTime = 0;
 var welcomeVAO = null;
+var welcomeHost = null;  // The container the current canvas is bound to
 
 var WELCOME_VERT = '#version 300 es\nvoid main(){float x=float(gl_VertexID%2)*4.0-1.0;float y=float(gl_VertexID/2)*4.0-1.0;gl_Position=vec4(x,y,0,1);}';
 
@@ -94,10 +95,12 @@ function initWelcomeGL() {
 
 function welcomeNoiseFrame() {
   if (!welcomeGL || !welcomeCanvas) return;
+  var host = welcomeHost || (welcomeCanvas && welcomeCanvas.parentNode);
+  if (!host) return;
   var gl = welcomeGL;
   // Sync canvas backing store to container size (prevents stretch on resize)
-  var dw = msgs.clientWidth;
-  var dh = msgs.clientHeight;
+  var dw = host.clientWidth;
+  var dh = host.clientHeight;
   if (dw && dh && (welcomeCanvas.width !== dw || welcomeCanvas.height !== dh)) {
     welcomeCanvas.width = dw;
     welcomeCanvas.height = dh;
@@ -117,23 +120,35 @@ function welcomeNoiseFrame() {
   welcomeRaf = requestAnimationFrame(welcomeNoiseFrame);
 }
 
-function startWelcomeNoise() {
-  var w = msgs.querySelector('.welcome');
+function startWelcomeNoise(container) {
+  // Explicit container arg lets callers target a specific tab's msgs element
+  // instead of depending on the global `msgs` being correct at call time.
+  // Falls back to `msgs` for the initial launch call in 03-ui.js.
+  var host = container || (typeof msgs !== 'undefined' ? msgs : null);
+  if (!host) return;
+  var w = host.querySelector('.welcome');
   if (!w) return;
+  // Tear down any prior noise field before starting a new one — prevents
+  // orphaned canvases / leaked WebGL contexts if a second welcome activates
+  // while a first is still live.
+  if (welcomeCanvas || welcomeGL || welcomeRaf) {
+    destroyWelcomeNoise(true); // immediate, no fade
+  }
+  welcomeHost = host;
   welcomeCanvas = document.createElement('canvas');
   welcomeCanvas.className = 'welcome-canvas';
-  // Mount in #messages behind the welcome content
-  msgs.insertBefore(welcomeCanvas, msgs.firstChild);
-  // Size to the messages container
-  welcomeCanvas.width = msgs.clientWidth;
-  welcomeCanvas.height = msgs.clientHeight;
+  // Mount as first child so the welcome content (z-index:1) renders on top
+  host.insertBefore(welcomeCanvas, host.firstChild);
+  // Initial size — the frame loop will resync each tick if this is 0
+  welcomeCanvas.width = host.clientWidth;
+  welcomeCanvas.height = host.clientHeight;
   welcomeTime = Math.random() * 1000;
   if (initWelcomeGL()) {
     welcomeRaf = requestAnimationFrame(welcomeNoiseFrame);
   }
 }
 
-function destroyWelcomeNoise() {
+function destroyWelcomeNoise(immediate) {
   if (welcomeRaf) { cancelAnimationFrame(welcomeRaf); welcomeRaf = null; }
   if (welcomeGL) {
     if (welcomeProg) welcomeGL.deleteProgram(welcomeProg);
@@ -142,9 +157,16 @@ function destroyWelcomeNoise() {
     welcomeVAO = null;
   }
   if (welcomeCanvas) {
-    welcomeCanvas.classList.add('fade-out');
     var c = welcomeCanvas;
-    setTimeout(function() { if (c.parentNode) c.parentNode.removeChild(c); }, 600);
     welcomeCanvas = null;
+    welcomeHost = null;
+    if (immediate) {
+      if (c.parentNode) c.parentNode.removeChild(c);
+    } else {
+      c.classList.add('fade-out');
+      setTimeout(function() { if (c.parentNode) c.parentNode.removeChild(c); }, 600);
+    }
+  } else {
+    welcomeHost = null;
   }
 }

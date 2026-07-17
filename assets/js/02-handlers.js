@@ -444,7 +444,9 @@ window.__acpTurnEnd = function(data) {
 
   // Request AI-generated title after first turn
   if (firstPrompt && !sessionTitle) {
-    pywebview.api.generate_title(firstPrompt);
+    // Pass the originating tab_id so the title lands on the tab that sent
+    // the prompt, even if the user has switched tabs by the time this fires.
+    pywebview.api.generate_title(firstPrompt, (data && data._tabId) || null);
     firstPrompt = '';
   }
 
@@ -630,9 +632,16 @@ window.__acpSessionLoaded = function(data) {
       while (idx < end) {
         var m = messages[idx];
         var el = document.createElement('div');
+        // Format ts (unix seconds) as HH:MM if present
+        var tStr = '';
+        if (m.ts) {
+          var _d = new Date(m.ts * 1000);
+          tStr = String(_d.getHours()).padStart(2,'0') + ':' + String(_d.getMinutes()).padStart(2,'0');
+        }
+        var tSpan = tStr ? '<span class="msg-time">' + tStr + '</span>' : '';
         if (m.role === 'user') {
           el.className = 'msg msg-user';
-          el.innerHTML = '<span class="msg-meta"><span class="msg-role">Operator</span></span>';
+          el.innerHTML = '<span class="msg-meta"><span class="msg-role">Operator</span>' + tSpan + '</span>';
           var body = document.createElement('span');
           body.className = 'msg-body';
           body.textContent = m.text;
@@ -681,7 +690,7 @@ window.__acpSessionLoaded = function(data) {
         } else {
           el.className = 'msg msg-agent';
           el._rawText = m.text;
-          el.innerHTML = '<span class="msg-meta"><span class="msg-role">Agent</span></span>' + renderMarkdown(m.text) + '<button class="msg-copy">Copy</button>';
+          el.innerHTML = '<span class="msg-meta"><span class="msg-role">Agent</span>' + tSpan + '</span>' + renderMarkdown(m.text) + '<button class="msg-copy">Copy</button>';
         }
         msgs.appendChild(el);
         idx++;
