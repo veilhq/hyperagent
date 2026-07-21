@@ -317,7 +317,16 @@
 .welcome-canvas.fade-out { opacity: 0; }
 #messages, .tab-messages { position: relative; }
 .welcome-icon { width: 32px; height: 32px; color: var(--text-dim); opacity: 0; animation: fadeSlideIn 0.3s var(--ease) 0.1s forwards; }
-.welcome-text { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0; animation: fadeSlideIn 0.3s var(--ease) 0.2s forwards; }
+.welcome-text { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0; animation: fadeSlideIn 0.3s var(--ease) 0.2s forwards; }
+/* Kaomoji greeting variant — compound selector beats plain .emote in
+   specificity so the combined fadeSlideIn + emote-glow animation isn't
+   overwritten by .emote's single-animation rule further down. */
+.welcome-text.emote {
+  text-transform: none;
+  letter-spacing: normal;
+  animation: fadeSlideIn 0.3s var(--ease) 0.2s forwards,
+             emote-glow 8s infinite ease-in-out;
+}
 .welcome-prompts {
   display: flex;
   flex-wrap: wrap;

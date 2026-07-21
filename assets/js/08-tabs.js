@@ -122,12 +122,19 @@ function _withTabContext(tabId, fn) {
   if (addBtn) addBtn.addEventListener('click', createTab);
 })();
 
-// --- Tab count badge ---
+// --- Completed executions badge ---
+// Counts background tabs whose execution finished but haven't been viewed yet
+// (i.e. tabs carrying the `done` class). Cleared when the user activates the tab.
 function _updateTabBadge() {
-  var count = Object.keys(tabs).length;
+  var count = 0;
+  var ids = Object.keys(tabs);
+  for (var i = 0; i < ids.length; i++) {
+    var t = tabs[ids[i]];
+    if (t && t.el && t.el.classList.contains('done')) count++;
+  }
   var badge = document.getElementById('sidebar-toggle-badge');
   if (!badge) return;
-  if (count > 1) {
+  if (count > 0) {
     badge.textContent = String(count);
     badge.classList.add('visible');
   } else {
@@ -232,6 +239,7 @@ function switchTab(tabId) {
   tabs[tabId].el.classList.remove('done');
   tabs[tabId].el.classList.add('active');
   tabs[tabId].unread = false;
+  _updateTabBadge();
 
   // Load the new tab's render state
   _loadRenderState(tabId);
@@ -392,6 +400,7 @@ function _markDone(data) {
     tab.unread = true;
     tab.el.classList.remove('unread');
     tab.el.classList.add('done');
+    _updateTabBadge();
   }
 }
 
