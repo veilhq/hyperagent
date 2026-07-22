@@ -463,6 +463,21 @@ class ACPClient:
             err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
             self._push_js("__acpError", {"error": f"Prompt failed: {err_msg}", "source": "jsonrpc"})
             logger.warning("%sprompt failed: %s", self._tab_ctx(), err_msg)
+        else:
+            # An "internal error" from kiro-cli may arrive as a non-end_turn
+            # stopReason rather than as a JSON-RPC error field. Anything outside
+            # the known-benign set (end_turn / cancelled / max_tokens /
+            # max_turn_requests / refusal) is surfaced so the user isn't left
+            # wondering why the turn ended silently.
+            _benign_reasons = {"", "end_turn", "cancelled", "canceled",
+                               "max_tokens", "max_turn_requests", "refusal"}
+            if stop_reason and stop_reason not in _benign_reasons:
+                self._push_js("__acpError", {
+                    "error": f"Prompt ended with stopReason={stop_reason}",
+                    "source": "stop_reason",
+                })
+                logger.warning("%sprompt ended abnormally: stopReason=%s",
+                               self._tab_ctx(), stop_reason)
         if hasattr(self, '_last_metadata') and self._last_metadata:
             data["_metadata"] = self._last_metadata
             self._last_metadata = None
@@ -1052,8 +1067,14 @@ class HyperagentAPI:
             if text.lower().startswith(prefix):
                 text = text[len(prefix):]
                 break
-        # Tokenize, drop articles/pronouns/filler that shouldn't lead a title.
-        _SKIP = {"a", "an", "the", "to", "i", "we", "you", "just", "also", "then", "and", "but"}
+        # Tokenize, drop articles/pronouns/prepositions/filler that shouldn't lead a title.
+        _SKIP = {
+            "a", "an", "the",
+            "i", "we", "you",
+            "just", "also", "then", "and", "but", "so",
+            # Prepositions/particles — usually the second word is the noun we want
+            "to", "in", "on", "at", "for", "with", "by", "of", "from", "into",
+        }
         import re as _re
         tokens = [t for t in _re.findall(r"[A-Za-z0-9']+", text) if t]
         while tokens and tokens[0].lower() in _SKIP:
@@ -1065,15 +1086,19 @@ class HyperagentAPI:
             title = user_message.strip()[:30]
         return title or user_message[:30]
 
-    def _ai_title(self, user_message):
-        """Ask kiro-cli for a descriptive 2-5 word title. Returns None on failure."""
+    def _ai_title(self, user_message, session_id=None):
+        """Ask kiro-cli for a descriptive 2-5 word title. Returns None on failure.
+
+        `session_id` is threaded through purely for logging — it lets log
+        readers correlate a generated title with the session that received it.
+        """
         import shutil
         kiro = shutil.which("kiro-cli")
         if not kiro:
             fallback = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "bin" / "kiro-cli.exe"
             kiro = str(fallback) if fallback.exists() else None
         if not kiro:
-            logger.warning("_ai_title: kiro-cli not found, using heuristic")
+            logger.warning("_ai_title: kiro-cli not found, using heuristic (session=%s)", session_id)
             return None
 
         # Trim overlong input so the prompt stays cheap
@@ -1113,11 +1138,22 @@ class HyperagentAPI:
 
             # Lines to reject: kiro-cli metering footer, prompt markers, spinners,
             # anything that clearly isn't the model's title reply.
+            # Note: `> ` is kiro-cli's assistant-response marker in --no-interactive
+            # mode — strip it (don't reject it), the content after `> ` IS the reply.
             _METER_MARKERS = (
                 'credits:', 'tokens:', 'time:', 'cost:', 'usage:', 'plan:',
                 'thinking', 'trust-all-tools', 'session id', 'model:',
             )
-            _PREFIX_REJECT = ('>', '▸', '›', '[', '#', '$', '•', '·', '|')
+            _PREFIX_REJECT = ('▸', '›', '[', '#', '$', '•', '·', '|')
+
+            def _strip_response_marker(line):
+                """Strip kiro-cli's leading `> ` response marker if present."""
+                s = line.lstrip()
+                if s.startswith('> '):
+                    return s[2:].strip()
+                if s.startswith('>') and len(s) > 1 and s[1] != '>':
+                    return s[1:].strip()
+                return line
 
             def _looks_like_title(line):
                 s = line.strip()
@@ -1134,16 +1170,27 @@ class HyperagentAPI:
                 return True
 
             lines = [ln for ln in clean.splitlines() if ln.strip()]
-            # Walk from the bottom up — the model's final reply is the last
-            # substantive line before the metering footer. Reverse-iterate and
-            # take the first line that survives the reject filter.
+
+            # Preferred path: find the assistant response marker line (`> ...`)
+            # — it's the reliable signal for kiro-cli's reply.
             candidate = None
             for ln in reversed(lines):
-                if _looks_like_title(ln):
-                    candidate = ln.strip()
-                    break
+                stripped = ln.lstrip()
+                if stripped.startswith('> ') or (stripped.startswith('>') and len(stripped) > 1 and stripped[1] != '>'):
+                    inner = _strip_response_marker(ln)
+                    if _looks_like_title(inner):
+                        candidate = inner
+                        break
+
+            # Fallback: walk from bottom up for any line that survives the filter.
             if not candidate:
-                logger.warning("_ai_title: no candidate line found in output: %r", clean[:400])
+                for ln in reversed(lines):
+                    if _looks_like_title(ln):
+                        candidate = ln.strip()
+                        break
+
+            if not candidate:
+                logger.warning("_ai_title: no candidate line found in output (session=%s): %r", session_id, clean[:400])
                 return None
 
             title = candidate.strip('`"\'*_ ').strip()
@@ -1164,15 +1211,15 @@ class HyperagentAPI:
                 title = title[:40].rstrip()
             low = title.lower()
             if any(bad in low for bad in ("error", "sorry", "cannot", "unable", "logged out")):
-                logger.warning("_ai_title: rejected suspicious response: %r", title)
+                logger.warning("_ai_title: rejected suspicious response (session=%s): %r", session_id, title)
                 return None
-            logger.info("_ai_title: generated %r", title)
+            logger.info("_ai_title: generated %r for session %s", title, session_id)
             return title or None
         except subprocess.TimeoutExpired:
-            logger.warning("_ai_title: kiro-cli timeout")
+            logger.warning("_ai_title: kiro-cli timeout (session=%s)", session_id)
             return None
         except Exception as e:
-            logger.error("_ai_title error: %s", e)
+            logger.error("_ai_title error (session=%s): %s", session_id, e)
             return None
 
     def generate_title(self, user_message, tab_id=None):
@@ -1194,7 +1241,7 @@ class HyperagentAPI:
             try:
                 # Prefer an AI-generated 2-5 word title; fall back to heuristic
                 # if kiro-cli is unavailable, times out, or returns junk.
-                title = self._ai_title(user_message) or self._heuristic_title(user_message)
+                title = self._ai_title(user_message, session_id=client._session_id) or self._heuristic_title(user_message)
 
                 client._push_js("__acpSessionTitle", {"title": title})
                 # Persist title for sidebar and tab

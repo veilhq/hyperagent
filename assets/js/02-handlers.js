@@ -224,9 +224,14 @@ function setThoughtActive(active) {
 
 function bumpThoughtIdle() {
   if (thoughtIdleTimer) clearTimeout(thoughtIdleTimer);
+  // Capture the element at schedule time. With per-tab render state, the
+  // module-level `currentThoughtEl` may point at a different tab by the time
+  // this timer fires — closing over `el` ensures the idle release lands on
+  // the same element that scheduled it.
+  var el = currentThoughtEl;
   thoughtIdleTimer = setTimeout(function () {
     thoughtIdleTimer = null;
-    setThoughtActive(false);
+    if (el) el.setAttribute('data-active', 'false');
   }, thoughtIdleMs);
 }
 
@@ -697,8 +702,13 @@ window.__acpStateChange = function(data) {
 
 
 window.__acpError = function(data) {
+  var msg = (data && data.error) ? String(data.error) : 'Unknown error';
+  var source = (data && data.source) ? String(data.source) : '';
   errorBar.classList.add('visible');
-  errorBar.textContent = data.error;
+  errorBar.textContent = msg;
+  // Also mirror to the JS console so failures show up under devtools without
+  // needing to reach for the hyperagent.log file.
+  try { console.error('[acp-error]', source ? '(' + source + ')' : '', msg, data); } catch (e) {}
 };
 
 window.__acpAuthRequired = function(data) {

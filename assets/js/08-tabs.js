@@ -28,7 +28,15 @@ function _newRenderState() {
     taskPanelCollapsed: false,
     // History loading state (per-tab)
     _loadingHistory: false,
-    _loadingHistoryTimeout: null
+    _loadingHistoryTimeout: null,
+    // Thought stream state (per-tab) — reasoning-model agent_thought_chunk
+    // stream. Kept per-tab so concurrent sessions don't share the same
+    // <pre> element or char count.
+    currentThoughtEl: null,
+    currentThoughtBodyEl: null,
+    currentThoughtCountEl: null,
+    thoughtCharCount: 0,
+    thoughtIdleTimer: null
   };
 }
 
@@ -52,7 +60,13 @@ function _saveRenderState(tabId) {
     taskPanelCollapsed: taskPanel ? taskPanel.classList.contains('collapsed') : false,
     // History loading state
     _loadingHistory: _loadingHistory,
-    _loadingHistoryTimeout: _loadingHistoryTimeout
+    _loadingHistoryTimeout: _loadingHistoryTimeout,
+    // Thought stream state
+    currentThoughtEl: currentThoughtEl,
+    currentThoughtBodyEl: currentThoughtBodyEl,
+    currentThoughtCountEl: currentThoughtCountEl,
+    thoughtCharCount: thoughtCharCount,
+    thoughtIdleTimer: thoughtIdleTimer
   };
 }
 
@@ -75,6 +89,12 @@ function _loadRenderState(tabId) {
   // Restore history loading state
   _loadingHistory = rs._loadingHistory;
   _loadingHistoryTimeout = rs._loadingHistoryTimeout;
+  // Restore thought stream globals
+  currentThoughtEl = rs.currentThoughtEl;
+  currentThoughtBodyEl = rs.currentThoughtBodyEl;
+  currentThoughtCountEl = rs.currentThoughtCountEl;
+  thoughtCharCount = rs.thoughtCharCount;
+  thoughtIdleTimer = rs.thoughtIdleTimer;
 }
 
 // Update task panel DOM to reflect the active tab's task state.
@@ -564,8 +584,23 @@ window.__acpSkillActivation = function(data) {
 };
 
 window.__acpError = function(data) {
-  // Errors always show (not tab-scoped)
+  // Errors always render into the top-of-window errorBar via the base handler,
+  // regardless of which tab is active. We additionally fire a transient toast
+  // so background-tab failures don't sit unseen under a different tab.
   if (_origAcpError) _origAcpError(data);
+
+  if (window.HvToast && data && data.error) {
+    var tabId = data._tabId;
+    var prefix = '';
+    if (tabId && tabs[tabId] && tabId !== activeTabId) {
+      prefix = (tabs[tabId].title || 'Tab') + ': ';
+    }
+    var msg = String(data.error);
+    // Trim very long errors so the toast stays readable — full text remains in
+    // the errorBar and in the hyperagent.log file.
+    if (msg.length > 240) msg = msg.slice(0, 237) + '...';
+    window.HvToast.show({ variant: 'error', message: prefix + msg });
+  }
 };
 
 // --- Task panel: tab-routed wrappers ---
