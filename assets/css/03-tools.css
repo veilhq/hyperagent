@@ -3,9 +3,9 @@
 .tool-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem;
+  gap: var(--space-1);
   align-self: flex-start;
-  padding: 0.3rem 0;
+  padding: var(--space-0-3) 0;
 }
 .tool-card {
   display: inline-flex;
@@ -16,16 +16,16 @@
   height: 1.4rem;
   padding: 0;
   cursor: pointer;
-  font-size: 0.55rem;
+  font-size: var(--fs-micro);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  animation: fadeSlideIn 0.15s var(--ease);
-  transition: opacity 0.2s var(--ease), transform 0.15s var(--ease), width 0.2s var(--ease), padding 0.2s var(--ease);
+  animation: fadeSlideIn var(--motion-fast) var(--ease);
+  transition: opacity var(--motion-base) var(--ease), transform var(--motion-fast) var(--ease), width var(--motion-base) var(--ease), padding var(--motion-base) var(--ease);
 }
 .tool-card.show-label {
   width: auto;
-  padding: 0.2rem 0.4rem;
+  padding: var(--space-0-2) var(--space-0-4);
 }
 .tool-card:hover {
   transform: translateY(-1px);
@@ -43,12 +43,12 @@
   max-width: 0;
   overflow: hidden;
   opacity: 0;
-  transition: max-width 0.25s var(--ease), opacity 0.2s var(--ease);
+  transition: max-width var(--motion-medium) var(--ease), opacity var(--motion-base) var(--ease);
 }
 .tool-card.show-label .tool-card-label {
   max-width: 12rem;
   opacity: 1;
-  margin-left: 0.25rem;
+  margin-left: var(--space-1);
 }
 
 /* State badge colors — by MCP group */
@@ -77,7 +77,7 @@
   background: var(--comp);
   color: var(--bg);
   opacity: 0.85;
-  animation: toolFailShake 0.3s ease-out;
+  animation: toolFailShake var(--motion-slow) ease-out;
 }
 @keyframes toolFailShake {
   0% { transform: translateX(0); }
@@ -92,11 +92,11 @@
   display: block;
   align-self: flex-start;
   background: var(--bg-surface);
-  border: 1px solid var(--comp);
-  border-left: 2px solid var(--comp);
-  padding: 0.3rem 0.5rem;
-  margin: 0.1rem 0 0.2rem;
-  font-size: 0.55rem;
+  border: var(--border-hair) solid var(--comp);
+  border-left: var(--border-rail) solid var(--comp);
+  padding: var(--space-0-3) var(--space-2);
+  margin: var(--space-0-1) 0 var(--space-0-2);
+  font-size: var(--fs-micro);
   line-height: 1.4;
   color: var(--comp);
   max-width: clamp(300px, 85%, 800px);
@@ -104,7 +104,7 @@
   word-break: break-word;
   max-height: 80px;
   overflow-y: auto;
-  animation: fadeSlideIn 0.15s var(--ease);
+  animation: fadeSlideIn var(--motion-fast) var(--ease);
 }
 
 /* Long-running warning — pulsing badge */
@@ -121,14 +121,14 @@
   display: none;
   align-self: flex-start;
   background: var(--bg-surface);
-  border: 1px solid var(--border);
-  padding: 0.4rem 0.6rem;
-  margin: 0.1rem 0;
+  border: var(--border-hair) solid var(--border);
+  padding: var(--space-0-4) var(--space-0-6);
+  margin: var(--space-0-1) 0;
   font-size: 0.6rem;
   line-height: 1.5;
   max-width: clamp(300px, 85%, 800px);
   overflow: hidden;
-  animation: fadeSlideIn 0.15s var(--ease);
+  animation: fadeSlideIn var(--motion-fast) var(--ease);
 }
 .tool-detail.visible { display: block; }
 .tool-detail-header {
@@ -137,7 +137,7 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-size: 0.5rem;
-  margin-bottom: 0.2rem;
+  margin-bottom: var(--space-0-2);
 }
 .tool-detail-body {
   color: var(--text);
@@ -150,14 +150,14 @@
 /* ---- Turn-end divider ---- */
 .turn-end {
   align-self: flex-start;
-  font-size: 0.55rem;
+  font-size: var(--fs-micro);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--text-dim);
-  margin: 0.3rem 0 0.6rem;
+  margin: var(--space-0-3) 0 var(--space-0-6);
   opacity: 0;
-  animation: fadeSlideIn 0.3s var(--ease) forwards;
+  animation: fadeSlideIn var(--motion-slow) var(--ease) forwards;
 }
 
 

@@ -1,0 +1,120 @@
+/* ===== Hyperagent: Toast notifications (WI-115) ==========================
+   Mirrored byte-for-byte from Hypervisor's `09-effects.css` toast block
+   (modulo this header comment). See work/to-do/hyper-ecosystem-toast-rework.md.
+
+   Card anatomy: left rail (variant color) → icon → body (title + message
+   + optional action) → optional close button. No shadow, hard edges,
+   `--variant-color` custom property drives severity color per variant.
+   ============================================================================ */
+
+.hv-toast-container {
+  position: fixed;
+  bottom: 3.5rem;
+  right: var(--space-5);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column-reverse;
+  gap: var(--space-2);
+  pointer-events: none;
+  max-width: min(400px, calc(100vw - 2rem));
+}
+
+.hv-toast {
+  --variant-color: var(--cool);
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--space-2);
+  align-items: start;
+  font-family: var(--font);
+  font-size: var(--fs-label);
+  line-height: 1.35;
+  color: var(--text);
+  background: var(--bg-card);
+  border: var(--border-hair) solid var(--border-strong);
+  border-left: 2px solid var(--variant-color);
+  padding: var(--space-2) var(--space-3);
+  box-shadow: none;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity var(--motion-medium) var(--ease),
+              transform var(--motion-medium) var(--ease);
+  pointer-events: auto;
+}
+
+.hv-toast-success { --variant-color: var(--accent); }
+.hv-toast-info    { --variant-color: var(--cool); }
+.hv-toast-warn    { --variant-color: var(--warm); }
+.hv-toast-error   { --variant-color: var(--comp); }
+
+.hv-toast-visible { opacity: 1; transform: translateY(0); }
+.hv-toast-exit    { opacity: 0; transform: translateY(8px); }
+
+.hv-toast-icon {
+  color: var(--variant-color);
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.hv-toast-icon svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.hv-toast-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-2);
+}
+
+.hv-toast-title {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-bright);
+  font-size: var(--fs-label);
+}
+
+.hv-toast-message {
+  color: var(--text);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+
+.hv-toast-action {
+  align-self: flex-start;
+  margin-top: var(--space-0-4);
+  font-size: var(--fs-caption);
+  padding: var(--space-0-2) var(--space-2);
+}
+
+.hv-toast-close {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-family: var(--font);
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0 var(--space-0-2);
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--ease);
+}
+.hv-toast-close:hover { color: var(--comp); }
+
+@media (prefers-reduced-motion: reduce) {
+  .hv-toast {
+    transition: opacity var(--motion-fast) linear;
+    transform: none;
+  }
+  .hv-toast-visible,
+  .hv-toast-exit { transform: none; }
+}

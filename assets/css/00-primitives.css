@@ -1,0 +1,402 @@
+/* ===== Primitive Composition Classes (WI-112 Phase 2) =====
+   Ecosystem-shared primitive vocabulary. Existing specific selectors compose
+   with these bases by adding the appropriate class in HTML/Python emit-side.
+   Specifics retain only unique overrides (width, positioning, JS hooks).
+
+   Naming: hv-{kind} for base, hv-{kind}-{variant} for variants.
+   All primitives use tokens from 00-variables.css — no literals here.
+   ============================================================================ */
+
+/* ---- Chip primitives — silhouette + fill variants ----------------------------
+   Silhouette: unified size, weight, letter-spacing. Variants fill differently.
+   Use for: WI IDs, status flags, project labels, tag markers, activity chips.
+*/
+.hv-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--chip-padding-x);
+  font-family: var(--font);
+  font-size: var(--chip-font-size);
+  font-weight: var(--chip-font-weight);
+  letter-spacing: var(--chip-letter-spacing);
+  text-transform: uppercase;
+  white-space: nowrap;
+  line-height: var(--chip-height);
+  box-sizing: border-box;
+  transition: filter var(--motion-fast) var(--ease),
+              background var(--motion-fast) var(--ease),
+              border-color var(--motion-fast) var(--ease),
+              color var(--motion-fast) var(--ease);
+}
+
+/* Filled — solid accent background, bg-color text. Signals "live/current". */
+.hv-chip-filled {
+  color: var(--bg);
+  background: var(--accent);
+  border: var(--border-hair) solid var(--accent);
+}
+
+/* Outlined accent — transparent fill, accent border+text. Signals "structured/notable". */
+.hv-chip-outlined-accent {
+  color: var(--accent);
+  background: transparent;
+  border: var(--border-hair) solid var(--accent-border);
+}
+
+/* Outlined muted — transparent fill, muted border+text. Signals "historical/quiet". */
+.hv-chip-outlined-muted {
+  color: var(--text-muted);
+  background: transparent;
+  border: var(--border-hair) solid var(--border);
+}
+
+/* Chip hover — brightness lift on filled, subtle border on outlined variants. */
+.hv-chip-filled:hover,
+:hover > .hv-chip-filled,
+.hv-hover-parent:hover .hv-chip-filled {
+  filter: brightness(1.15);
+}
+.hv-chip-outlined-accent:hover,
+:hover > .hv-chip-outlined-accent,
+.hv-hover-parent:hover .hv-chip-outlined-accent {
+  border-color: var(--accent);
+}
+
+/* ---- Row primitive — 3-column grid (chip / body / right meta) ---------------
+   Standard interactive row for pulse rows, dir-index doc lists, etc.
+   Chip col sized by content (auto); body flexes; meta right-aligned.
+*/
+.hv-row {
+  display: grid;
+  grid-template-columns: var(--row-grid);
+  align-items: center;
+  column-gap: var(--row-gap);
+  padding: var(--row-padding-y) var(--space-0-35, 0.35rem);
+  border-bottom: var(--border-hair) solid transparent;
+  color: var(--text);
+  text-decoration: none;
+  transition: background var(--motion-fast) var(--ease),
+              border-color var(--motion-fast) var(--ease);
+}
+.hv-row:hover {
+  background: var(--bg-card-hover);
+  border-bottom-color: var(--accent-border);
+}
+.hv-row:hover .hv-row-title,
+.hv-row:hover > *:nth-child(2) {
+  color: var(--accent);
+}
+
+/* ---- Section primitive (quiet) — frameless section with left rail -----------
+   Companion to .hv-section (bordered). Use when a section needs to signal
+   grouping without a full border frame (e.g., inside a card).
+*/
+.hv-section-quiet {
+  margin-bottom: var(--section-gap);
+  padding-left: var(--space-4);
+  border-left: var(--section-rail-width) solid var(--accent-border);
+  background: transparent;
+  animation: fadeSlideIn var(--motion-slow) var(--ease) var(--motion-tick) both;
+}
+.hv-section-quiet > h2,
+.markdown-body .hv-section-quiet > h2 {
+  margin-top: 0;
+  padding-top: 0;
+  font-size: var(--fs-heading);
+  border-bottom: none;
+  margin-bottom: var(--space-2);
+}
+
+/* ---- Hover primitives -------------------------------------------------------- */
+
+/* Lift: translateY on hover + accent border. Use on card-like containers. */
+.hv-hover-lift {
+  transition: transform var(--motion-base) var(--ease),
+              border-color var(--motion-base) var(--ease),
+              box-shadow var(--motion-base) var(--ease);
+}
+.hv-hover-lift:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow-hover);
+}
+
+/* Brightness: subtle filter lift for chip-like elements without transform. */
+.hv-hover-brightness {
+  transition: filter var(--motion-fast) var(--ease);
+}
+.hv-hover-brightness:hover {
+  filter: brightness(1.15);
+}
+
+/* ---- Noise field container hook ---------------------------------------------
+   Marks a container that the WebGL2 Bayer-dither noise field mounts into.
+   JS looks for this class; CSS provides the canvas positioning contract.
+*/
+.hv-noise-field {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.hv-noise-field > canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: var(--z-base);
+}
+.hv-noise-field > *:not(canvas) {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---- Progress bar (track + fill) --------------------------------------------
+   Two-element pattern: `.hv-progress-track` (bordered container),
+   `.hv-progress-fill` inside with inline `style="width: N%"`.
+   Fill uses the shared --progress-gradient token.
+*/
+.hv-progress-track {
+  display: block;
+  height: 4px;
+  background: var(--bg-card);
+  border: var(--border-hair) solid var(--border);
+  min-width: 40px;
+  position: relative;
+}
+.hv-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--progress-gradient);
+  transition: width var(--motion-slow) var(--ease);
+}
+/* Empty state — striped diagonal fill to signal "no data yet" */
+.hv-progress-track-empty {
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 3px,
+    var(--border) 3px,
+    var(--border) 4px
+  );
+}
+
+/* ============================================================================
+   Form primitives — input + button
+   ============================================================================ */
+
+/* ---- Input base — bordered, single-line text field --------------------------
+   Used for: search input, name/URL fields, filter inputs.
+*/
+.hv-input {
+  display: block;
+  width: 100%;
+  background: var(--bg);
+  border: var(--border-hair) solid var(--border);
+  color: var(--text-bright);
+  font-family: var(--font);
+  font-size: var(--fs-label);
+  padding: var(--space-2) var(--space-3);
+  outline: none;
+  transition: border-color var(--motion-base) var(--ease),
+              box-shadow var(--motion-base) var(--ease);
+}
+.hv-input::placeholder { color: var(--text-dim); }
+.hv-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 var(--border-hair) var(--accent-border), var(--shadow-glow);
+}
+/* Suppress the base :focus-visible outline — the primitive's own accent
+   border + accent-border ring is the focus indicator. Otherwise text inputs
+   (which trigger :focus-visible on click per spec) render two outlines. */
+.hv-input:focus-visible {
+  outline: none;
+}
+
+/* Inline variant — no border, no padding; sits inside a bordered container. */
+.hv-input-inline {
+  background: transparent;
+  border: none;
+  color: var(--text-bright);
+  font-family: var(--font);
+  font-size: var(--fs-label);
+  padding: 0;
+  outline: none;
+  width: 100%;
+}
+.hv-input-inline::placeholder { color: var(--text-dim); }
+
+/* ---- Button base + variants --------------------------------------------------
+   Ghost by default: bordered, transparent bg, muted text, hovers to accent.
+*/
+.hv-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: transparent;
+  border: var(--border-hair) solid var(--border-strong);
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--motion-base) var(--ease),
+              border-color var(--motion-base) var(--ease),
+              background var(--motion-base) var(--ease),
+              transform var(--motion-fast) var(--ease);
+}
+.hv-button:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.hv-button:active:not(:disabled) {
+  filter: brightness(0.9);
+}
+.hv-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Primary — filled accent, high visual weight. */
+.hv-button-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+.hv-button-primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+  color: var(--bg);
+}
+
+/* Ghost — same as base (explicit for clarity/composability). */
+.hv-button-ghost {
+  /* Inherits from .hv-button */
+}
+
+/* Danger — comp color, warns on destructive action. */
+.hv-button-danger {
+  color: var(--error);
+  border-color: var(--error);
+}
+.hv-button-danger:hover:not(:disabled) {
+  background: var(--error);
+  color: var(--bg);
+}
+
+/* ============================================================================
+   Overlay primitives — full-viewport backdrop + panel variants
+   ============================================================================ */
+
+/* ---- Overlay base — full-viewport dim backdrop ------------------------------
+   Shared by confirm dialog, command palette, shortcuts overlay, etc.
+   Individual overlays override z-index if they need to stack above others.
+*/
+.hv-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.8);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--ease);
+  pointer-events: none;
+}
+.hv-overlay.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ---- Modal panel — centered card inside an overlay -------------------------- */
+.hv-panel-modal {
+  background: var(--bg-card);
+  border: var(--border-hair) solid var(--border-strong);
+  padding: var(--space-5) var(--space-6);
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-panel);
+  animation: fadeSlideIn var(--motion-base) var(--ease) both;
+}
+
+/* ---- Drawer panel — side-anchored slide-in ---------------------------------- */
+.hv-panel-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: min(400px, 90vw);
+  background: var(--bg-card);
+  border-left: var(--border-hair) solid var(--border-strong);
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.6);
+  transform: translateX(100%);
+  transition: transform var(--motion-slow) var(--ease);
+  overflow-y: auto;
+}
+.hv-overlay.visible .hv-panel-drawer {
+  transform: translateX(0);
+}
+
+/* ============================================================================
+   Accessibility parity — reduced motion (WI-112 Phase 8)
+   Applies to both system preference and .a11y-reduce-motion class toggle.
+   Every animated primitive gets a no-op override so reduced-motion users see
+   static UI without pull-in animations, transform lifts, or filter flashes.
+   ============================================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .hv-chip,
+  .hv-chip-filled,
+  .hv-chip-outlined-accent,
+  .hv-chip-outlined-muted { transition: none !important; }
+  .hv-chip-filled:hover,
+  .hv-chip-outlined-accent:hover,
+  .hv-chip-outlined-muted:hover { filter: none !important; }
+  .hv-row { transition: none !important; }
+  .hv-hover-lift { transition: none !important; }
+  .hv-hover-lift:hover {
+    transform: none !important;
+    box-shadow: none !important;
+  }
+  .hv-hover-brightness { transition: none !important; }
+  .hv-hover-brightness:hover { filter: none !important; }
+  .hv-progress-fill { transition: none !important; }
+  .hv-section,
+  .hv-section-quiet { animation: none !important; }
+  .hv-overlay,
+  .hv-panel-modal,
+  .hv-panel-drawer { transition: none !important; animation: none !important; }
+  .hv-button { transition: none !important; }
+}
+html.a11y-reduce-motion .hv-chip,
+html.a11y-reduce-motion .hv-chip-filled,
+html.a11y-reduce-motion .hv-chip-outlined-accent,
+html.a11y-reduce-motion .hv-chip-outlined-muted { transition: none !important; }
+html.a11y-reduce-motion .hv-chip-filled:hover,
+html.a11y-reduce-motion .hv-chip-outlined-accent:hover,
+html.a11y-reduce-motion .hv-chip-outlined-muted:hover { filter: none !important; }
+html.a11y-reduce-motion .hv-row { transition: none !important; }
+html.a11y-reduce-motion .hv-hover-lift { transition: none !important; }
+html.a11y-reduce-motion .hv-hover-lift:hover {
+  transform: none !important;
+  box-shadow: none !important;
+}
+html.a11y-reduce-motion .hv-hover-brightness { transition: none !important; }
+html.a11y-reduce-motion .hv-hover-brightness:hover { filter: none !important; }
+html.a11y-reduce-motion .hv-progress-fill { transition: none !important; }
+html.a11y-reduce-motion .hv-section,
+html.a11y-reduce-motion .hv-section-quiet { animation: none !important; }
+html.a11y-reduce-motion .hv-overlay,
+html.a11y-reduce-motion .hv-panel-modal,
+html.a11y-reduce-motion .hv-panel-drawer { transition: none !important; animation: none !important; }
+html.a11y-reduce-motion .hv-button { transition: none !important; }

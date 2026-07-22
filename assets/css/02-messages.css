@@ -3,10 +3,19 @@
 #messages {
   flex: 1;
   overflow-y: auto;
-  padding: 1.25rem 1.5rem;
+  padding: var(--space-1-25) var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: var(--space-0-3);
+}
+/* When the welcome screen is present, drop container padding so the noise
+   field canvas (mounted inside .welcome via HvNoiseField, WI-113 Phase 6)
+   renders edge-to-edge — matches pre-refresh visual where the canvas
+   covered the full #messages area. Padding restores automatically once
+   welcome is torn down and real messages appear. */
+#messages:has(> .welcome),
+.tab-messages:has(> .welcome) {
+  padding: 0;
 }
 
 #messages.no-animate .msg { animation: none; }
@@ -20,15 +29,15 @@
 /* ---- Message base ---- */
 .msg {
   max-width: clamp(300px, 90%, 900px);
-  padding: 0.75rem 1rem;
-  font-size: 0.8rem;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--fs-h5-6);
   line-height: 1.7;
   white-space: pre-wrap;
   word-wrap: break-word;
-  animation: fadeSlideIn 0.2s var(--ease);
-  border: 1px solid var(--border);
+  animation: fadeSlideIn var(--motion-base) var(--ease);
+  border: var(--border-hair) solid var(--border);
   background: var(--bg-card);
-  transition: transform 0.15s var(--ease), border-color 0.15s var(--ease);
+  transition: transform var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease);
 }
 .msg:hover {
   transform: translateY(-1px);
@@ -39,21 +48,21 @@
 .msg-meta {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.3rem;
+  gap: var(--space-2);
+  margin-bottom: var(--space-0-3);
 }
 .msg-role {
-  font-size: 0.55rem;
+  font-size: var(--fs-micro);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-dim);
 }
 .msg-time {
-  font-size: 0.55rem;
+  font-size: var(--fs-micro);
   color: var(--text-dim);
   opacity: 0;
-  transition: opacity 0.15s var(--ease);
+  transition: opacity var(--motion-fast) var(--ease);
 }
 .msg:hover .msg-time { opacity: 0.6; }
 
@@ -64,7 +73,7 @@
   background: var(--bg-surface);
   color: var(--text-bright);
   max-width: clamp(200px, 75%, 600px);
-  padding: 0.5rem 0.85rem;
+  padding: var(--space-2) 0.85rem;
   position: relative;
 }
 .msg-user::before {
@@ -100,18 +109,18 @@
 /* Message copy button */
 .msg-copy {
   position: absolute;
-  top: 0.4rem;
-  right: 0.4rem;
+  top: var(--space-0-4);
+  right: var(--space-0-4);
   background: var(--bg-surface);
-  border: 1px solid var(--border);
+  border: var(--border-hair) solid var(--border);
   color: var(--text-dim);
   font: 0.55rem/1 var(--font);
-  padding: 0.2rem 0.4rem;
+  padding: var(--space-0-2) var(--space-0-4);
   cursor: pointer;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   opacity: 0;
-  transition: opacity 0.15s var(--ease), color 0.15s var(--ease), border-color 0.15s var(--ease);
+  transition: opacity var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease);
 }
 .msg-agent:hover .msg-copy { opacity: 1; }
 .msg-copy:hover { color: var(--accent); border-color: var(--accent); }
@@ -120,9 +129,9 @@
 /* ---- Markdown Typography ---- */
 .msg-agent h1, .msg-agent h2, .msg-agent h3 {
   color: var(--accent);
-  font-size: 0.8rem;
+  font-size: var(--fs-h5-6);
   text-transform: uppercase;
-  margin: 0.8rem 0 0.3rem;
+  margin: var(--space-0-8) 0 var(--space-0-3);
 }
 .msg-agent h3 { color: var(--warm); text-transform: none; }
 .msg-agent h4 { color: var(--cool); text-transform: none; font-size: 0.8rem; margin: 0.6rem 0 0.2rem; }
@@ -138,18 +147,18 @@
 /* Inline code */
 .msg-agent code {
   background: var(--bg-elevated);
-  padding: 0.1rem 0.35rem;
+  padding: var(--space-0-1) 0.35rem;
   font-size: 0.75rem;
-  border: 1px solid var(--border);
+  border: var(--border-hair) solid var(--border);
   color: var(--warm);
 }
 
 /* Code blocks */
 .msg-agent pre {
   background: var(--bg-surface);
-  border: 1px solid var(--border);
-  padding: 0.6rem 0.8rem;
-  margin: 0.5rem 0;
+  border: var(--border-hair) solid var(--border);
+  padding: var(--space-0-6) var(--space-0-8);
+  margin: var(--space-2) 0;
   overflow-x: auto;
   font-size: 0.72rem;
   line-height: 1.5;
@@ -164,22 +173,22 @@
 /* Code block wrapper with language label */
 .code-block {
   position: relative;
-  margin: 0.5rem 0;
+  margin: var(--space-2) 0;
 }
 .code-block pre { margin: 0; }
 .code-lang {
   position: absolute;
   top: 0;
   right: 0;
-  font-size: 0.55rem;
+  font-size: var(--fs-micro);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  padding: 0.2rem 0.5rem;
+  padding: var(--space-0-2) var(--space-2);
   color: var(--bg);
   background: var(--accent-dim);
   opacity: 0;
-  transition: opacity 0.15s var(--ease);
+  transition: opacity var(--motion-fast) var(--ease);
 }
 .code-block:hover .code-lang { opacity: 1; }
 
@@ -189,16 +198,16 @@
   top: 0;
   right: 0;
   background: var(--bg-surface);
-  border: 1px solid var(--border);
+  border: var(--border-hair) solid var(--border);
   color: var(--text-dim);
   font: 0.55rem/1 var(--font);
-  padding: 0.2rem 0.4rem;
+  padding: var(--space-0-2) var(--space-0-4);
   cursor: pointer;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   opacity: 0;
   z-index: 2;
-  transition: opacity 0.15s var(--ease), color 0.15s var(--ease), border-color 0.15s var(--ease);
+  transition: opacity var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease);
 }
 /* When a language label is present, shift copy button left so they don't overlap */
 .code-block .code-lang ~ .code-copy,
@@ -210,7 +219,7 @@
 /* ---- Tables ---- */
 .table-wrap {
   overflow-x: auto;
-  margin: 0.5rem 0;
+  margin: var(--space-2) 0;
   white-space: normal;
 }
 .msg-agent table {
@@ -220,8 +229,8 @@
 }
 .msg-agent th {
   text-align: left;
-  padding: 0.35rem 0.6rem;
-  border-bottom: 1px solid var(--accent-border);
+  padding: 0.35rem var(--space-0-6);
+  border-bottom: var(--border-hair) solid var(--accent-border);
   color: var(--warm);
   font-weight: 700;
   text-transform: uppercase;
@@ -229,17 +238,17 @@
   letter-spacing: 0.05em;
 }
 .msg-agent td {
-  padding: 0.3rem 0.6rem;
-  border-bottom: 1px solid var(--border);
+  padding: var(--space-0-3) var(--space-0-6);
+  border-bottom: var(--border-hair) solid var(--border);
   color: var(--text);
 }
 .msg-agent tr:hover td { background: var(--accent-glow); }
 
 /* ---- Blockquotes ---- */
 .msg-agent blockquote {
-  border-left: 2px solid var(--accent-border);
-  padding: 0.3rem 0.8rem;
-  margin: 0.5rem 0;
+  border-left: var(--border-rail) solid var(--accent-border);
+  padding: var(--space-0-3) var(--space-0-8);
+  margin: var(--space-2) 0;
   color: var(--text-muted);
   background: var(--bg-surface);
   font-style: italic;
@@ -247,8 +256,8 @@
 
 /* ---- Typing indicator (blinking box) ---- */
 .typing-indicator {
-  padding: 0.6rem 1rem;
-  animation: fadeSlideIn 0.2s var(--ease);
+  padding: var(--space-0-6) var(--space-4);
+  animation: fadeSlideIn var(--motion-base) var(--ease);
 }
 .typing-indicator .thinking-dot {
   display: inline-block;
@@ -288,7 +297,7 @@
   display: none;
   width: 100%;
   height: 8px;
-  border-top: 1px solid var(--border);
+  border-top: var(--border-hair) solid var(--border);
   background: var(--bg);
 }
 .thinking-bar.active { display: block; }
@@ -301,19 +310,22 @@
   align-items: center;
   justify-content: center;
   flex: 1;
-  gap: 0.75rem;
+  gap: var(--space-3);
   color: var(--text-dim);
   z-index: 1;
 }
+/* Noise field canvas — the shared module (HvNoiseField) creates a canvas with
+   .hv-noise-field-canvas + legacy .home-anchor-canvas classes. The primitive
+   rule `.hv-noise-field > canvas` (in 00-primitives.css) provides positioning;
+   we add the fade transition and opacity 0/1 states here so destroyWelcomeNoise
+   (fadeMs > 0) can trigger a smooth exit. Kept `.welcome-canvas` selector for
+   backward-compat with any legacy path that still adds it. */
+.hv-noise-field > canvas,
 .welcome-canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 0;
   opacity: 1;
-  transition: opacity 0.6s var(--ease);
+  transition: opacity var(--motion-slow) var(--ease);
 }
+.hv-noise-field > canvas.fade-out,
 .welcome-canvas.fade-out { opacity: 0; }
 #messages, .tab-messages { position: relative; }
 .welcome-icon { width: 32px; height: 32px; color: var(--text-dim); opacity: 0; animation: fadeSlideIn 0.3s var(--ease) 0.1s forwards; }
@@ -324,29 +336,29 @@
 .welcome-text.emote {
   text-transform: none;
   letter-spacing: normal;
-  animation: fadeSlideIn 0.3s var(--ease) 0.2s forwards,
+  animation: fadeSlideIn var(--motion-slow) var(--ease) var(--motion-base) forwards,
              emote-glow 8s infinite ease-in-out;
 }
 .welcome-prompts {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  gap: var(--space-0-4);
   justify-content: center;
   max-width: 500px;
-  margin-top: 0.5rem;
+  margin-top: var(--space-2);
   opacity: 0;
-  animation: fadeSlideIn 0.3s var(--ease) 0.35s forwards;
+  animation: fadeSlideIn var(--motion-slow) var(--ease) 0.35s forwards;
 }
 .welcome-chip {
   background: var(--bg-card);
-  border: 1px solid var(--border);
+  border: var(--border-hair) solid var(--border);
   color: var(--text-muted);
   font: 0.65rem/1.4 var(--font);
-  padding: 0.4rem 0.7rem;
+  padding: var(--space-0-4) 0.7rem;
   cursor: pointer;
-  transition: border-color 0.15s var(--ease), color 0.15s var(--ease);
+  transition: border-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
 }
-.welcome-chip:hover { border-color: var(--accent); color: var(--text-bright); }
+.welcome-chip:hover { border-color: var(--accent); color: var(--accent); }
 
 
 /* ---- ASCII emote glow (palette color cycling) ---- */
@@ -367,11 +379,11 @@
   align-self: flex-start;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.3rem 0.6rem;
-  margin: 0.2rem 0;
-  font-size: 0.55rem;
-  animation: fadeSlideIn 0.3s var(--ease);
+  gap: var(--space-2);
+  padding: var(--space-0-3) var(--space-0-6);
+  margin: var(--space-0-2) 0;
+  font-size: var(--fs-micro);
+  animation: fadeSlideIn var(--motion-slow) var(--ease);
 }
 .steering-label {
   font-weight: 700;
@@ -386,3 +398,139 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+
+/* ==================================================================
+   Thought stream (WI-114) — extended-thinking reasoning surface
+   ==================================================================
+   agent_thought_chunk events accumulate in a collapsed-by-default bar
+   under the Agent nameplate. A Bayer-dither indicator (shared HvNoiseField
+   module) animates only while chunks are actively arriving; goes static
+   under reduce-motion. Bespoke styles instead of composing .hv-section-quiet
+   — the surface is too small for a section-rail treatment and needs its
+   own inline silhouette (follows the .ha-cluster-chip precedent from WI-113
+   for intentional local overrides on tiny chrome).
+   ================================================================== */
+
+.msg-thought {
+  align-self: flex-start;
+  margin: 0;
+  padding: var(--space-0-3) 0;
+  max-width: clamp(300px, 90%, 900px);
+  font-size: var(--fs-micro);
+  color: var(--text-dim);
+  animation: fadeSlideIn var(--motion-base) var(--ease);
+}
+
+/* Collapsed bar — always visible, click to expand.
+   Deliberately borderless: sits inside the .msg-agent's own border, and a
+   second frame would create box-in-box noise. Bar reads as inline meta,
+   integrated with the nameplate rhythm above. */
+.msg-thought-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0-4);
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font: var(--fs-micro)/1.4 var(--font);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--ease);
+}
+.msg-thought-bar:hover { color: var(--text-muted); }
+.msg-thought-bar:hover .msg-thought-dither { opacity: 0.7; }
+
+/* Grid activity indicator — a 3×3 grid of accent cells. When the stream is
+   active, cells pulse in a clockwise chase around the perimeter, tracing
+   circular motion within a grid silhouette. Center cell stays empty. Pure
+   CSS animation — no WebGL, no JS lifecycle. The reduce-motion catch-all
+   in zz-accessibility.css halts the pulse automatically. Grid geometry
+   drives everything — no border-radius, no smooth easing on the chase,
+   preserving the brutalist pixel feel. */
+.msg-thought-dither {
+  --cell: 3px;
+  --gap: 1px;
+  display: grid;
+  grid-template-columns: repeat(3, var(--cell));
+  grid-template-rows: repeat(3, var(--cell));
+  gap: var(--gap);
+  width: calc(3 * var(--cell) + 2 * var(--gap));
+  height: calc(3 * var(--cell) + 2 * var(--gap));
+  flex-shrink: 0;
+}
+.msg-thought-dither > span {
+  background: var(--accent);
+  opacity: 0.2;
+  transition: opacity var(--motion-fast) var(--ease);
+}
+/* Center cell: never lit — keeps the ring silhouette clean */
+.msg-thought-dither > span:nth-child(5) {
+  opacity: 0;
+}
+
+/* Active state — perimeter chase.
+   DOM order is row-major (1..9). Clockwise perimeter starting from top-left
+   is 1 → 2 → 3 → 6 → 9 → 8 → 7 → 4. Each cell gets an animation-delay
+   spaced 1/8 of the cycle so brightness sweeps around the ring. */
+.msg-thought[data-active="true"] .msg-thought-dither > span {
+  animation: msg-thought-cell-pulse 1s linear infinite;
+}
+.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(1) { animation-delay: 0s; }
+.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(2) { animation-delay: 0.125s; }
+.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(3) { animation-delay: 0.25s; }
+.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(6) { animation-delay: 0.375s; }
+.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(9) { animation-delay: 0.5s; }
+.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(8) { animation-delay: 0.625s; }
+.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(7) { animation-delay: 0.75s; }
+.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(4) { animation-delay: 0.875s; }
+/* Center cell stays dark even when active */
+.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(5) {
+  animation: none;
+}
+
+@keyframes msg-thought-cell-pulse {
+  0%, 100% { opacity: 0.2; }
+  10%      { opacity: 1; }
+  25%      { opacity: 0.2; }
+}
+
+/* Marker label — reads "thought" in the chip type register */
+.msg-thought-marker {
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.msg-thought-marker::before {
+  content: '▸ ';
+  display: inline-block;
+  transition: transform var(--motion-fast) var(--ease);
+}
+.msg-thought[data-expanded="true"] .msg-thought-marker::before {
+  transform: rotate(90deg);
+}
+
+/* Live char count — dimmer than the marker, monospace tab-friendly */
+.msg-thought-count {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+.msg-thought-count::before { content: '· '; opacity: 0.5; }
+
+/* Expanded body — dimmed monospace, no markdown, no fade animation.
+   Thoughts are stream-of-consciousness; preserve raw formatting. */
+.msg-thought-body {
+  margin: var(--space-0-3) 0 0;
+  padding: var(--space-0-4) var(--space-0-6);
+  background: var(--bg-surface);
+  border-left: var(--border-rail) solid var(--accent-border);
+  color: var(--text-muted);
+  font: var(--fs-micro)/1.6 var(--font);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: 24rem;
+  overflow-y: auto;
+}
+.msg-thought-body[hidden] { display: none; }

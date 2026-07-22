@@ -6,9 +6,9 @@
 .tab-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 1.25rem 1.5rem;
+  padding: var(--space-1-25) var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: var(--space-0-3);
 }
 .tab-messages.no-animate .msg { animation: none; }

@@ -1,18 +1,18 @@
 /* ===== Hyperagent: Input Area ===== */
 
 .input-area {
-  padding: 1.2rem 1.25rem;
-  border-top: 1px solid var(--border);
+  padding: var(--space-1-2) var(--space-1-25);
+  border-top: var(--border-hair) solid var(--border);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   background: var(--bg-surface);
 }
 
 /* Icon buttons (Sessions, New Chat) */
 .input-icon-btn {
   background: none;
-  border: 1px solid var(--border);
+  border: var(--border-hair) solid var(--border);
   color: var(--text-muted);
   width: 30px;
   height: 30px;
@@ -22,7 +22,7 @@
   cursor: pointer;
   flex-shrink: 0;
   position: relative;
-  transition: border-color 0.2s var(--ease), color 0.2s var(--ease);
+  transition: border-color var(--motion-base) var(--ease), color var(--motion-base) var(--ease);
 }
 .input-icon-btn:hover { border-color: var(--accent); color: var(--text-bright); }
 
@@ -32,60 +32,39 @@
 }
 
 #input {
-  width: 100%;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  color: var(--text-bright);
-  font: 0.7rem var(--font);
+  /* Composes with .hv-input — silhouette + focus ring from primitive.
+     Specific: textarea-only dimensions + font shorthand for line-height. */
+  font: var(--fs-label) var(--font);
   line-height: 1.4;
-  padding: 0.4rem 0.8rem;
+  padding: var(--space-0-4) var(--space-0-8);
   resize: none;
-  outline: none;
   min-height: 30px;
   max-height: 180px;
   box-sizing: border-box;
   margin: 0;
   display: block;
-  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease), height 0.1s var(--ease);
+  transition: border-color var(--motion-base) var(--ease), box-shadow var(--motion-base) var(--ease), height var(--motion-tick) var(--ease);
 }
-#input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent-border);
-}
-#input::placeholder { color: var(--text-dim); }
 
-/* Send button */
+/* Send button — composes with .hv-button. Specific: accent-glow fill + prompting state. */
 #send-btn {
   background: var(--accent-glow);
-  border: 1px solid var(--accent-border);
+  border-color: var(--accent-border);
   color: var(--accent);
-  font: 0.7rem var(--font);
-  line-height: 1.4;
-  padding: 0 1rem;
+  padding: 0 var(--space-4);
   height: 30px;
-  cursor: pointer;
-  text-transform: uppercase;
   letter-spacing: 0.05em;
-  transition: all 0.15s var(--ease);
-  white-space: nowrap;
 }
-#send-btn:hover { background: var(--accent); color: var(--bg); }
+#send-btn:hover:not(:disabled) { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 #send-btn:disabled { opacity: 0.25; cursor: default; }
 #send-btn:disabled:hover { background: var(--accent-glow); color: var(--accent); }
 
-/* Cancel button (shown during prompting) */
+/* Cancel button (shown during prompting) — composes with .hv-button-danger. Specific: hidden by default + tighter padding. */
 #cancel-btn {
   display: none;
-  background: none;
-  border: 1px solid var(--comp);
-  color: var(--comp);
-  font: 0.7rem/1 var(--font);
-  padding: 0 0.8rem;
+  padding: 0 var(--space-0-8);
   height: 30px;
-  cursor: pointer;
-  text-transform: uppercase;
 }
-#cancel-btn:hover { background: var(--comp); color: var(--bg); }
-.prompting #cancel-btn { display: block; }
+.prompting #cancel-btn { display: flex; }
 .prompting #send-btn { border-color: var(--warm); color: var(--warm); }
-.prompting #send-btn:hover { background: var(--warm); color: var(--bg); }
+.prompting #send-btn:hover:not(:disabled) { background: var(--warm); color: var(--bg); border-color: var(--warm); }

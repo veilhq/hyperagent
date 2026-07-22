@@ -30,6 +30,9 @@ function appendUser(text) {
 
 function ensureAgentMsg() {
   if (!currentMsgEl) {
+    // A new agent message starts a fresh phase — close any in-flight
+    // thought batch so the next thought_chunk creates its own row below.
+    resetThoughtStream();
     currentMsgEl = document.createElement('div');
     currentMsgEl.className = 'msg msg-agent';
     currentMsgEl.innerHTML = '<span class="msg-meta"><span class="msg-role">Agent</span><span class="msg-time">' + msgTime() + '</span></span>';
@@ -133,6 +136,120 @@ function flushStream() {
       sw.remove();
     });
   }
+}
+
+// --- Thought stream (WI-114) ---
+// agent_thought_chunk arrives per-word from reasoning-enabled models.
+// Rendered into a collapsed-by-default panel under the Agent nameplate,
+// with a live char count and a CSS-masked Bayer dither indicator that
+// animates only while chunks are actively arriving. Distinct from the
+// visible message stream: no word-fade, no markdown parsing.
+var currentThoughtEl = null;      // .msg-thought container for current turn
+var currentThoughtBodyEl = null;  // <pre> holding the accumulated text
+var currentThoughtCountEl = null; // live char/token count on the bar
+var thoughtCharCount = 0;
+var thoughtIdleTimer = null;
+var thoughtIdleMs = 500;          // idle ms before the dither settles
+var thoughtIdSeq = 0;
+
+function ensureThoughtEl() {
+  // Called on first agent_thought_chunk of a reasoning batch. The row is a
+  // sibling of .msg-user / .msg-agent / .tool-row inside #messages — each
+  // reasoning batch reads as its own phase of the turn, matching how tool
+  // rows are their own line rather than nested inside a message bubble.
+  if (currentThoughtEl) return currentThoughtEl;
+  var id = 'thought-body-' + (++thoughtIdSeq);
+  var wrap = document.createElement('div');
+  wrap.className = 'msg-thought';
+  wrap.setAttribute('data-expanded', 'false');
+  wrap.setAttribute('data-active', 'false');
+
+  var bar = document.createElement('button');
+  bar.type = 'button';
+  bar.className = 'msg-thought-bar';
+  bar.setAttribute('aria-expanded', 'false');
+  bar.setAttribute('aria-controls', id);
+
+  var dither = document.createElement('span');
+  dither.className = 'msg-thought-dither';
+  dither.setAttribute('aria-hidden', 'true');
+  // 9 grid cells: 8 perimeter cells + 1 center. CSS assigns animation-delay
+  // per :nth-child to trace a clockwise perimeter chase; center stays empty.
+  for (var i = 0; i < 9; i++) {
+    dither.appendChild(document.createElement('span'));
+  }
+
+  var marker = document.createElement('span');
+  marker.className = 'msg-thought-marker';
+  marker.textContent = 'thought';
+
+  var count = document.createElement('span');
+  count.className = 'msg-thought-count';
+  count.textContent = '0';
+
+  bar.appendChild(dither);
+  bar.appendChild(marker);
+  bar.appendChild(count);
+
+  var body = document.createElement('pre');
+  body.className = 'msg-thought-body';
+  body.id = id;
+  body.hidden = true;
+
+  bar.addEventListener('click', function () {
+    var expanded = wrap.getAttribute('data-expanded') === 'true';
+    var next = !expanded;
+    wrap.setAttribute('data-expanded', next ? 'true' : 'false');
+    bar.setAttribute('aria-expanded', next ? 'true' : 'false');
+    body.hidden = !next;
+    if (next) scrollBottom();
+  });
+
+  wrap.appendChild(bar);
+  wrap.appendChild(body);
+  msgs.appendChild(wrap);
+
+  currentThoughtEl = wrap;
+  currentThoughtBodyEl = body;
+  currentThoughtCountEl = count;
+  thoughtCharCount = 0;
+  return wrap;
+}
+
+function setThoughtActive(active) {
+  if (currentThoughtEl) {
+    currentThoughtEl.setAttribute('data-active', active ? 'true' : 'false');
+  }
+}
+
+function bumpThoughtIdle() {
+  if (thoughtIdleTimer) clearTimeout(thoughtIdleTimer);
+  thoughtIdleTimer = setTimeout(function () {
+    thoughtIdleTimer = null;
+    setThoughtActive(false);
+  }, thoughtIdleMs);
+}
+
+function appendThoughtChunk(text) {
+  if (!text) return;
+  ensureThoughtEl();
+  if (currentThoughtBodyEl) {
+    currentThoughtBodyEl.appendChild(document.createTextNode(text));
+  }
+  thoughtCharCount += text.length;
+  if (currentThoughtCountEl) {
+    currentThoughtCountEl.textContent = String(thoughtCharCount);
+  }
+  setThoughtActive(true);
+  bumpThoughtIdle();
+}
+
+function resetThoughtStream() {
+  if (thoughtIdleTimer) { clearTimeout(thoughtIdleTimer); thoughtIdleTimer = null; }
+  currentThoughtEl = null;
+  currentThoughtBodyEl = null;
+  currentThoughtCountEl = null;
+  thoughtCharCount = 0;
 }
 
 // --- Tool icon mapping ---
@@ -258,6 +375,23 @@ window.__acpUpdate = function(update) {
       }
       break;
 
+    case 'agent_thought_chunk':
+      // Extended-thinking reasoning stream. Rendered in a collapsed-by-default
+      // container above the visible message, with a dither activity indicator
+      // that animates only while chunks are actively arriving.
+      var tiT = document.getElementById('typing-indicator');
+      if (tiT) tiT.remove();
+      collapseToolRow();
+      currentToolRow = null;
+      appendThoughtChunk((update.content && update.content.text) || '');
+      break;
+
+    case 'user_message_chunk':
+      // Echo of the user's own prompt over ACP — Hyperagent renders the user
+      // message locally in appendUser() at send time, so this event is
+      // intentionally ignored to avoid double-rendering.
+      break;
+
     case 'tool_call':
       var ti2 = document.getElementById('typing-indicator');
       if (ti2) ti2.remove();
@@ -273,6 +407,9 @@ window.__acpUpdate = function(update) {
       }
       currentMsgEl = null;
       currentMsgText = '';
+      // Thought row (if any) belonged to the just-finished reasoning phase;
+      // the next thought batch will open a new row below the tool row.
+      resetThoughtStream();
       // Ensure a tool-row container exists for this turn
       if (!currentToolRow) {
         currentToolRow = document.createElement('div');
@@ -334,6 +471,7 @@ window.__acpUpdate = function(update) {
         }
         currentMsgEl = null;
         currentMsgText = '';
+        resetThoughtStream();
         if (!currentToolRow) {
           currentToolRow = document.createElement('div');
           currentToolRow.className = 'tool-row';
@@ -398,6 +536,14 @@ window.__acpUpdate = function(update) {
         }
       }
       break;
+
+    default:
+      // Unknown / unhandled ACP sessionUpdate. Debug-log so future protocol
+      // additions become visible immediately rather than silently dropped.
+      if (update && update.sessionUpdate) {
+        console.debug('[ACP] unhandled sessionUpdate:', update.sessionUpdate, update);
+      }
+      break;
   }
 };
 
@@ -439,6 +585,7 @@ window.__acpTurnEnd = function(data) {
     currentMsgText = '';
     toolCards = {};
     currentToolRow = null;
+    resetThoughtStream();
     return;
   }
 
@@ -478,14 +625,21 @@ window.__acpTurnEnd = function(data) {
   currentMsgText = '';
   toolCards = {};
   currentToolRow = null;
+  resetThoughtStream();
 };
 
 window.__acpStateChange = function(data) {
+  var prevState = state;
   state = data.state;
   statusEl.textContent = state;
-  statusEl.className = 'topbar-status ' + state;
+  statusEl.className = 'ha-cluster-chip topbar-status ' + state;
   sendBtn.disabled = (state !== 'ready' && state !== 'prompting') || _loadingHistory;
   app.classList.toggle('prompting', state === 'prompting');
+
+  // Toast on successful reconnect (crashed → ready). WI-113 Phase 9.
+  if (state === 'ready' && prevState === 'crashed' && window.HvToast) {
+    window.HvToast.show({ variant: 'success', message: 'reconnected' });
+  }
 
   // Thinking indicator
   if (state === 'prompting') {
@@ -571,6 +725,7 @@ window.__acpNewSession = function() {
   toolCards = {};
   toolNameMap = {};
   currentToolRow = null;
+  resetThoughtStream();
   sessionTitle = '';
   firstPrompt = '';
   var skillStripEl = getSkillStrip();
@@ -602,6 +757,7 @@ window.__acpSessionLoaded = function(data) {
   currentMsgText = '';
   toolCards = {};
   currentToolRow = null;
+  resetThoughtStream();
   activeSkills = {};
   var skillStripReset = getSkillStrip();
   if (skillStripReset) skillStripReset.innerHTML = '';

@@ -6,6 +6,7 @@
   --bg:            #000000;
   --bg-surface:    #050505;
   --bg-card:       #0a0a0a;
+  --bg-card-hover: #111111;
   --bg-elevated:   #0e0e0e;
   --border:        #222222;
   --border-strong: #333333;
@@ -14,11 +15,11 @@
   --text-muted:    #909090;
   --text-dim:      #666666;
   --accent:        #00ff41;
-  --accent-dim:    #00cc33;
-  --accent-glow:   rgba(0, 255, 65, 0.06);
-  --accent-border: rgba(0, 255, 65, 0.15);
-  --warm:          #ffb000;
-  --comp:          #ff3333;
+  --accent-dim:     #00cc33;
+  --accent-glow:    rgba(0, 255, 65, 0.06);
+  --accent-border:  rgba(0, 255, 65, 0.15);
+  --warm:         #ffb000;
+  --comp:           #ff3333;
   --cool:          #00cccc;
 
   /* Semantic color roles — state communication, independent of palette aesthetic */
@@ -31,6 +32,106 @@
 
   --font:          'Departure Mono', 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Courier New', monospace;
   --ease:          cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-bounce:   cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ========================================================================
+     Aesthetic Refresh — Foundational Token Scales (WI-112 Phase 1)
+     Canonical for the hyper ecosystem. WI-113 (Hyperagent) adopts verbatim.
+     ======================================================================== */
+
+  /* Type scale — replaces ad-hoc rem font-sizes */
+  --fs-micro:   0.55rem;   /* badge/chip text */
+  --fs-caption: 0.65rem;   /* tooltip, tiny labels, panel headers */
+  --fs-label:   0.7rem;    /* button labels, small nav */
+  --fs-body:    0.85rem;   /* body copy in dense UI, confirm messages */
+  --fs-heading: 0.9rem;    /* h2 in section panel, prominent labels */
+  --fs-hero:    1rem;      /* h1 tagline; hero tagline uses flag style overrides */
+
+  /* Content type scale — markdown body headings (04-content.css) */
+  --fs-h1:      1.5rem;    /* markdown H1 */
+  --fs-h2:      1.15rem;   /* markdown H2 */
+  --fs-h3:      0.95rem;   /* markdown H3 */
+  --fs-h5-6:    0.8rem;    /* markdown H5 / H6 (compact uppercase) */
+
+  /* Spacing scale — replaces raw rem padding/margin/gap */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  /* Sub-scale — finer granularity for UI density tuning (WI-112 extension) */
+  --space-0-1:  0.1rem;    /* hairline gap */
+  --space-0-2:  0.2rem;    /* micro padding */
+  --space-0-3:  0.3rem;    /* fine padding */
+  --space-0-4:  0.4rem;    /* chip inline padding (also --chip-padding-x) */
+  --space-0-6:  0.6rem;    /* content inline padding, paragraph margin */
+  --space-0-8:  0.8rem;    /* compact-component inline padding */
+  --space-1-2:  1.2rem;    /* mid-step between --space-4 and --space-5 */
+  --space-1-25: 1.25rem;   /* section-panel default padding */
+
+  /* Motion tokens — canonical durations for transitions/animations.
+     Pinned to Hypervisor's actual usage distribution (WI-112 audit). */
+  --motion-instant: 0.05s;  /* active/pressed feedback (imperceptible tap) */
+  --motion-tick:    0.1s;   /* very-fast toggles */
+  --motion-fast:    0.15s;  /* chip/button micro-interactions (most-used) */
+  --motion-base:    0.2s;   /* default UI transitions (color, border, transform) */
+  --motion-medium:  0.25s;  /* dropdown expand/collapse */
+  --motion-slow:    0.3s;   /* page-level fade-in, larger reveals */
+
+  /* Border weights — replaces raw 1px/2px in border declarations */
+  --border-hair: 1px;      /* default frame */
+  --border-rail: 2px;      /* section accent stripe, focus emphasis */
+
+  /* Z-index scale */
+  --z-base:        0;
+  --z-topbar:      100;
+  --z-dropdown:    200;
+  --z-overlay:     300;
+  --z-modal:       400;
+  --z-toast:       500;
+  --z-screensaver: 600;
+  /* Hypervisor-local extensions above the canonical WI-111 scale — needed
+     for surfaces that don't exist in Hyperagent (splash, cursor floater,
+     legacy overlays). Not part of the ecosystem parity contract. */
+  --z-cursor:      550;    /* cursor companion box (persistent floater) */
+  --z-splash:      700;    /* boot splash — highest layer */
+
+  /* Shadow / elevation scale — replaces arbitrary rgba shadow strings */
+  --shadow-hover: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 1px var(--accent-border);
+  --shadow-panel: 0 6px 24px rgba(0, 0, 0, 0.4), 0 0 1px var(--accent-border);
+  --shadow-glow:  0 0 12px var(--accent-glow);
+
+  /* Chip primitives — silhouette for all chip variants */
+  --chip-height:         1.4;       /* line-height unit; sizes via padding */
+  --chip-padding-x:      0.4rem;
+  --chip-font-size:      var(--fs-micro);
+  --chip-font-weight:    700;
+  --chip-letter-spacing: 0.06em;
+
+  /* Row primitives — 3-column grid for pulse/list rows */
+  --row-grid:      auto 1fr auto;   /* chip / body / right meta */
+  --row-gap:       var(--space-3);
+  --row-padding-y: var(--space-2);
+
+  /* Section primitives — bordered content sections */
+  --section-rail-width: var(--border-rail);
+  --section-padding:    var(--space-5) var(--space-5) var(--space-2);
+  --section-gap:        var(--space-6);
+
+  /* Scrollbar tokens */
+  --scrollbar-width:        6px;
+  --scrollbar-track:        var(--bg);
+  --scrollbar-thumb:        var(--border-strong);
+  --scrollbar-thumb-hover:  var(--text-dim);
+
+  /* Selection tokens */
+  --selection-bg: var(--accent);
+  --selection-fg: var(--bg);
+
+  /* Progress bar gradient — extracted from hard-coded gradient (Phase 6).
+     3-stop: dim → accent → warm signals depth/heat as work advances. */
+  --progress-gradient: linear-gradient(90deg, var(--accent-dim) 0%, var(--accent) 60%, var(--warm) 100%);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -38,33 +139,33 @@ html, body { height: 100%; overflow: hidden; }
 
 /* ---- Custom cursors (accent-synced via --cursor-* vars set in JS) ---- */
 body, body * {
-  cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2300ff41' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z'/></svg>") 2 2, auto !important;
-  cursor: var(--cursor-default, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2300ff41' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z'/></svg>") 2 2, auto) !important;
+  cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2300ff41' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z'/></svg>") 2 2, auto !important;
+  cursor: var(--cursor-default, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2300ff41' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z'/></svg>") 2 2, auto) !important;
 }
 a, button, [role="button"], .session-item, .session-item-title, .session-delete-btn, .search-close, .input-icon-btn, #send-btn, #cancel-btn, .msg-copy, .welcome-chip, .tool-card {
   cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='%2300ff41' stroke='%2300ff41' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z'/></svg>") 2 2, pointer !important;
   cursor: var(--cursor-pointer, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='%2300ff41' stroke='%2300ff41' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z'/></svg>") 2 2, pointer) !important;
 }
 textarea, input[type="text"], input[type="search"] {
-  cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2300ff41' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M17 22h-1a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4h1'/><path d='M7 22h1a4 4 0 0 0 4-4V6a4 4 0 0 0-4-4H7'/></svg>") 10 10, text !important;
-  cursor: var(--cursor-text, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2300ff41' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M17 22h-1a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4h1'/><path d='M7 22h1a4 4 0 0 0 4-4V6a4 4 0 0 0-4-4H7'/></svg>") 10 10, text) !important;
+  cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2300ff41' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M17 22h-1a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4h1'/><path d='M7 22h1a4 4 0 0 0 4-4V6a4 4 0 0 0-4-4H7'/></svg>") 10 10, text !important;
+  cursor: var(--cursor-text, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2300ff41' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M17 22h-1a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4h1'/><path d='M7 22h1a4 4 0 0 0 4-4V6a4 4 0 0 0-4-4H7'/></svg>") 10 10, text) !important;
 }
-*:disabled { cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23666666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><path d='m4.9 4.9 14.2 14.2'/></svg>") 10 10, not-allowed !important; }
+*:disabled { cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23666666' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><path d='m4.9 4.9 14.2 14.2'/></svg>") 10 10, not-allowed !important; }
 
 /* ---- Cursor companion box ---- */
 .cursor-box {
   position: fixed;
   width: 8px;
   height: 8px;
-  border: 1px solid var(--cool);
+  border: var(--border-hair) solid var(--cool);
   background: transparent;
   pointer-events: none;
-  z-index: 9998;
+  z-index: var(--z-cursor);
   opacity: 0;
-  transition: opacity 0.15s var(--ease), background 0.1s var(--ease);
+  transition: opacity var(--motion-fast) var(--ease), background var(--motion-tick) var(--ease);
 }
 .cursor-box.visible { opacity: 1; }
-.cursor-box.blink { animation: cursorBoxBlink 0.3s ease-out 1; }
+.cursor-box.blink { animation: cursorBoxBlink var(--motion-slow) ease-out 1; }
 @keyframes cursorBoxBlink {
   0%, 30%  { background: var(--cool); }
   50%      { background: transparent; }
@@ -83,48 +184,51 @@ body {
 
 ::selection { background: var(--accent); color: var(--bg); }
 
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--border-strong); border: 1px solid var(--bg); }
-::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+/* ---- Focus ring (accessibility) — mirrors Hypervisor's canonical rule.
+   Every interactive element that receives keyboard focus gets an accent
+   outline. `:focus-visible` (not `:focus`) so mouse clicks don't show it. */
+:focus-visible {
+  outline: var(--border-hair) solid var(--accent);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar { width: var(--scrollbar-width); }
+::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border: var(--border-hair) solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
 @keyframes fadeSlideIn {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ---- Shortcuts overlay ---- */
+/* ---- Shortcuts overlay — composes with .hv-overlay .hv-panel-modal ----
+   Primitive provides fullscreen backdrop, blur, visible-fade.
+   Specific overrides: darker backdrop (0.85 vs 0.8) + tighter panel size. */
 .shortcuts-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9000;
   background: rgba(0,0,0,0.85);
-  display: none;
-  align-items: center;
-  justify-content: center;
+  /* z-index bumped from primitive default so shortcuts sits above other modals */
+  z-index: var(--z-modal);
 }
-.shortcuts-overlay.visible { display: flex; }
 .shortcuts-panel {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-strong);
-  padding: 1.2rem 1.5rem;
+  padding: var(--space-1-2) var(--space-5);
   max-width: 340px;
   width: 90%;
 }
 .shortcuts-title {
-  font-size: 0.65rem;
+  font-size: var(--fs-caption);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--accent);
-  margin-bottom: 0.8rem;
+  margin-bottom: var(--space-0-8);
 }
 .shortcuts-grid { display: flex; flex-direction: column; gap: 0.35rem; }
-.sc-row { display: flex; align-items: center; gap: 0.6rem; font-size: 0.65rem; color: var(--text); }
+.sc-row { display: flex; align-items: center; gap: var(--space-0-6); font-size: var(--fs-caption); color: var(--text); }
 .sc-row kbd {
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  padding: 0.15rem 0.4rem;
+  border: var(--border-hair) solid var(--border);
+  padding: 0.15rem var(--space-0-4);
   font: 0.6rem var(--font);
   color: var(--text-bright);
   min-width: 60px;
@@ -135,33 +239,34 @@ body {
 .search-bar {
   display: none;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.35rem 0.75rem;
-  border-bottom: 1px solid var(--border);
+  gap: var(--space-2);
+  padding: 0.35rem var(--space-3);
+  border-bottom: var(--border-hair) solid var(--border);
   background: var(--bg-surface);
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  z-index: 90;
+  /* Just below topbar tier so status-cluster stays reachable while searching */
+  z-index: calc(var(--z-topbar) - 10);
 }
 .search-bar.visible { display: flex; }
 .search-input {
   flex: 1;
   background: var(--bg);
-  border: 1px solid var(--border);
+  border: var(--border-hair) solid var(--border);
   color: var(--text-bright);
-  font: 0.7rem var(--font);
-  padding: 0.3rem 0.6rem;
+  font: var(--fs-label) var(--font);
+  padding: var(--space-0-3) var(--space-0-6);
   outline: none;
 }
 .search-input:focus { border-color: var(--accent); }
-.search-count { font-size: 0.55rem; color: var(--text-dim); white-space: nowrap; }
+.search-count { font-size: var(--fs-micro); color: var(--text-dim); white-space: nowrap; }
 .search-close {
   background: none;
   border: none;
   color: var(--text-dim);
-  font-size: 1rem;
+  font-size: var(--fs-hero);
   cursor: pointer;
   line-height: 1;
 }
@@ -172,12 +277,12 @@ body {
 
 /* ---- Responsive: narrow window ---- */
 @media (max-width: 600px) {
-  #messages { padding: 0.75rem; }
+  #messages { padding: var(--space-3); }
   .msg { max-width: 98%; font-size: 0.75rem; }
   .msg-user { max-width: 90%; }
-  .input-area { padding: 0.6rem 0.75rem; }
-  .topbar { padding: 0.3rem 0.5rem; }
-  .ctx-meter-bar { width: 32px; }
+  .input-area { padding: var(--space-0-6) var(--space-3); }
+  .topbar { padding: var(--space-0-3) var(--space-2); }
+  .ctx-meter-bar { width: 40px; }
   .sidebar.open { width: 180px; }
   .welcome-prompts { max-width: 90%; }
 }
@@ -186,5 +291,5 @@ body {
 @media (min-width: 1200px) {
   .msg { max-width: clamp(400px, 70%, 900px); }
   .msg-user { max-width: clamp(200px, 55%, 600px); }
-  #messages { padding: 1.5rem 3rem; }
+  #messages { padding: var(--space-5) 3rem; }
 }

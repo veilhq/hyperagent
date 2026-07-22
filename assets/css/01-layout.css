@@ -7,68 +7,144 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ---- Floating status cluster (top-right) ---- */
+/* ============================================================================
+   Floating status cluster (top-right)  — WI-113 rebuild
+   ============================================================================
+   Hyperagent-specific chrome group. Each item is uniformly 20px tall for a
+   consistent visual row. Uses a dedicated `.ha-cluster-chip` base class
+   (deliberately NOT `.hv-chip`) because the cluster's uniform-height
+   requirement conflicts with the primitive's content-sized model — the
+   cluster has no Hypervisor equivalent, so this local silhouette is fine.
+   Sizing pattern: fixed height + matching line-height for pixel-perfect
+   vertical glyph centering that survives Departure Mono's ascender metrics.
+   ============================================================================ */
+
 .status-cluster {
   position: fixed;
-  top: 0.5rem;
-  right: 0.75rem;
-  z-index: 100;
+  top: var(--space-2);
+  right: var(--space-3);
+  z-index: var(--z-topbar);
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--space-1);
+}
+.status-center {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.plan-credits {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
 }
 
-.topbar-status {
-  font-size: 0.6rem;
+/* Uniform chip silhouette for cluster items. Height + line-height match →
+   text is baseline-centered inside a 20px pill with no ascender clipping. */
+.ha-cluster-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 var(--space-2);
+  border: var(--border-hair) solid transparent;
+  font-family: var(--font);
+  font-size: var(--fs-micro);
   font-weight: 700;
-  letter-spacing: 0.03em;
-  color: var(--bg);
-  background: var(--text-dim);
-  padding: 0.25rem 0.5rem;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  line-height: 20px;
   white-space: nowrap;
-  line-height: 1;
-  transition: background 0.25s var(--ease);
+  box-sizing: border-box;
+  transition: background var(--motion-medium) var(--ease), border-color var(--motion-medium) var(--ease);
 }
-.topbar-status.ready { background: var(--accent); }
-.topbar-status.prompting { background: var(--warm); }
-.topbar-status.crashed { background: var(--comp); }
 
-.status-title {
-  font-size: 0.6rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
+/* ---- topbar-status — filled pill, state-colored ---- */
+.topbar-status {
   color: var(--bg);
   background: var(--text-dim);
-  padding: 0.25rem 0.5rem;
-  line-height: 1;
+  border-color: var(--text-dim);
+}
+.topbar-status.ready     { background: var(--accent); border-color: var(--accent); }
+.topbar-status.prompting { background: var(--warm);   border-color: var(--warm); }
+.topbar-status.crashed   { background: var(--comp);   border-color: var(--comp); }
+
+/* ---- session title — dim filled pill, truncates ---- */
+.status-title {
+  color: var(--bg);
+  background: var(--text-dim);
+  border-color: var(--text-dim);
   max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
   display: none;
 }
-.status-title.has-title { display: inline-block; }
+.status-title.has-title { display: inline-flex; }
 
-/* Context usage meter */
-.ctx-meter {
-  display: flex;
+/* ---- session metric counters (turns/credits/tokens) — outlined muted ---- */
+.status-center-item {
+  color: var(--text-muted);
+  background: transparent;
+  border-color: var(--border);
+}
+.status-center-item:empty { display: none; }
+
+/* ---- plan credits label — filled, state color reflects usage ---- */
+.plan-credits-label {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.plan-credits-label:empty                { display: none; }
+.plan-credits-label.warn                 { background: var(--warning); border-color: var(--warning); }
+.plan-credits-label.critical             { background: var(--error);   border-color: var(--error); }
+
+/* ---- refresh button — 20px square, matches cluster row ---- */
+.plan-credits-refresh {
+  display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border: var(--border-hair) solid var(--border);
+  color: var(--text-dim);
+  font-size: var(--fs-caption);
+  line-height: 1;
+  cursor: var(--cursor-pointer);
+  transition: color var(--motion-fast), border-color var(--motion-fast);
+}
+.plan-credits-refresh:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.plan-credits-refresh.spinning {
+  animation: spin 0.6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- context usage meter — 20px pill with label + tiny progress bar ---- */
+.ctx-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 20px;
+  padding: 0 var(--space-2);
   background: var(--bg-surface);
-  border: 1px solid var(--border);
-  padding: 0.1rem 0.35rem;
+  border: var(--border-hair) solid var(--border);
+  box-sizing: border-box;
 }
 .ctx-meter-label {
-  font-size: 0.5rem;
+  font-family: var(--font);
+  font-size: var(--fs-micro);
   font-weight: 700;
   letter-spacing: 0.05em;
+  line-height: 1;
   color: var(--text-dim);
   white-space: nowrap;
 }
 .ctx-meter-bar {
-  width: 36px;
-  height: 3px;
+  width: 40px;
+  height: 4px;
   background: var(--border);
   position: relative;
   overflow: hidden;
@@ -80,78 +156,26 @@
   height: 100%;
   width: 0%;
   background: var(--accent);
-  transition: width 0.4s var(--ease), background 0.3s var(--ease);
+  transition: width 0.4s var(--ease), background var(--motion-slow) var(--ease);
 }
-.ctx-meter-fill.warn { background: var(--warm); }
+.ctx-meter-fill.warn     { background: var(--warm); }
 .ctx-meter-fill.critical { background: var(--comp); }
 
 /* Error bar */
 .error-bar {
   max-height: 0;
   overflow: hidden;
-  padding: 0 1.25rem;
+  padding: 0 var(--space-1-25);
   background: var(--comp);
   color: var(--bg);
   font-size: 0.68rem;
   font-weight: 700;
   opacity: 0;
-  transition: max-height 0.25s var(--ease), opacity 0.25s var(--ease), padding 0.25s var(--ease);
+  transition: max-height var(--motion-medium) var(--ease), opacity var(--motion-medium) var(--ease), padding var(--motion-medium) var(--ease);
 }
 .error-bar.visible {
   max-height: 3rem;
   opacity: 1;
-  padding: 0.5rem 1.25rem;
+  padding: var(--space-2) var(--space-1-25);
 }
 .error-bar a { color: var(--bg); text-decoration: underline; }
-
-
-/* Status center */
-.status-center {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-.status-center-item,
-.plan-credits-label {
-  font-size: 0.6rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  color: var(--bg);
-  padding: 0.25rem 0.5rem;
-  white-space: nowrap;
-  line-height: 1;
-}
-.status-center-item { background: var(--comp); }
-.status-center-item:empty { display: none; }
-
-/* Plan credits widget */
-.plan-credits {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-.plan-credits-label { background: var(--accent); }
-.plan-credits-label:empty { display: none; }
-.plan-credits-label.warn { background: var(--warning); }
-.plan-credits-label.critical { background: var(--error); }
-.plan-credits-refresh {
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  font-size: 0.7rem;
-  width: 18px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: var(--cursor-pointer);
-  transition: color 0.15s, border-color 0.15s;
-}
-.plan-credits-refresh:hover {
-  color: var(--accent);
-  border-color: var(--accent-border);
-}
-.plan-credits-refresh.spinning {
-  animation: spin 0.6s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }

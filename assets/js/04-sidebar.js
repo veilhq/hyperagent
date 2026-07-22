@@ -72,7 +72,12 @@ function startRename(sessionId, el) {
     titleEl.classList.remove('renaming');
     if (input.parentNode) input.parentNode.removeChild(input);
     if (newTitle !== currentTitle) {
-      pywebview.api.rename_session(sessionId, newTitle);
+      var p = pywebview.api.rename_session(sessionId, newTitle);
+      if (p && typeof p.catch === 'function') {
+        p.catch(function () {
+          if (window.HvToast) window.HvToast.show({ variant: 'error', message: 'rename failed — session unchanged' });
+        });
+      }
     }
   }
 
@@ -113,7 +118,7 @@ function refreshSessions() {
       var el = document.createElement('div');
       el.className = 'session-item stagger-in';
       el.setAttribute('data-session-id', s.id);
-      var lockBadge = s.locked ? '<span class="session-lock">IN USE</span>' : '';
+      var lockBadge = s.locked ? renderChip('outlined-muted', 'IN USE', 'session-lock') : '';
       el.innerHTML = '<div class="session-item-row">'
         + '<div class="session-item-title">' + escapeHtml(s.title) + '</div>'
         + '<button class="session-delete-btn" title="Delete">&times;</button>'
@@ -181,8 +186,17 @@ function _showLoadingSplash() {
 }
 
 function deleteSession(id, el) {
+  var title = el ? (el.querySelector('.session-item-title') || {}).textContent : null;
   pywebview.api.delete_session(id).then(function() {
     if (el && el.parentNode) el.parentNode.removeChild(el);
+    if (window.HvToast) {
+      window.HvToast.show({
+        variant: 'success',
+        message: 'session deleted' + (title ? ': ' + title : '')
+      });
+    }
+  }).catch(function() {
+    if (window.HvToast) window.HvToast.show({ variant: 'error', message: 'session delete failed' });
   });
 }
 

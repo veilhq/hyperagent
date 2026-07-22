@@ -13,11 +13,11 @@
   z-index: 1;
   width: 0;
   overflow: hidden;
-  border-right: 1px solid var(--border);
+  border-right: var(--border-hair) solid var(--border);
   background: var(--bg-surface);
   display: flex;
   flex-direction: column;
-  transition: width 0.2s var(--ease);
+  transition: width var(--motion-base) var(--ease);
 }
 .sidebar.open { width: 240px; }
 
@@ -26,7 +26,7 @@
 
 .sidebar-tabs-section {
   flex-shrink: 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--border-hair) solid var(--border);
 }
 
 .sidebar-sessions-section {
@@ -39,7 +39,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.5rem 0.8rem;
+  padding: var(--space-2) var(--space-0-8);
 }
 
 .sidebar-section-label {
@@ -51,20 +51,20 @@
 }
 
 .sidebar-tab-list {
-  padding: 0 0 0.4rem;
+  padding: 0 0 var(--space-0-4);
 }
 
 .sidebar-tab-item {
   position: relative;
   display: flex;
   align-items: center;
-  padding: 0.4rem 0.8rem;
-  gap: 0.4rem;
+  padding: var(--space-0-4) var(--space-0-8);
+  gap: var(--space-0-4);
   cursor: pointer;
-  border-left: 2px solid transparent;
-  transition: background 0.15s var(--ease), border-color 0.15s var(--ease);
+  border-left: var(--border-rail) solid transparent;
+  transition: background var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease);
 }
-.sidebar-tab-item:hover { background: var(--bg-elevated); }
+.sidebar-tab-item:hover { background: var(--bg-card-hover); }
 .sidebar-tab-item.active {
   border-left-color: var(--accent);
   background: var(--accent-glow);
@@ -126,13 +126,13 @@
   background: none;
   border: none;
   color: var(--text-dim);
-  font-size: 0.8rem;
+  font-size: var(--fs-h5-6);
   cursor: pointer;
   padding: 0 0.15rem;
   line-height: 1;
   opacity: 0;
   flex-shrink: 0;
-  transition: opacity 0.15s var(--ease), color 0.15s var(--ease);
+  transition: opacity var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
 }
 .sidebar-tab-item:hover .sidebar-tab-item-close { opacity: 1; }
 .sidebar-tab-item-close:hover { color: var(--comp); }
@@ -144,8 +144,8 @@
   font-weight: 700;
   color: var(--text-bright);
   background: var(--bg);
-  border: 1px solid var(--accent);
-  padding: 0.1rem 0.3rem;
+  border: var(--border-hair) solid var(--accent);
+  padding: var(--space-0-1) var(--space-0-3);
   flex: 1;
   min-width: 0;
   outline: none;
@@ -174,14 +174,14 @@
 
 /* --- Session history items (unchanged structure) --- */
 .session-list {
-  padding: 0.4rem 0;
+  padding: var(--space-0-4) 0;
 }
 
 .session-item {
-  padding: 0.5rem 0.8rem;
+  padding: var(--space-2) var(--space-0-8);
   cursor: pointer;
-  border-left: 2px solid transparent;
-  transition: background 0.15s var(--ease), border-color 0.15s var(--ease), opacity 0.2s var(--ease), transform 0.2s var(--ease);
+  border-left: var(--border-rail) solid transparent;
+  transition: background var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease), opacity var(--motion-base) var(--ease), transform var(--motion-base) var(--ease);
 }
 .session-item.stagger-in {
   opacity: 0;
@@ -191,14 +191,14 @@
   opacity: 1;
   transform: translateX(0);
 }
-.session-item:hover { background: var(--bg-elevated); }
+.session-item:hover { background: var(--bg-card-hover); }
 .session-item.active {
   border-left-color: var(--accent);
   background: var(--accent-glow);
 }
 
 .session-item-title {
-  font-size: 0.7rem;
+  font-size: var(--fs-label);
   font-weight: 700;
   color: var(--text);
   white-space: nowrap;
@@ -211,19 +211,19 @@
 .session-item-row {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: var(--space-0-3);
 }
 
 .session-delete-btn {
   background: none;
   border: none;
   color: var(--text-dim);
-  font-size: 0.9rem;
+  font-size: var(--fs-heading);
   cursor: pointer;
-  padding: 0 0.2rem;
+  padding: 0 var(--space-0-2);
   line-height: 1;
   opacity: 0;
-  transition: opacity 0.15s var(--ease), color 0.15s var(--ease);
+  transition: opacity var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
 }
 .session-item:hover .session-delete-btn { opacity: 1; }
 .session-delete-btn:hover { color: var(--comp); }
@@ -237,33 +237,32 @@
 
 
 .session-lock {
-  font-size: 0.5rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  /* Composes with .hv-chip .hv-chip-outlined-muted (via renderChip helper).
+     Specific: warm color to signal attention/lock state + slight left margin. */
   color: var(--warm);
-  margin-left: 0.4rem;
+  border-color: var(--warm);
+  margin-left: var(--space-0-4);
 }
 
 /* Context menu */
 .session-ctx-menu {
   position: fixed;
-  z-index: 9000;
+  z-index: var(--z-dropdown);
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  padding: 0.3rem 0;
+  border: var(--border-hair) solid var(--border);
+  padding: var(--space-0-3) 0;
   min-width: 120px;
   display: none;
 }
 .session-ctx-menu.visible { display: block; }
 .session-ctx-menu-item {
-  padding: 0.4rem 0.8rem;
-  font-size: 0.65rem;
+  padding: var(--space-0-4) var(--space-0-8);
+  font-size: var(--fs-caption);
   color: var(--text);
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--space-0-4);
 }
 .session-ctx-menu-item:hover {
   background: var(--accent-glow);
@@ -276,48 +275,25 @@
 .session-ctx-menu-sep {
   height: 1px;
   background: var(--border);
-  margin: 0.25rem 0;
+  margin: var(--space-1) 0;
 }
 
 /* Inline rename input */
 .session-item-title.renaming { display: none; }
 .session-rename-input {
   font-family: var(--font);
-  font-size: 0.7rem;
+  font-size: var(--fs-label);
   font-weight: 700;
   color: var(--text-bright);
   background: var(--bg);
-  border: 1px solid var(--accent);
-  padding: 0.1rem 0.3rem;
+  border: var(--border-hair) solid var(--accent);
+  padding: var(--space-0-1) var(--space-0-3);
   flex: 1;
   min-width: 0;
   outline: none;
 }
 
-/* --- Toast notifications --- */
-.ha-toast {
-  position: fixed;
-  bottom: 60px;
-  left: 50%;
-  transform: translateX(-50%) translateY(10px);
-  background: var(--bg-elevated);
-  border: 1px solid var(--accent-border);
-  padding: 0.4rem 0.8rem;
-  font-size: 0.6rem;
-  font-family: var(--font);
-  color: var(--text-bright);
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s var(--ease), transform 0.2s var(--ease);
-  z-index: 8000;
-}
-.ha-toast.visible {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-  pointer-events: auto;
-}
-.ha-toast-accent {
-  color: var(--accent);
-  font-weight: 700;
-}
+/* --- Toast notifications: legacy .ha-toast removed (WI-113 Phase 9). ---
+   Toasts now use the canonical .hv-toast primitive rendered by
+   window.HvToast.show() — see .hyperagent/assets/css/10-toast.css and the
+   initToasts IIFE in 00-core.js. */

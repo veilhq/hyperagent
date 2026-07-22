@@ -4,32 +4,32 @@
 .skill-strip {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: var(--space-0-3);
 }
 
 .skill-strip:not(:empty) {
-  padding-right: 0.3rem;
-  border-right: 1px solid var(--border);
-  margin-right: 0.1rem;
+  padding-right: var(--space-0-3);
+  border-right: var(--border-hair) solid var(--border);
+  margin-right: var(--space-0-1);
 }
 
 .skill-badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.12rem 0.4rem;
+  gap: var(--space-1);
+  padding: 0.12rem var(--space-0-4);
   font-size: 0.5rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   white-space: nowrap;
   color: var(--cool);
-  border: 1px solid var(--cool);
-  animation: skillBadgeIn 0.25s var(--ease);
+  border: var(--border-hair) solid var(--cool);
+  animation: skillBadgeIn var(--motion-medium) var(--ease);
   box-shadow: 0 0 4px var(--cool), inset 0 0 4px rgba(0, 204, 204, 0.05);
 }
 .skill-badge-icon {
-  font-size: 0.55rem;
+  font-size: var(--fs-micro);
   line-height: 1;
   animation: skillIconPulse 2.5s ease-in-out infinite;
 }
@@ -49,12 +49,12 @@
   align-self: flex-start;
   display: flex;
   align-items: baseline;
-  gap: 0.4rem;
-  padding: 0.3rem 0.6rem;
-  margin: 0.2rem 0;
+  gap: var(--space-0-4);
+  padding: var(--space-0-3) var(--space-0-6);
+  margin: var(--space-0-2) 0;
   background: var(--bg-surface);
   max-width: clamp(300px, 85%, 600px);
-  animation: skillCardIn 0.3s var(--ease);
+  animation: skillCardIn var(--motion-slow) var(--ease);
   box-shadow: 0 0 6px rgba(0, 204, 204, 0.08);
 }
 .skill-card-name {
@@ -67,7 +67,7 @@
   animation: skillTextGlow 2s ease-in-out 1;
 }
 .skill-card-desc {
-  font-size: 0.55rem;
+  font-size: var(--fs-micro);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;

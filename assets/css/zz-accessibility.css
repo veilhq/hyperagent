@@ -1,0 +1,55 @@
+/* ===== Hyperagent: Accessibility parity (WI-113 Phase 8) ===== */
+
+/* ---- Respect OS-level `prefers-reduced-motion` ----
+   Nuclear override — all animations and transitions collapse to near-zero
+   so keyframe cycles (emote-glow, splashBlink, toolPulse, streaming-cursor,
+   welcome noise field frame loop, message appear, tool card flash/shake,
+   ha-splash fade, session-item stagger-in) stop cold under the OS setting.
+   Mirrors Hypervisor's canonical rule. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---- Class-based reduced-motion toggle ----
+   Enables app-side "reduce motion" without depending on OS setting. No UI
+   toggles this in Hyperagent yet, but the hook is here for a future setting. */
+html.a11y-reduce-motion *,
+html.a11y-reduce-motion *::before,
+html.a11y-reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* ---- High-contrast palette ----
+   Bumps text/border colors toward WCAG contrast targets. Respects OS
+   `prefers-contrast: more` and the class-based toggle in parallel. Chip
+   variants (filled, outlined-accent, outlined-muted) remain distinguishable
+   because their differences are structural (fill vs border+bg) rather than
+   only chromatic. */
+@media (prefers-contrast: more) {
+  :root {
+    --text-dim: #a0a0a0;
+    --text-muted: #cccccc;
+    --text: #e0e0e0;
+    --text-bright: #ffffff;
+    --border: #444444;
+    --border-strong: #666666;
+  }
+}
+html.a11y-high-contrast {
+  --text-dim: #a0a0a0;
+  --text-muted: #cccccc;
+  --text: #e0e0e0;
+  --text-bright: #ffffff;
+  --border: #444444;
+  --border-strong: #666666;
+}

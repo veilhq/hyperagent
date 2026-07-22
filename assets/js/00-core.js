@@ -3,6 +3,188 @@
 "use strict";
 
 const $ = (s) => document.querySelector(s);
+
+/* ---- Chip render helper (WI-113 Phase 3) --------------------------------
+   Mirrors `render_chip()` from Hypervisor's `site_utils/chips.py` — same
+   variant vocabulary, same signature.
+
+   Semantic vocabulary (WI-111 Phase 4):
+   - 'filled'          → live/current (active status, ID chips)
+   - 'outlined-accent' → structured/notable (project, "NEW" markers)
+   - 'outlined-muted'  → historical/quiet (idle status, tags, badges like "IN USE")
+
+   Usage:
+     renderChip('filled', 'WI-42')
+     renderChip('outlined-muted', 'IN USE', 'session-lock')
+     renderChip('filled', 'ready', 'topbar-status', {state: 'ready'})
+*/
+const CHIP_VARIANTS = ['filled', 'outlined-accent', 'outlined-muted'];
+function renderChip(variant, text, extraClass, dataAttrs) {
+  if (CHIP_VARIANTS.indexOf(variant) === -1) {
+    throw new Error("Unknown chip variant '" + variant + "'; expected one of " + CHIP_VARIANTS.join(', '));
+  }
+  var classes = 'hv-chip hv-chip-' + variant;
+  if (extraClass) classes += ' ' + String(extraClass).trim();
+  var attrs = '';
+  if (dataAttrs) {
+    for (var k in dataAttrs) {
+      if (Object.prototype.hasOwnProperty.call(dataAttrs, k)) {
+        attrs += ' data-' + k + '="' + dataAttrs[k] + '"';
+      }
+    }
+  }
+  return '<span class="' + classes + '"' + attrs + '>' + text + '</span>';
+}
+window.renderChip = renderChip;  // Expose for cross-module use inside IIFE
+
+/* ---- Toast notifications (WI-115 variant-aware primitive) ----------------
+   Shared cross-app IIFE — behavior-identical to Hypervisor's
+   `core/00-core.js` (indentation differs because Hyperagent's file is not
+   wrapped in an outer IIFE). See work/to-do/hyper-ecosystem-toast-rework.md.
+
+     HvToast.show("plain message")                    → info variant, 3s
+     HvToast.show({ variant, title, message, icon,
+                    duration, action, dedupeKey })    → full options
+
+     variant:   'success' | 'info' | 'warn' | 'error'   (default: 'info')
+     duration:  ms number | 'sticky'                    (variant defaults apply)
+     action:    { label: string, onClick: () => void }  (adds inline button)
+     dedupeKey: string — replaces prior toast with same key
+*/
+(function initToasts() {
+  if (window.HvToast) return; // idempotent
+
+  var container = document.createElement('div');
+  container.className = 'hv-toast-container';
+  container.setAttribute('aria-live', 'polite');
+  container.setAttribute('aria-atomic', 'false');
+  function attach() { document.body.appendChild(container); }
+  if (document.body) attach();
+  else document.addEventListener('DOMContentLoaded', attach);
+
+  var VARIANTS = {
+    success: { icon: 'check-circle',   duration: 3000,     assertive: false },
+    info:    { icon: 'info',           duration: 3000,     assertive: false },
+    warn:    { icon: 'alert-triangle', duration: 5000,     assertive: true  },
+    error:   { icon: 'circle-x',       duration: 'sticky', assertive: true  }
+  };
+  var MAX_VISIBLE = 5;
+  var EXIT_MS = 300;
+  var visible = [];
+  var dedupeMap = {};
+
+  function normalize(input) {
+    if (typeof input === 'string') return { variant: 'info', message: input };
+    if (!input || typeof input !== 'object') return { variant: 'info', message: String(input) };
+    return input;
+  }
+
+  function dismiss(toast) {
+    if (!toast || toast.__dismissed) return;
+    toast.__dismissed = true;
+    if (toast.__timer) clearTimeout(toast.__timer);
+    toast.classList.remove('hv-toast-visible');
+    toast.classList.add('hv-toast-exit');
+    var idx = visible.indexOf(toast);
+    if (idx >= 0) visible.splice(idx, 1);
+    if (toast.__dedupeKey && dedupeMap[toast.__dedupeKey] === toast) {
+      delete dedupeMap[toast.__dedupeKey];
+    }
+    setTimeout(function () {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    }, EXIT_MS);
+  }
+
+  function show(input) {
+    var opts = normalize(input);
+    var variant = VARIANTS[opts.variant] ? opts.variant : 'info';
+    var defaults = VARIANTS[variant];
+    var icon = opts.icon || defaults.icon;
+    var duration = opts.duration != null ? opts.duration : defaults.duration;
+    var sticky = duration === 'sticky';
+    var message = opts.message == null ? '' : String(opts.message);
+    var title = opts.title ? String(opts.title) : '';
+    var action = opts.action && opts.action.label && typeof opts.action.onClick === 'function' ? opts.action : null;
+    var dedupeKey = opts.dedupeKey || null;
+
+    if (dedupeKey && dedupeMap[dedupeKey]) dismiss(dedupeMap[dedupeKey]);
+
+    var toast = document.createElement('div');
+    toast.className = 'hv-toast hv-toast-' + variant;
+    if (defaults.assertive) toast.setAttribute('role', 'alert');
+    toast.__dedupeKey = dedupeKey;
+
+    var iconEl = document.createElement('i');
+    iconEl.className = 'hv-toast-icon';
+    iconEl.setAttribute('data-lucide', icon);
+    toast.appendChild(iconEl);
+
+    var body = document.createElement('div');
+    body.className = 'hv-toast-body';
+    if (title) {
+      var titleEl = document.createElement('div');
+      titleEl.className = 'hv-toast-title';
+      titleEl.textContent = title;
+      body.appendChild(titleEl);
+    }
+    var msgEl = document.createElement('div');
+    msgEl.className = 'hv-toast-message';
+    msgEl.textContent = message;
+    body.appendChild(msgEl);
+    if (action) {
+      var actionBtn = document.createElement('button');
+      actionBtn.className = 'hv-button hv-button-ghost hv-toast-action';
+      actionBtn.type = 'button';
+      actionBtn.textContent = action.label;
+      actionBtn.addEventListener('click', function () {
+        try { action.onClick(); } catch (e) {}
+        dismiss(toast);
+      });
+      body.appendChild(actionBtn);
+    }
+    toast.appendChild(body);
+
+    if (sticky || action) {
+      var closeBtn = document.createElement('button');
+      closeBtn.className = 'hv-toast-close';
+      closeBtn.type = 'button';
+      closeBtn.setAttribute('aria-label', 'Dismiss notification');
+      closeBtn.textContent = '\u00d7';
+      closeBtn.addEventListener('click', function () { dismiss(toast); });
+      toast.appendChild(closeBtn);
+    }
+
+    container.appendChild(toast);
+    visible.push(toast);
+    if (dedupeKey) dedupeMap[dedupeKey] = toast;
+
+    while (visible.length > MAX_VISIBLE) dismiss(visible[0]);
+
+    if (window.lucide && typeof window.lucide.createIcons === 'function') {
+      try { window.lucide.createIcons(); } catch (e) {}
+    }
+
+    requestAnimationFrame(function () { toast.classList.add('hv-toast-visible'); });
+
+    if (!sticky) {
+      toast.__timer = setTimeout(function () { dismiss(toast); }, duration);
+    }
+
+    return { dismiss: function () { dismiss(toast); } };
+  }
+
+  try {
+    var pending = sessionStorage.getItem('__hv_notify');
+    if (pending) {
+      sessionStorage.removeItem('__hv_notify');
+      show(pending);
+    }
+  } catch (e) {}
+
+  window.HvToast = { show: show, dismiss: dismiss };
+  window.__hypervisorToast = show;  // legacy alias — accepts string or options
+})();
+
 var msgs = $('#messages');
 const input = $('#input');
 const sendBtn = $('#send-btn');
@@ -74,7 +256,7 @@ function refreshPlanCredits() {
     if (!data || !data.ok) { if (label) label.textContent = '?'; return; }
     if (label) {
       label.textContent = data.used + ' / ' + data.total + ' cr';
-      label.className = 'plan-credits-label' + (data.used_pct >= 90 ? ' critical' : data.used_pct >= 70 ? ' warn' : '');
+      label.className = 'ha-cluster-chip plan-credits-label' + (data.used_pct >= 90 ? ' critical' : data.used_pct >= 70 ? ' warn' : '');
       label.title = data.detail || '';
     }
   }).catch(function() {
@@ -114,9 +296,9 @@ function applyAccent(palette) {
   }
   // Dynamic cursors synced to accent
   var ec = encodeURIComponent(hex);
-  root.setProperty('--cursor-default', "url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='" + ec + "' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z'/></svg>\") 2 2, auto");
+  root.setProperty('--cursor-default', "url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='" + ec + "' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z'/></svg>\") 2 2, auto");
   root.setProperty('--cursor-pointer', "url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='" + ec + "' stroke='" + ec + "' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z'/></svg>\") 2 2, pointer");
-  root.setProperty('--cursor-text', "url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='" + ec + "' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M17 22h-1a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4h1'/><path d='M7 22h1a4 4 0 0 0 4-4V6a4 4 0 0 0-4-4H7'/></svg>\") 10 10, text");
+  root.setProperty('--cursor-text', "url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='" + ec + "' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M17 22h-1a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4h1'/><path d='M7 22h1a4 4 0 0 0 4-4V6a4 4 0 0 0-4-4H7'/></svg>\") 10 10, text");
 }
 window.applyAccent = applyAccent;
 if (window.pywebview && window.pywebview.api) {

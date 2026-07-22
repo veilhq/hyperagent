@@ -263,7 +263,7 @@ function switchTab(tabId) {
   var tabState = tabs[tabId].state || 'ready';
   state = tabState;
   statusEl.textContent = tabState;
-  statusEl.className = 'topbar-status ' + tabState;
+  statusEl.className = 'ha-cluster-chip topbar-status ' + tabState;
   sendBtn.disabled = (tabState !== 'ready' && tabState !== 'prompting') || _loadingHistory;
   app.classList.toggle('prompting', tabState === 'prompting');
 
@@ -333,10 +333,16 @@ function _escTabHtml(str) {
 
 function _showWelcomeInTab(container) {
   var w = document.createElement('div');
-  w.className = 'welcome';
+  w.className = 'welcome hv-noise-field';
   w.innerHTML = '<svg class="welcome-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108.28 108.28" fill="currentColor"><path d="M107.94,71.76l-35.71-35.71-.04-.04h-34.8c-.63,0-1.14-.51-1.14-1.14V1.14c0-.63-.51-1.14-1.14-1.14H1.14C.51,0,0,.51,0,1.14v34.58c0,.3.12.59.33.8l33.56,33.56c.72.72.21,1.94-.8,1.94H1.14c-.63,0-1.14.51-1.14,1.14v33.98c0,.63.51,1.14,1.14,1.14h33.98c.63,0,1.14-.51,1.14-1.14v-33.73c0-.63.51-1.14,1.14-1.14h33.48c.63,0,1.14.51,1.14,1.14v33.73c0,.63.51,1.14,1.14,1.14h33.98c.63,0,1.14-.51,1.14-1.14v-34.58c0-.3-.12-.59-.33-.8Z"/><path d="M72.67,18.01l7.88,3.11c2.6,1.03,4.66,3.08,5.68,5.68l3.11,7.87c.18.45.82.45,1,0l3.11-7.87c1.03-2.6,3.08-4.66,5.68-5.68l7.88-3.11c.45-.18.45-.82,0-1l-7.88-3.11c-2.6-1.03-4.66-3.08-5.68-5.68l-3.11-7.87c-.18-.45-.82-.45-1,0l-3.11,7.87c-1.03,2.6-3.08,4.66-5.68,5.68l-7.88,3.11c-.45.18-.45.82,0,1Z"/></svg>'
-    + '<span class="welcome-text">' + welcomeGreetings[Math.floor(Math.random() * welcomeGreetings.length)] + '</span>'
+    + '<span class="welcome-text"></span>'
     + '<div class="welcome-prompts"></div>';
+  var greetingEl = w.querySelector('.welcome-text');
+  if (window.HvGreeting) {
+    window.HvGreeting.applyTo(greetingEl);
+  } else {
+    greetingEl.textContent = 'ready when you are.';
+  }
   var chips = w.querySelector('.welcome-prompts');
   welcomePrompts.forEach(function(p) {
     var chip = document.createElement('button');
@@ -404,24 +410,14 @@ function _markDone(data) {
   }
 }
 
-// Helper: show a transient toast notification
-var _toastEl = null;
-var _toastTimer = null;
+// Helper: show a transient toast notification.
+// Delegates to window.HvToast (canonical ecosystem toast from 00-core.js
+// initToasts, WI-113 Phase 9). Kept as _showToast for internal callers in
+// this file; new call sites should prefer window.HvToast.show(msg) directly.
 function _showToast(message) {
-  if (!_toastEl) {
-    _toastEl = document.createElement('div');
-    _toastEl.className = 'ha-toast';
-    document.body.appendChild(_toastEl);
+  if (window.HvToast) {
+    window.HvToast.show(message);
   }
-  _toastEl.innerHTML = '<span class="ha-toast-accent">&#9670;</span> ' + _escTabHtml(message);
-  // Reset animation
-  _toastEl.classList.remove('visible');
-  void _toastEl.offsetWidth;
-  _toastEl.classList.add('visible');
-  if (_toastTimer) clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(function() {
-    _toastEl.classList.remove('visible');
-  }, 3000);
 }
 
 // Wrap __acpUpdate: route to correct tab's messages container
@@ -458,7 +454,7 @@ window.__acpTurnEnd = function(data) {
   } else if (tabId && tabs[tabId]) {
     // Background tab execution complete — mark as done and show toast
     _markDone(data);
-    _showToast('Execution complete: ' + (tabs[tabId].title || 'Tab'));
+    _showToast({ variant: 'success', message: 'Execution complete: ' + (tabs[tabId].title || 'Tab') });
     _withTabContext(tabId, function() {
       if (_origAcpTurnEnd) _origAcpTurnEnd(data);
     });
