@@ -208,11 +208,11 @@ function _addTabToUI(tabId, title, sessionId) {
   var mainLayout = document.querySelector('.main-layout');
   mainLayout.appendChild(msgsContainer);
 
-  // Create sidebar tab item
+  // Create sidebar tab item — 3-column grid: [chip] [title] [close]
   var tabEl = document.createElement('div');
   tabEl.className = 'sidebar-tab-item';
   tabEl.setAttribute('data-tab-id', tabId);
-  tabEl.innerHTML = '<span class="sidebar-tab-item-indicator"></span>'
+  tabEl.innerHTML = '<span class="sidebar-tab-dither"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>'
     + '<span class="sidebar-tab-item-title">' + _escTabHtml(title || 'New Chat') + '</span>'
     + '<button class="sidebar-tab-item-close" title="Close tab">&times;</button>';
 
@@ -372,6 +372,13 @@ function _showWelcomeInTab(container) {
     chips.appendChild(chip);
   });
   container.appendChild(w);
+  // Mount the welcome noise field (WI-113 Phase 6). Deferred to next paint so
+  // layout is complete before HvNoiseField reads container dimensions, and
+  // pass the tab container so startWelcomeNoise finds the .welcome inside it
+  // (default host is #messages, which is empty in tab mode).
+  requestAnimationFrame(function() {
+    if (typeof startWelcomeNoise === 'function') startWelcomeNoise(container);
+  });
 }
 
 // --- Get open session IDs (for sidebar filtering) ---
@@ -423,6 +430,9 @@ function _markDone(data) {
   if (data._tabId === activeTabId) return;
   var tab = tabs[data._tabId];
   if (tab) {
+    // Don't clobber a failure. __acpError fires before __acpTurnEnd on a
+    // failed prompt, so without this guard the success state would win.
+    if (tab.el.classList.contains('errored')) return;
     tab.unread = true;
     tab.el.classList.remove('unread');
     tab.el.classList.add('done');
@@ -495,6 +505,11 @@ window.__acpStateChange = function(data) {
     // Update indicator classes
     tabs[tabId].el.classList.toggle('prompting', data.state === 'prompting');
     tabs[tabId].el.classList.toggle('crashed', data.state === 'crashed');
+    // A new prompt supersedes the previous run's failure marker.
+    if (data.state === 'prompting') {
+      tabs[tabId].el.classList.remove('errored');
+      tabs[tabId].el.classList.remove('done');
+    }
   }
 
   // Only update global UI (status bar, thinking indicator) for active tab
@@ -589,6 +604,19 @@ window.__acpError = function(data) {
   // so background-tab failures don't sit unseen under a different tab.
   if (_origAcpError) _origAcpError(data);
 
+  // Mark the tab as errored so the sidebar dither shows the failure glyph.
+  // Without this, __acpTurnEnd's _markDone() would tag a failed prompt with
+  // `done` and render the success pattern. `crashed` is reserved for
+  // subprocess death (state machine), so prompt-level failures need their
+  // own state. Cleared when the tab starts a new prompt.
+  var errTabId = data && data._tabId;
+  if (errTabId && tabs[errTabId]) {
+    tabs[errTabId].el.classList.remove('prompting');
+    tabs[errTabId].el.classList.remove('done');
+    tabs[errTabId].el.classList.add('errored');
+    _updateTabBadge();
+  }
+
   if (window.HvToast && data && data.error) {
     var tabId = data._tabId;
     var prefix = '';
@@ -668,11 +696,11 @@ function _registerInitialTab(tabId) {
   // The original #messages div becomes this tab's container
   var originalMsgs = document.getElementById('messages');
 
-  // Create sidebar tab item for initial tab
+  // Create sidebar tab item for initial tab — 3-column grid: [chip] [title] [close]
   var tabEl = document.createElement('div');
   tabEl.className = 'sidebar-tab-item active';
   tabEl.setAttribute('data-tab-id', tabId);
-  tabEl.innerHTML = '<span class="sidebar-tab-item-indicator"></span>'
+  tabEl.innerHTML = '<span class="sidebar-tab-dither"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>'
     + '<span class="sidebar-tab-item-title">New Chat</span>'
     + '<button class="sidebar-tab-item-close" title="Close tab">&times;</button>';
 

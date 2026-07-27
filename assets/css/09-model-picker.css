@@ -1,0 +1,249 @@
+/* =========================================================================
+   Model Picker — topbar dropdown for switching the active kiro-cli model.
+   Composes on .ha-cluster-chip and .hv-dropdown primitives.
+   ========================================================================= */
+
+.model-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.model-picker-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  border: 1px solid var(--accent-border);
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.7rem;
+  padding: 0.25rem 0.6rem;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.model-picker-btn:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+.model-picker-btn.model-picker-open {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.model-picker-label {
+  font-variant-numeric: tabular-nums;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-picker-caret {
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+/* Dropdown panel — composes on .hv-dropdown (fade+slide-in transition primitive).
+   Fixed width, right-anchored to the button. */
+.model-picker-dropdown {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  width: 22rem;
+  max-height: 30rem;
+  overflow-y: auto;
+  z-index: 100;
+  background: var(--bg);
+  border: 1px solid var(--accent-border);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+}
+
+.model-picker-dropdown[hidden] { display: none; }
+
+.model-picker-header {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--accent-border);
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.model-picker-default-label { display: inline-block; }
+.model-picker-default-label #model-picker-default {
+  color: var(--text-muted);
+  font-family: inherit;
+}
+
+.model-picker-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.model-picker-group-header {
+  padding: 0.4rem 0.75rem 0.25rem;
+  font-size: 0.55rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border-top: 1px solid var(--accent-border);
+}
+.model-picker-group-header:first-child { border-top: none; }
+
+.model-picker-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.75rem;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.7rem;
+  text-align: left;
+  transition: background 0.1s;
+  position: relative;
+}
+
+.model-picker-item:hover {
+  background: var(--accent);
+  color: var(--bg);
+}
+.model-picker-item:hover .model-picker-item-name {
+  color: var(--bg);
+}
+.model-picker-item:hover .model-picker-item-desc {
+  color: var(--bg);
+  opacity: 0.7;
+}
+.model-picker-item:hover .model-picker-item-rate {
+  color: var(--bg);
+  border-color: var(--bg);
+  opacity: 0.8;
+}
+.model-picker-item:hover .model-picker-set-default {
+  color: var(--bg);
+  border-color: var(--bg);
+}
+.model-picker-item:hover .model-picker-item-default-badge {
+  color: var(--bg);
+  border-color: var(--bg);
+}
+
+.model-picker-item-body { min-width: 0; }
+.model-picker-item-name {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-bright);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.model-picker-item-desc {
+  display: block;
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  margin-top: 0.15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-picker-item-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.55rem;
+  color: var(--text-muted);
+}
+
+/* Credit-rate multiplier chip. Cost scale via muted->warm->comp so a glance
+   at the dropdown tells you which models are cheap vs. expensive. Colors
+   defined at three thresholds; anything else falls back to muted. */
+.model-picker-item-rate {
+  display: inline-block;
+  padding: 0.1rem 0.3rem;
+  border: 1px solid var(--accent-border);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  min-width: 2.4rem;
+  text-align: center;
+}
+.model-picker-item-rate[data-tier="cheap"]   { color: var(--accent); border-color: var(--accent); }
+.model-picker-item-rate[data-tier="normal"]  { color: var(--text-muted); }
+.model-picker-item-rate[data-tier="warm"]    { color: var(--warm); border-color: var(--warm); }
+.model-picker-item-rate[data-tier="premium"] { color: var(--comp); border-color: var(--comp); }
+
+/* Current-model indicator: inverted accent row — black text on accent
+   background for unmistakable "this is active" signal. */
+.model-picker-item.is-current {
+  background: var(--accent);
+  border-left: 2px solid var(--accent);
+  padding-left: calc(0.75rem - 2px);
+  color: var(--bg);
+}
+.model-picker-item.is-current .model-picker-item-name {
+  color: var(--bg);
+}
+.model-picker-item.is-current .model-picker-item-desc {
+  color: var(--bg);
+  opacity: 0.7;
+}
+.model-picker-item.is-current .model-picker-item-rate {
+  color: var(--bg);
+  border-color: var(--bg);
+  opacity: 0.8;
+}
+.model-picker-item.is-current .model-picker-set-default {
+  color: var(--bg);
+  border-color: var(--bg);
+}
+.model-picker-item.is-current .model-picker-item-default-badge {
+  color: var(--bg);
+  border-color: var(--bg);
+}
+
+/* "default" glyph next to the model that matches kiro-cli's chat.defaultModel */
+.model-picker-item-default-badge {
+  display: inline-block;
+  font-size: 0.5rem;
+  padding: 0.1rem 0.3rem;
+  border: 1px solid var(--accent-border);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* "Set as default" action button — appears on hover, right-aligned */
+.model-picker-set-default {
+  opacity: 0;
+  font-size: 0.55rem;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--accent-border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: opacity 0.12s, color 0.12s, border-color 0.12s;
+  font-family: inherit;
+}
+.model-picker-item:hover .model-picker-set-default,
+.model-picker-set-default:focus { opacity: 1; }
+.model-picker-set-default:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Reduced-motion: skip the hover opacity fade */
+@media (prefers-reduced-motion: reduce) {
+  .model-picker-set-default { transition: none; }
+  .model-picker-item { transition: none; }
+  .model-picker-btn { transition: none; }
+}

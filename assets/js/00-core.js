@@ -1,6 +1,4 @@
 /* ===== Hyperagent: Core ===== */
-(function() {
-"use strict";
 
 const $ = (s) => document.querySelector(s);
 
@@ -35,12 +33,12 @@ function renderChip(variant, text, extraClass, dataAttrs) {
   }
   return '<span class="' + classes + '"' + attrs + '>' + text + '</span>';
 }
-window.renderChip = renderChip;  // Expose for cross-module use inside IIFE
+window.renderChip = renderChip;  // Explicit promotion for cross-module reads.
 
 /* ---- Toast notifications (WI-115 variant-aware primitive) ----------------
-   Shared cross-app IIFE — behavior-identical to Hypervisor's
-   `core/00-core.js` (indentation differs because Hyperagent's file is not
-   wrapped in an outer IIFE). See work/to-do/hyper-ecosystem-toast-rework.md.
+   Byte-mirrored from Hypervisor's `core/00-core.js` — behavior-identical.
+   Wrapped in a self-contained IIFE (`initToasts`) so re-parsing is idempotent
+   via the `if (window.HvToast) return` guard at the top.
 
      HvToast.show("plain message")                    → info variant, 3s
      HvToast.show({ variant, title, message, icon,

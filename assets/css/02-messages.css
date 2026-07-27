@@ -525,7 +525,6 @@
   margin: var(--space-0-3) 0 0;
   padding: var(--space-0-4) var(--space-0-6);
   background: var(--bg-surface);
-  border-left: var(--border-rail) solid var(--accent-border);
   color: var(--text-muted);
   font: var(--fs-micro)/1.6 var(--font);
   white-space: pre-wrap;

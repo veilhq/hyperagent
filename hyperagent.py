@@ -64,6 +64,110 @@ for _h in logger.handlers:
 
 
 # ---------------------------------------------------------------------------
+# Model helpers — read/write kiro-cli's chat.defaultModel via `kiro-cli settings`
+# and locate the kiro-cli binary. Mirrors acp_bridge.find_kiro().
+# ---------------------------------------------------------------------------
+
+def _find_kiro():
+    """Locate the kiro-cli executable, or return None."""
+    found = shutil.which("kiro-cli")
+    if found:
+        return found
+    fallback = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "bin" / "kiro-cli.exe"
+    return str(fallback) if fallback.exists() else None
+
+
+def _kiro_settings_run(args, timeout=5):
+    """Run `kiro-cli settings ...` without spawning a console window. Returns
+    (returncode, stdout, stderr) or (None, "", str(error)) on exception."""
+    kiro = _find_kiro()
+    if not kiro:
+        return (None, "", "kiro-cli not found")
+    # CREATE_NO_WINDOW = 0x08000000 (Windows). Prevents a stray console flash
+    # when we shell out from the PyWebView main thread.
+    flags = 0x08000000 if os.name == "nt" else 0
+    try:
+        r = subprocess.run(
+            [kiro, "settings", *args],
+            capture_output=True, text=True, timeout=timeout,
+            creationflags=flags,
+        )
+        return (r.returncode, r.stdout or "", r.stderr or "")
+    except Exception as e:
+        return (None, "", str(e))
+
+
+def read_kiro_default_model():
+    """Return kiro-cli's chat.defaultModel value, or None."""
+    rc, out, err = _kiro_settings_run(["chat.defaultModel", "--format", "json"])
+    if rc != 0 or not out.strip():
+        return None
+    try:
+        v = json.loads(out.strip())
+        if isinstance(v, str):
+            return v
+        return None
+    except Exception:
+        return out.strip().strip('"') or None
+
+
+def write_kiro_default_model(model_id):
+    """Set chat.defaultModel via kiro-cli settings CLI. Returns True on success."""
+    if not model_id or not isinstance(model_id, str):
+        return False
+    rc, out, err = _kiro_settings_run(["chat.defaultModel", model_id, "--global"])
+    if rc == 0:
+        logger.info("kiro-cli chat.defaultModel set to %s", model_id)
+        return True
+    logger.warning("kiro-cli set chat.defaultModel failed rc=%s err=%s", rc, err.strip())
+    return False
+
+
+# Cache of {modelId: rate_multiplier} sourced from `kiro-cli chat --list-models`.
+# Populated lazily on first read, then reused. Multipliers are stable per kiro-cli
+# version, so caching for the lifetime of the process is safe.
+_MODEL_RATES_CACHE = None
+
+
+def get_model_rates():
+    """Return a dict {modelId: rate_multiplier} from `kiro-cli chat --list-models`.
+    Cached after first successful fetch. Returns empty dict on failure so the UI
+    can degrade gracefully (no multiplier shown)."""
+    global _MODEL_RATES_CACHE
+    if _MODEL_RATES_CACHE is not None:
+        return _MODEL_RATES_CACHE
+    kiro = _find_kiro()
+    if not kiro:
+        _MODEL_RATES_CACHE = {}
+        return _MODEL_RATES_CACHE
+    flags = 0x08000000 if os.name == "nt" else 0
+    try:
+        r = subprocess.run(
+            [kiro, "chat", "--list-models", "--format", "json"],
+            capture_output=True, text=True, timeout=5,
+            creationflags=flags,
+        )
+        if r.returncode != 0 or not r.stdout.strip():
+            _MODEL_RATES_CACHE = {}
+            return _MODEL_RATES_CACHE
+        data = json.loads(r.stdout)
+        rates = {}
+        for m in data.get("models", []):
+            mid = m.get("model_id") or m.get("modelId")
+            rm = m.get("rate_multiplier")
+            if mid is not None and rm is not None:
+                rates[mid] = rm
+        _MODEL_RATES_CACHE = rates
+        logger.debug("model rates cached: %d entries", len(rates))
+        return rates
+    except Exception as e:
+        logger.debug("get_model_rates failed: %s", e)
+        _MODEL_RATES_CACHE = {}
+        return _MODEL_RATES_CACHE
+
+
+
+# ---------------------------------------------------------------------------
 # Skill metadata cache
 # ---------------------------------------------------------------------------
 
@@ -107,19 +211,37 @@ _SKILL_MD_PATTERN = re.compile(r"[/\\]\.kiro[/\\]skills[/\\]([^/\\]+)[/\\]SKILL\
 # ---------------------------------------------------------------------------
 
 def _check_auth():
-    """Return True if kiro-cli is already authenticated."""
-    try:
-        si = subprocess.STARTUPINFO()
-        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        si.wShowWindow = subprocess.SW_HIDE
-        r = subprocess.run(
-            ["kiro-cli", "whoami"],
-            capture_output=True, text=True, startupinfo=si, timeout=10
-        )
-        return r.returncode == 0 and "Logged in" in r.stdout
-    except Exception as e:
-        logger.error(f"_check_auth error: {e}")
-        return False
+    """Return True if kiro-cli is already authenticated.
+
+    Retries transparently on WinError 32 (file lock) which can appear briefly
+    after a kiro-cli crash while Windows releases the .exe handle. A locked
+    executable is NOT an auth failure; distinguishing the two prevents a
+    cascading login-retry storm during recovery.
+    """
+    for attempt in range(5):
+        try:
+            si = subprocess.STARTUPINFO()
+            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            si.wShowWindow = subprocess.SW_HIDE
+            r = subprocess.run(
+                ["kiro-cli", "whoami"],
+                capture_output=True, text=True, startupinfo=si, timeout=10
+            )
+            return r.returncode == 0 and "Logged in" in r.stdout
+        except OSError as e:
+            # WinError 32 → executable transiently locked (recent crash).
+            # Retry with short backoff; only treat as auth failure if it persists.
+            if getattr(e, "winerror", None) == 32 and attempt < 4:
+                logger.warning("_check_auth: exe locked (WinError 32), retry %d/4 in 200ms", attempt + 1)
+                time.sleep(0.2)
+                continue
+            logger.error("_check_auth error (attempt %d): %s", attempt + 1, e)
+            return False
+        except Exception as e:
+            logger.error("_check_auth error: %s", e)
+            return False
+    logger.error("_check_auth: exe locked through all retries, giving up")
+    return False
 
 
 def _do_login(window=None):
@@ -168,19 +290,33 @@ def _do_login(window=None):
 
 def _do_login_visible():
     """Run 'kiro-cli login' in a visible console so interactive prompts (AWS SSO, etc.) work.
-    Blocks until the process exits. Returns True on success."""
+    Blocks until the process exits. Returns True on success.
+
+    Retries Popen on WinError 32 for the same reason as _check_auth — the .exe
+    may be transiently locked immediately after a crash.
+    """
     logger.info("_do_login_visible: spawning visible console")
-    try:
-        proc = subprocess.Popen(
-            ["kiro-cli", "login", "--license", "pro"],
-            creationflags=subprocess.CREATE_NEW_CONSOLE,
-        )
-        proc.wait(timeout=120)
-        logger.info(f"_do_login_visible: exit={proc.returncode}")
-        return proc.returncode == 0
-    except Exception as e:
-        logger.error(f"_do_login_visible error: {e}")
-        return False
+    for attempt in range(5):
+        try:
+            proc = subprocess.Popen(
+                ["kiro-cli", "login", "--license", "pro"],
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
+            )
+            proc.wait(timeout=120)
+            logger.info("_do_login_visible: exit=%d", proc.returncode)
+            return proc.returncode == 0
+        except OSError as e:
+            if getattr(e, "winerror", None) == 32 and attempt < 4:
+                logger.warning("_do_login_visible: exe locked (WinError 32), retry %d/4 in 200ms", attempt + 1)
+                time.sleep(0.2)
+                continue
+            logger.error("_do_login_visible error (attempt %d): %s", attempt + 1, e)
+            return False
+        except Exception as e:
+            logger.error("_do_login_visible error: %s", e)
+            return False
+    logger.error("_do_login_visible: exe locked through all retries, giving up")
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +342,12 @@ class ACPClient:
         self._skill_tool_ids = set()  # tool call IDs for SKILL.md reads (suppressed from UI)
         self._todo_tool_ids = set()  # tool call IDs for todo_list tools (pushed to task panel)
         self._cancelled = threading.Event()  # suppress session/update after cancel until next prompt
+        # Model state — populated from session/new or session/load response (kiro-cli
+        # ACP extension: result.models = {currentModelId, availableModels[]}).
+        self._current_model_id = None
+        self._available_models = []
         self._prompt_start = None  # timing anchor for prompt duration logs
+        self._write_lock = threading.Lock()  # serialize socket writes (multi-threaded _send)
 
     def _tab_ctx(self):
         """Return '[tab=abcdef]' prefix for logs. Empty string if no tab_id assigned."""
@@ -329,12 +470,13 @@ class ACPClient:
         if not self._sockfile:
             return
         data = json.dumps(msg) + "\n"
-        try:
-            self._sockfile.write(data.encode())
-            self._sockfile.flush()
-            logger.trace("%ssent: id=%s method=%s", self._tab_ctx(), msg.get('id'), msg.get('method',''))
-        except (BrokenPipeError, OSError) as e:
-            logger.error("%ssend error: %s", self._tab_ctx(), e)
+        with self._write_lock:
+            try:
+                self._sockfile.write(data.encode())
+                self._sockfile.flush()
+                logger.trace("%ssent: id=%s method=%s", self._tab_ctx(), msg.get('id'), msg.get('method',''))
+            except (BrokenPipeError, OSError) as e:
+                logger.error("%ssend error: %s", self._tab_ctx(), e)
 
     def _request(self, method, params=None, callback=None):
         rid = self._next_id()
@@ -393,6 +535,8 @@ class ACPClient:
         if isinstance(result, dict) and "sessionId" in result:
             self._set_session_id(result["sessionId"])
             self._state = "ready"
+            self._capture_and_push_models(result)
+            self._apply_preferred_model()
         elif isinstance(result, dict) and "error" in result:
             err = result["error"]
             err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
@@ -420,6 +564,8 @@ class ACPClient:
                 logger.debug("%son_lazy_session: %s", self._tab_ctx(), result)
                 if isinstance(result, dict) and "sessionId" in result:
                     self._set_session_id(result["sessionId"])
+                    self._capture_and_push_models(result)
+                    self._apply_preferred_model()
                 elif isinstance(result, dict) and "error" in result:
                     err = result["error"]
                     err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
@@ -544,7 +690,14 @@ class ACPClient:
                         logger.trace("%srecv: id=%s method=%s", self._tab_ctx(), msg.get('id'), msg.get('method',''))
                         self._dispatch(msg)
                     except json.JSONDecodeError as e:
-                        logger.error("%sJSON decode error: %s", self._tab_ctx(), e)
+                        # Include line length + boundary bytes so we can diagnose
+                        # whether the write-lock fix eliminates fragmentation.
+                        head = line[:60].decode("utf-8", errors="replace").rstrip()
+                        tail = line[-60:].decode("utf-8", errors="replace").rstrip()
+                        logger.error(
+                            "%sJSON decode error: %s | len=%d head=%r tail=%r",
+                            self._tab_ctx(), e, len(line), head, tail,
+                        )
         except Exception as e:
             logger.error("%sreader exception: %s", self._tab_ctx(), e)
         logger.info("%sreader exited, state=%s", self._tab_ctx(), self._state)
@@ -786,6 +939,100 @@ class ACPClient:
         prefs.pop("sessionId", None)
         self._save_prefs(prefs)
 
+    # --- Model switching ---
+
+    def _capture_and_push_models(self, session_result):
+        """Extract kiro-cli's `models` field from a session/new or session/load
+        response and push it to the frontend for the model picker UI."""
+        if not isinstance(session_result, dict):
+            return
+        models = session_result.get("models")
+        if not isinstance(models, dict):
+            return
+        self._current_model_id = models.get("currentModelId") or self._current_model_id
+        available = models.get("availableModels")
+        if isinstance(available, list) and available:
+            self._available_models = available
+        self._push_models_event()
+
+    def _push_models_event(self):
+        """Push the current model state (current + available + kiro default) to the frontend."""
+        # Merge in credit-rate multipliers from `kiro-cli chat --list-models`.
+        # The ACP session/new response doesn't include cost data, so we look
+        # it up separately (cached after first call). Missing entries are fine —
+        # the UI just omits the multiplier chip.
+        rates = get_model_rates()
+        enriched = []
+        for m in (self._available_models or []):
+            mid = m.get("modelId") if isinstance(m, dict) else None
+            if mid and mid in rates:
+                # Shallow copy so we don't mutate the cached list.
+                m2 = dict(m)
+                m2["rateMultiplier"] = rates[mid]
+                enriched.append(m2)
+            else:
+                enriched.append(m)
+        self._push_js("__acpModels", {
+            "currentModelId": self._current_model_id,
+            "availableModels": enriched,
+            "defaultModelId": read_kiro_default_model(),
+        })
+
+    def _apply_preferred_model(self):
+        """After session setup, if the user has a stored hyperagent-level default
+        (`lastModelId` in preferences.json) that differs from the current model,
+        apply it via session/set_model."""
+        preferred = self._load_prefs().get("lastModelId")
+        if not preferred or preferred == self._current_model_id:
+            return
+        if not self._session_id:
+            return
+        # Only apply if the model is still in the available list (avoids failing
+        # on models kiro-cli has removed since the preference was saved).
+        if not any(m.get("modelId") == preferred for m in (self._available_models or [])):
+            logger.debug("%spreferred model %s not in available list, skipping", self._tab_ctx(), preferred)
+            return
+        logger.info("%sapplying preferred model: %s (was %s)", self._tab_ctx(), preferred, self._current_model_id)
+        self._request_set_model(preferred, remember=False)
+
+    def _request_set_model(self, model_id, remember=True):
+        """Send session/set_model and update local state on success."""
+        if not self._session_id:
+            return
+
+        def on_set(result):
+            if isinstance(result, dict) and "error" in result:
+                err = result["error"]
+                err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+                logger.warning("%sset_model(%s) failed: %s", self._tab_ctx(), model_id, err_msg)
+                self._push_js("__acpError", {"error": f"Model switch failed: {err_msg}"})
+                # Re-push current state so UI reverts the selection
+                self._push_models_event()
+                return
+            logger.info("%smodel switched: %s", self._tab_ctx(), model_id)
+            self._current_model_id = model_id
+            if remember:
+                prefs = self._load_prefs()
+                prefs["lastModelId"] = model_id
+                self._save_prefs(prefs)
+            self._push_models_event()
+
+        self._request("session/set_model", {
+            "sessionId": self._session_id,
+            "modelId": model_id,
+        }, on_set)
+
+    def set_model(self, model_id):
+        """Public entry point from the bridge API. Switches this session's model
+        and persists the choice as the hyperagent-level default."""
+        if not model_id:
+            return False
+        if not self._session_id:
+            logger.warning("%sset_model called with no active session", self._tab_ctx())
+            return False
+        self._request_set_model(model_id, remember=True)
+        return True
+
 
 # ---------------------------------------------------------------------------
 # ACPClientPool — manages multiple ACPClient instances for tabbed UI
@@ -856,6 +1103,14 @@ class ACPClientPool:
             if prev != tab_id:
                 logger.info("switch_tab: %s -> %s",
                             str(prev)[:6] if prev else "-", str(tab_id)[:6])
+                # Refresh the model picker so it reflects the newly-active
+                # tab's session (each tab has independent model state).
+                client = self._clients.get(tab_id)
+                if client:
+                    try:
+                        client._push_models_event()
+                    except Exception as e:
+                        logger.debug("switch_tab: _push_models_event failed: %s", e)
             return True
         logger.warning("switch_tab: unknown tab=%s", str(tab_id)[:6])
         return False
@@ -1020,6 +1275,8 @@ class HyperagentAPI:
                         client._push_js("__acpError", {"error": f"Failed to load session: {err_msg}"})
                     else:
                         client._set_session_id(session_id)
+                        client._capture_and_push_models(result)
+                        client._apply_preferred_model()
                     client._state = "ready"
                     client._push_state()
 
@@ -1272,6 +1529,52 @@ class HyperagentAPI:
     def toggle_fullscreen(self):
         if self._acp._window:
             self._acp._window.toggle_fullscreen()
+
+    # --- Model switcher API ---
+
+    def set_model(self, model_id, tab_id=None):
+        """Switch the active model for the given tab (or the active tab if omitted).
+        Persists the choice as the hyperagent-level default. Returns True if the
+        request was dispatched, False otherwise."""
+        client = self._pool.get_client(tab_id) if tab_id else self._pool.active_client
+        if not client:
+            return False
+        return client.set_model(model_id)
+
+    def set_default_model(self, model_id):
+        """Write model_id to kiro-cli's chat.defaultModel setting (global).
+        Broadcasts the updated defaultModelId to all tab UIs. Returns True on success."""
+        if not write_kiro_default_model(model_id):
+            return False
+        # Refresh the UI on every open tab so the "default" indicator reflects the change.
+        for tab_id, client in list(self._pool._clients.items()):
+            try:
+                client._push_models_event()
+            except Exception as e:
+                logger.debug("push_models_event on tab %s failed: %s", tab_id, e)
+        return True
+
+    def get_models(self, tab_id=None):
+        """Return the current model state for a tab: current, available (with
+        rate multipliers merged in), and kiro default. Used by the frontend to
+        seed the picker if it mounts after __acpModels has fired."""
+        client = self._pool.get_client(tab_id) if tab_id else self._pool.active_client
+        if not client:
+            return None
+        rates = get_model_rates()
+        enriched = []
+        for m in (client._available_models or []):
+            mid = m.get("modelId") if isinstance(m, dict) else None
+            if mid and mid in rates:
+                m2 = dict(m); m2["rateMultiplier"] = rates[mid]
+                enriched.append(m2)
+            else:
+                enriched.append(m)
+        return {
+            "currentModelId": client._current_model_id,
+            "availableModels": enriched,
+            "defaultModelId": read_kiro_default_model(),
+        }
 
     def debug_log(self, message):
         """Route a JS-side trace into the hyperagent log."""

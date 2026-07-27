@@ -88,14 +88,14 @@
   color: var(--accent);
 }
 
-/* ---- Section primitive (quiet) — frameless section with left rail -----------
-   Companion to .hv-section (bordered). Use when a section needs to signal
-   grouping without a full border frame (e.g., inside a card).
+/* ---- Section primitive (quiet) — frameless content section ------------------
+   Companion to .hv-section (bordered). Groups content with generous spacing
+   and heading weight — no colored rail. Use for content sections that should
+   read as document structure, not navigation targets.
 */
 .hv-section-quiet {
   margin-bottom: var(--section-gap);
   padding-left: var(--space-4);
-  border-left: var(--section-rail-width) solid var(--accent-border);
   background: transparent;
   animation: fadeSlideIn var(--motion-slow) var(--ease) var(--motion-tick) both;
 }

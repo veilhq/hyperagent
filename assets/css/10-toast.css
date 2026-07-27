@@ -31,7 +31,6 @@
   color: var(--text);
   background: var(--bg-card);
   border: var(--border-hair) solid var(--border-strong);
-  border-left: 2px solid var(--variant-color);
   padding: var(--space-2) var(--space-3);
   box-shadow: none;
   opacity: 0;

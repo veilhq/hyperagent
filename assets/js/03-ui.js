@@ -244,12 +244,32 @@ function showWelcome() {
     chips.appendChild(chip);
   });
   msgs.appendChild(w);
-  // Defer noise start — 06-welcome.js may not have loaded yet at initial parse
-  setTimeout(function() { startWelcomeNoise(); }, 0);
+  // Defer noise mount to next animation frame so layout is complete before
+  // HvNoiseField reads container dimensions. Matches the pattern used in
+  // createTab (08-tabs.js) which reliably shows the dither. Previously used
+  // setTimeout(0) which fires after script parse but not necessarily after
+  // first layout — leaving the canvas mounted at 0x0 on initial launch.
+  // WI-118 fix: per-module <script> blocks mean startWelcomeNoise (from
+  // 06-welcome.js) may not be defined yet at RAF time when this is called
+  // from initial script parse. Wait until all inline scripts have parsed.
+  function _mountNoise() {
+    if (typeof startWelcomeNoise === 'function') startWelcomeNoise();
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() { requestAnimationFrame(_mountNoise); });
+  } else {
+    requestAnimationFrame(_mountNoise);
+  }
 }
 
 // Show welcome on load if empty
 showWelcome();
+
+// WebGL cursor trail (WI-119) — same shared module Hypervisor uses.
+// Idempotent, idle-suspending, a11y-gated internally.
+if (window.HvCursorTrail) {
+  window.HvCursorTrail.start(document.body);
+}
 
 // Show steering files included in session
 function showSteering() {

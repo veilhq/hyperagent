@@ -93,7 +93,6 @@
   align-self: flex-start;
   background: var(--bg-surface);
   border: var(--border-hair) solid var(--comp);
-  border-left: var(--border-rail) solid var(--comp);
   padding: var(--space-0-3) var(--space-2);
   margin: var(--space-0-1) 0 var(--space-0-2);
   font-size: var(--fs-micro);

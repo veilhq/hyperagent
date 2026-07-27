@@ -84,16 +84,16 @@ The frontend reacts to state transitions pushed from Python via `window.evaluate
 ### Build Pipeline
 
 ```
-assets/shell.html          ← HTML skeleton with {{CSS}} and {{JS}} placeholders
-assets/css/00-*.css        ← concatenated in sorted order → replaces {{CSS}}
-assets/js/00-*.js          ← concatenated in sorted order → replaces {{JS}}
+assets/shell.html          ← HTML skeleton with {{CSS}} and {{JS_BLOCKS}} placeholders
+assets/css/*.css           ← concatenated in sorted order → replaces {{CSS}}
+assets/js/*.js             ← emitted as per-module <script> blocks → replaces {{JS_BLOCKS}}
                            ↓
 build.py                   → generated_html.py (HTML as Python string literal)
                            ↓
 hyperagent.py imports HTML → passes to webview.create_window(html=HTML)
 ```
 
-No runtime file serving — the entire UI is a single inline HTML string passed to PyWebView.
+No runtime file serving — the entire UI is a single inline HTML string passed to PyWebView. Each JS module is emitted as its own `<script>` block (WI-118) so a parse error in one module doesn't take down the app.
 
 ## Project Structure
 
@@ -105,23 +105,30 @@ No runtime file serving — the entire UI is a single inline HTML string passed 
 ├── assets/
 │   ├── shell.html         ← HTML template
 │   ├── css/
+│   │   ├── 00-primitives.css  ← Ecosystem primitives (hv-chip, hv-row, hv-noise-field, hv-button, hv-overlay, ...)
 │   │   ├── 00-variables.css   ← Custom properties, reset, scrollbar, animations
-│   │   ├── 01-layout.css      ← Topbar, app layout, error bar
-│   │   ├── 02-messages.css    ← Message bubbles, code blocks, markdown
+│   │   ├── 01-layout.css      ← Topbar, app layout, error bar, status cluster
+│   │   ├── 02-messages.css    ← Message bubbles, code blocks, markdown, welcome screen
 │   │   ├── 03-tools.css       ← Tool call cards and states
 │   │   ├── 04-input.css       ← Input area, send/cancel buttons
 │   │   ├── 05-sidebar.css     ← Session sidebar
-│   │   └── 06-splash.css      ← Loading splash screen
+│   │   ├── 06-splash.css      ← Loading splash screen
+│   │   ├── 07-skills.css      ← Skill activation strip
+│   │   ├── 07-tabs.css        ← Per-tab message containers
+│   │   ├── 08-tasks.css       ← Task sidebar panel
+│   │   ├── 10-toast.css       ← Toast notifications
+│   │   └── zz-accessibility.css ← A11y overrides (loads last)
 │   ├── js/
-│   │   ├── 00-core.js         ← IIFE open, DOM refs, state, accent sync
+│   │   ├── 00-core.js         ← DOM refs, state, accent sync, PyWebView bridge detection
+│   │   ├── 00-shared-modules.js ← HvNoiseField, HvGreeting, HvCursorTrail (mirrored from Hypervisor)
 │   │   ├── 01-markdown.js     ← Lightweight markdown→HTML renderer
 │   │   ├── 02-handlers.js     ← ACP event handlers, tool cards, stream buffer
-│   │   ├── 03-ui.js           ← Send, cancel, shortcuts, search, welcome
+│   │   ├── 03-ui.js           ← Send, cancel, shortcuts, welcome screen mount
 │   │   ├── 04-sidebar.js      ← Session list management
 │   │   ├── 05-thinking.js     ← WebGL2 thinking bar indicator
-│   │   ├── 06-welcome.js      ← WebGL2 welcome noise field
+│   │   ├── 06-welcome.js      ← startWelcomeNoise / destroyWelcomeNoise shim over HvNoiseField
 │   │   ├── 07-tasks.js        ← Task sidebar panel
-│   │   └── zz-close.js        ← IIFE close
+│   │   └── 08-tabs.js         ← Session tab bar
 │   └── (icons: .ico, .png, .svg)
 └── .gitignore
 ```

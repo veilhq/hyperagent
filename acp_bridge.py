@@ -55,7 +55,14 @@ def main():
 
     logger.info("starting: port=%d kiro=%s", port, kiro)
 
-    # Spawn kiro-cli
+    # Spawn kiro-cli. RUST_BACKTRACE=1 asks the Rust runtime to emit a panic
+    # backtrace on stderr when a panic reaches process exit. Cost is zero when
+    # no panic occurs; when one does, the backtrace lands in bridge.log via the
+    # existing stderr relay and gives us a real diagnostic instead of just an
+    # opaque STATUS_CONTROL_C_EXIT (0xC000013A) code.
+    child_env = os.environ.copy()
+    child_env.setdefault("RUST_BACKTRACE", "1")
+
     si = subprocess.STARTUPINFO()
     si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     si.wShowWindow = subprocess.SW_HIDE
@@ -65,6 +72,7 @@ def main():
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         cwd=str(PORTAL_ROOT),
+        env=child_env,
         startupinfo=si,
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
     )
@@ -78,6 +86,23 @@ def main():
 
     logger.info("connected to parent on port %d", port)
 
+    # Serialize writes to the socket. Three relay threads (stdout, stderr,
+    # watchdog) share `sf`; without this lock a large stdout payload can be
+    # interleaved at the BufferedWriter's 8KB flush boundary by a concurrent
+    # stderr or watchdog write, producing corrupt JSON on the parent side.
+    sock_write_lock = threading.Lock()
+
+    def sock_write(payload: bytes) -> bool:
+        """Thread-safe write+flush to the parent socket. Returns False on error."""
+        with sock_write_lock:
+            try:
+                sf.write(payload)
+                sf.flush()
+                return True
+            except Exception as e:
+                logger.debug("sock_write failed: %s", e)
+                return False
+
     # Relay: kiro stdout → socket
     def relay_stdout():
         try:
@@ -87,8 +112,8 @@ def main():
                     logger.info("relay_stdout: EOF from kiro")
                     break
                 if line.strip():
-                    sf.write(line)
-                    sf.flush()
+                    if not sock_write(line):
+                        break
                     logger.trace("relay_stdout: forwarded %db", len(line))
         except Exception as e:
             logger.error("relay_stdout error: %s", e)
@@ -122,11 +147,7 @@ def main():
                 if text:
                     logger.debug("stderr: %s", text)
                     msg = json.dumps({"jsonrpc": "2.0", "method": "_bridge/stderr", "params": {"text": text}}) + "\n"
-                    try:
-                        sf.write(msg.encode())
-                        sf.flush()
-                    except Exception:
-                        pass
+                    sock_write(msg.encode())
         except Exception as e:
             logger.error("relay_stderr error: %s", e)
 
@@ -142,11 +163,8 @@ def main():
                 "method": "_bridge/child_exited",
                 "params": {"exitCode": exit_code},
             }) + "\n"
-            try:
-                sf.write(msg.encode())
-                sf.flush()
-            except Exception as e:
-                logger.debug("watchdog: notify failed (socket already closed?): %s", e)
+            if not sock_write(msg.encode()):
+                logger.debug("watchdog: notify failed (socket already closed?)")
             # Force-close the socket to unwind any hanging readline calls
             # on either side (parent's reader, our relay_stdin).
             try:

@@ -32,6 +32,18 @@
       <span class="ha-cluster-chip plan-credits-label" id="plan-credits-label"></span>
       <button class="plan-credits-refresh" id="plan-credits-refresh" onclick="refreshPlanCredits()" title="Refresh usage">&#x21bb;</button>
     </div>
+    <div class="model-picker" id="model-picker">
+      <button class="ha-cluster-chip model-picker-btn" id="model-picker-btn" onclick="toggleModelPicker(event)" title="Model">
+        <span class="model-picker-label" id="model-picker-label">model</span>
+        <svg class="model-picker-caret" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="model-picker-dropdown hv-dropdown" id="model-picker-dropdown" hidden>
+        <div class="model-picker-header">
+          <span class="model-picker-default-label">default: <span id="model-picker-default">—</span></span>
+        </div>
+        <div class="model-picker-list" id="model-picker-list"></div>
+      </div>
+    </div>
   </div>
   <div class="error-bar"></div>
   <div class="main-layout">
@@ -71,8 +83,6 @@
 </div>
 <!-- Lucide icon runtime — hydrates <i data-lucide="..."> elements (toast variants, etc.) -->
 <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-<script>
-{{JS}}
-</script>
+{{JS_BLOCKS}}
 </body>
 </html>

@@ -60,8 +60,8 @@ function startRename(sessionId, el) {
   input.type = 'text';
   input.className = 'session-rename-input';
   input.value = currentTitle;
-  var row = el.querySelector('.session-item-row');
-  row.insertBefore(input, titleEl.nextSibling);
+  // Insert into the grid's body column (after the title element)
+  el.insertBefore(input, titleEl.nextSibling);
   input.focus();
   input.select();
 
@@ -115,16 +115,23 @@ function refreshSessions() {
     data.sessions.forEach(function(s, i) {
       // Skip sessions that are currently open as tabs
       if (openIds[s.id]) return;
+
       var el = document.createElement('div');
       el.className = 'session-item stagger-in';
       el.setAttribute('data-session-id', s.id);
-      var lockBadge = s.locked ? renderChip('outlined-muted', 'IN USE', 'session-lock') : '';
-      el.innerHTML = '<div class="session-item-row">'
-        + '<div class="session-item-title">' + escapeHtml(s.title) + '</div>'
-        + '<button class="session-delete-btn" title="Delete">&times;</button>'
-        + '</div>'
-        + '<div class="session-item-meta">' + escapeHtml(s.age) + ' · ' + escapeHtml(s.msgs) + lockBadge + '</div>';
-      // Single click: open in a new tab
+
+      // Build stacked row: title on top, meta strip (chip + age) below, delete btn top-right
+      var chipHtml = renderChip('outlined-muted', escapeHtml(s.msgs), 'session-item-chip');
+      var lockHtml = s.locked ? ' ' + renderChip('outlined-muted', 'IN USE', 'session-lock') : '';
+      el.innerHTML =
+        '<span class="session-item-title">' + escapeHtml(s.title) + '</span>' +
+        '<div class="session-item-meta">' +
+          chipHtml + lockHtml +
+          '<span class="session-item-age">' + escapeHtml(s.age) + '</span>' +
+        '</div>' +
+        '<button class="session-delete-btn" title="Delete">&times;</button>';
+
+      // Single click on title: open in a new tab
       el.querySelector('.session-item-title').onclick = function() {
         if (s.locked) return;
         openInNewTab(s.id, s.title);
