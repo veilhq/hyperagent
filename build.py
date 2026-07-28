@@ -7,6 +7,14 @@ declarations in classic scripts share a common global lexical environment,
 so cross-module references (e.g. shared `state`, `msgs`, `input`) keep working
 without any explicit `window.` prefix.
 
+WI-142 Phase 1: Hyperkit (../.hyperkit/) supplies the shared tokens.css +
+primitives.css and four shared JS modules (noise-field, greeting,
+cursor-trail, toast). Hyperkit content is prepended — CSS so app-local
+primitives can override shared ones via cascade order, JS so window.HvToast
+etc. are defined before any app-local module references them. Missing
+Hyperkit files fail the build loudly rather than silently falling back to a
+stale local copy.
+
 Usage: python build.py
 Output: Updates the HTML variable in generated_html.py
 """
@@ -14,11 +22,56 @@ import glob
 from pathlib import Path
 
 ROOT = Path(__file__).parent
+HYPERKIT_DIR = ROOT.parent / ".hyperkit"
+HYPERKIT_CSS_DIR = HYPERKIT_DIR / "css"
+HYPERKIT_JS_DIR = HYPERKIT_DIR / "js"
+HYPERKIT_JS_MODULES = ["noise-field.js", "greeting.js", "cursor-trail.js", "toast.js"]
 
 
 def concat_files(pattern):
     files = sorted(glob.glob(str(ROOT / pattern)))
     return "\n".join(Path(f).read_text(encoding="utf-8") for f in files)
+
+
+def concat_hyperkit_css():
+    """Read Hyperkit's tokens.css + primitives.css. Fails loudly if missing."""
+    parts = []
+    for name in ("tokens.css", "primitives.css"):
+        f = HYPERKIT_CSS_DIR / name
+        if not f.exists():
+            raise FileNotFoundError(
+                f"Hyperkit CSS file missing: {f}\n"
+                "Hyperagent's build.py requires .hyperspace/.hyperkit/css/tokens.css "
+                "and primitives.css. Run WI-142 setup or restore the .hyperkit/ directory."
+            )
+        parts.append(f.read_text(encoding="utf-8"))
+    return "\n".join(parts)
+
+
+def render_hyperkit_js_blocks():
+    """Emit one <script> block per Hyperkit JS module, in load order.
+
+    Loads before any app-local module — app code references window.HvToast /
+    HvNoiseField / HvGreeting / HvCursorTrail and expects them already defined.
+    """
+    if not HYPERKIT_JS_DIR.exists():
+        raise FileNotFoundError(
+            f"Hyperkit JS directory missing: {HYPERKIT_JS_DIR}\n"
+            "Hyperagent's build.py requires .hyperspace/.hyperkit/js/. "
+            "Run WI-142 setup or restore the .hyperkit/ directory."
+        )
+    blocks = []
+    for name in HYPERKIT_JS_MODULES:
+        f = HYPERKIT_JS_DIR / name
+        if not f.exists():
+            raise FileNotFoundError(
+                f"Hyperkit JS module missing: {f}\n"
+                f"Hyperagent's build.py expects all of {HYPERKIT_JS_MODULES} "
+                "in .hyperspace/.hyperkit/js/."
+            )
+        content = f.read_text(encoding="utf-8")
+        blocks.append(f"<!-- hyperkit/{name} -->\n<script>\n{content}\n</script>")
+    return "\n".join(blocks)
 
 
 def render_js_blocks():
@@ -37,8 +90,8 @@ def render_js_blocks():
 
 
 def build():
-    css = concat_files("assets/css/*.css")
-    js_blocks = render_js_blocks()
+    css = concat_hyperkit_css() + "\n" + concat_files("assets/css/*.css")
+    js_blocks = render_hyperkit_js_blocks() + "\n" + render_js_blocks()
     shell = (ROOT / "assets/shell.html").read_text(encoding="utf-8")
     html = shell.replace("{{CSS}}", css).replace("{{JS_BLOCKS}}", js_blocks)
 
@@ -53,7 +106,14 @@ def build():
         for f in sorted(glob.glob(str(ROOT / "assets/js/*.js")))
     )
     js_count = len(sorted(glob.glob(str(ROOT / "assets/js/*.js"))))
-    print(f"Built: {len(css)} bytes CSS, {js_total} bytes JS across {js_count} modules -> generated_html.py")
+    hyperkit_js_total = sum(
+        (HYPERKIT_JS_DIR / name).stat().st_size for name in HYPERKIT_JS_MODULES
+    )
+    print(
+        f"Built: {len(css)} bytes CSS, {js_total} bytes JS across {js_count} local modules "
+        f"+ {hyperkit_js_total} bytes across {len(HYPERKIT_JS_MODULES)} Hyperkit modules "
+        "-> generated_html.py"
+    )
 
 
 if __name__ == "__main__":

@@ -175,4 +175,4 @@ After per-surface capture, verify these cross-surface concerns hold:
 - [ ] **High contrast**: chip/badge/tool-card variants remain distinguishable (colors alone are not the only signal)
 - [ ] **Focus outlines**: keyboard-focused primitives (textarea, buttons, session items, tabs) show a visible outline meeting WCAG contrast
 - [ ] **No off-scale values**: grep `.hyperagent/assets/css/` for raw `rem`/`px`/`z-index`/`box-shadow` literals (Phase 1 audit)
-- [ ] **Byte-identical tokens**: `diff .hypervisor/assets/css/00-variables.css .hyperagent/assets/css/00-variables.css` — the `:root` token block is identical
+- [ ] **Shared tokens intact**: verify `.hyperspace/.hyperkit/css/tokens.css` and `primitives.css` exist and both apps' builds complete without the `FileNotFoundError` fail-loud check tripping (WI-142 — the `:root` token block moved out of each app's `00-variables.css` into this single shared file; there is no longer a diff to run between apps, only a check that both consume the same Hyperkit source)

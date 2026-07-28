@@ -58,12 +58,35 @@
   color: var(--text-dim);
 }
 
+/* Refresh button — small ghost icon button next to the Sessions label */
+.session-refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0;
+  transition: color var(--motion-fast) var(--ease), transform var(--motion-fast) var(--ease);
+}
+.session-refresh-btn:hover { color: var(--accent); }
+.session-refresh-btn:active { transform: rotate(180deg); }
+.session-refresh-btn.spinning svg { animation: session-refresh-spin 0.6s linear; }
+@keyframes session-refresh-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* ---- Tab cards ----
-   Bordered card containers with dither grid and title. */
+   Clipped-corner cards with dither grid and title.
+   Corner notch (top-right) is the shape signature. No border — clip IS the shape. */
 .sidebar-tab-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-1);
   padding: 0 var(--space-3) var(--space-3);
 }
 
@@ -74,39 +97,14 @@
   align-items: center;
   column-gap: var(--space-2);
   padding: var(--space-2) var(--space-4) var(--space-2) var(--space-3);
-  border: var(--border-hair) solid var(--border);
-  border-left: var(--border-rail) solid var(--accent-border);
-  background: var(--bg-card);
   cursor: pointer;
   transition: background var(--motion-fast) var(--ease),
-              border-color var(--motion-fast) var(--ease),
               transform var(--motion-fast) var(--ease);
-}
-.sidebar-tab-item:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--accent-border);
-  border-left-color: var(--accent);
-  transform: translateY(-1px);
-}
-.sidebar-tab-item.active {
-  background: var(--accent-glow);
-  border-color: var(--accent-border);
-  border-left-color: var(--accent);
 }
 .sidebar-tab-item.active .sidebar-tab-item-title { color: var(--text-bright); }
 
-/* State rails — override left border for state signaling */
-.sidebar-tab-item.prompting {
-  border-left-color: var(--accent);
-}
-.sidebar-tab-item.unread {
-  border-left-color: var(--comp);
-}
-.sidebar-tab-item.done {
-  border-left-color: var(--warm);
-}
+/* State classes — used by dither grid patterns only (no rail) */
 .sidebar-tab-item.crashed {
-  border-left-color: var(--comp);
   animation: tab-rail-shake var(--motion-slow) ease-out;
 }
 @keyframes tab-rail-shake {
@@ -206,7 +204,7 @@
   opacity: 0.9;
 }
 .sidebar-tab-item.errored {
-  border-left-color: var(--comp);
+  animation: tab-rail-shake var(--motion-slow) ease-out;
 }
 
 /* Tab title */
@@ -272,7 +270,7 @@
 .sidebar-toggle-badge.visible { display: block; }
 
 /* a11y: hide indicators */
-.a11y-hide-indicators .sidebar-tab-item { animation: none !important; border-left-color: var(--accent-border) !important; }
+.a11y-hide-indicators .sidebar-tab-item { animation: none !important; }
 .a11y-hide-indicators .sidebar-toggle-badge { display: none !important; }
 
 /* ---- Session history cards ----
@@ -280,7 +278,7 @@
 .session-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-1);
   padding: 0 var(--space-3);
 }
 
@@ -348,6 +346,36 @@
   font-variant-numeric: tabular-nums;
   color: var(--text-dim);
   white-space: nowrap;
+}
+
+/* Removal transition — tabs */
+.sidebar-tab-item.tab-removing {
+  opacity: 0;
+  transform: translateX(-10px);
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+  transition: opacity var(--motion-fast) var(--ease),
+              transform var(--motion-fast) var(--ease),
+              max-height var(--motion-base) var(--ease),
+              padding var(--motion-base) var(--ease);
+}
+
+/* Removal transition — sessions */
+.session-item.session-removing {
+  opacity: 0;
+  transform: translateX(-10px);
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin: 0;
+  overflow: hidden;
+  transition: opacity var(--motion-fast) var(--ease),
+              transform var(--motion-fast) var(--ease),
+              max-height var(--motion-base) var(--ease),
+              padding var(--motion-base) var(--ease),
+              margin var(--motion-base) var(--ease);
 }
 
 /* Delete button — top-right corner, absolute positioned */

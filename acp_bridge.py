@@ -22,7 +22,7 @@ HYPERSPACE_ROOT = Path(__file__).parent.parent.resolve()
 # Structured logging (shared ecosystem logger)
 # ---------------------------------------------------------------------------
 
-sys.path.insert(0, str(HYPERSPACE_ROOT))
+sys.path.insert(0, str(HYPERSPACE_ROOT / ".hyperkit" / "python"))
 from hyper_logging import setup_logger, TRACE  # noqa: E402
 
 # Bridge log level is env-configurable; INFO default keeps the log to lifecycle events.

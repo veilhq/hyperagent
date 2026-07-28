@@ -99,6 +99,13 @@ function toggleSidebar() {
 }
 
 function refreshSessions() {
+  var btn = document.getElementById('session-refresh-btn');
+  if (btn) {
+    btn.classList.remove('spinning');
+    // Restart the animation even if triggered twice quickly
+    void btn.offsetWidth;
+    btn.classList.add('spinning');
+  }
   pywebview.api.list_sessions().then(function(data) {
     sessionList.innerHTML = '';
     if (data && data.auth_required) {
@@ -195,7 +202,10 @@ function _showLoadingSplash() {
 function deleteSession(id, el) {
   var title = el ? (el.querySelector('.session-item-title') || {}).textContent : null;
   pywebview.api.delete_session(id).then(function() {
-    if (el && el.parentNode) el.parentNode.removeChild(el);
+    if (el) {
+      el.classList.add('session-removing');
+      setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 200);
+    }
     if (window.HvToast) {
       window.HvToast.show({
         variant: 'success',

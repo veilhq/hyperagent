@@ -1,0 +1,143 @@
+/* ===== Hyperagent: Background Activity Strip =====
+   Surfaces otherwise-invisible background work in the status cluster.
+   First consumer is title generation, which previously mutated the tab title
+   several seconds after a turn ended with no indication anything was running.
+
+   Generic by design: any background process can push a badge here via
+   window.HaActivity.start(key, label) / .done(key) / .fail(key).
+
+   Visual vocabulary follows .skill-strip / .skill-badge (07-skills.css) so the
+   two strips read as siblings — same size, spacing, and separator treatment.
+   Distinguished by color: skills use --cool, activity uses --warm. */
+
+.activity-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-3);
+}
+
+.activity-strip:not(:empty) {
+  padding-right: var(--space-0-3);
+  border-right: var(--border-hair) solid var(--border);
+  margin-right: var(--space-0-1);
+}
+
+.activity-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0.12rem var(--space-0-4);
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--warm);
+  border: var(--border-hair) solid var(--warm);
+  animation: activityBadgeIn var(--motion-medium) var(--ease);
+}
+
+/* Terminal state: badge lingers briefly so a fast process is still perceivable,
+   then fades. JS removes the node after the fade completes. */
+.activity-badge.is-done {
+  color: var(--accent);
+  border-color: var(--accent-border);
+  animation: activityBadgeOut var(--motion-slow) var(--ease) forwards;
+}
+.activity-badge.is-failed {
+  color: var(--comp);
+  border-color: var(--comp);
+  animation: activityBadgeOut var(--motion-slow) var(--ease) forwards;
+}
+
+/* ---- Dither: 3-cell marching indicator ----
+   Reuses the ecosystem dither language (tab state, thought stream) at a size
+   that fits inline in a topbar badge. */
+.activity-dither {
+  display: inline-flex;
+  gap: 1px;
+}
+.activity-dither > span {
+  width: 2px;
+  height: 2px;
+  background: currentColor;
+  opacity: 0.2;
+  animation: activityDither 1.05s linear infinite;
+}
+.activity-dither > span:nth-child(1) { animation-delay: 0s; }
+.activity-dither > span:nth-child(2) { animation-delay: 0.35s; }
+.activity-dither > span:nth-child(3) { animation-delay: 0.7s; }
+
+/* Terminal states hold a solid indicator rather than marching. */
+.activity-badge.is-done .activity-dither > span,
+.activity-badge.is-failed .activity-dither > span {
+  animation: none;
+  opacity: 0.9;
+}
+
+@keyframes activityDither {
+  0%, 100% { opacity: 0.2; }
+  15%      { opacity: 1; }
+  40%      { opacity: 0.2; }
+}
+
+@keyframes activityBadgeIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes activityBadgeOut {
+  0%   { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ---- Tab title generating state ----
+   The tab whose title is being generated dims its placeholder title, so the
+   pending rename is visible at its destination — not only in the topbar.
+
+   Deliberately text-only: `.sidebar-tab-item` is a 2-column grid (dither,
+   title) with the close button absolutely positioned, so adding a third
+   in-flow indicator element would wrap to a new row. The animated indicator
+   lives in the topbar activity badge instead; here we only restyle text. */
+.sidebar-tab-item.title-pending .sidebar-tab-item-title {
+  color: var(--text-dim);
+}
+
+/* Title landing: brief highlight so the rename is perceivable rather than a
+   silent text swap. */
+@keyframes titleSettle {
+  0%   { color: var(--warm); }
+  100% { color: var(--text); }
+}
+.sidebar-tab-item.title-settled .sidebar-tab-item-title {
+  animation: titleSettle var(--motion-slow) var(--ease);
+}
+
+/* Topbar session title gets the same settle treatment. */
+.status-title.title-settled {
+  animation: titleSettle var(--motion-slow) var(--ease);
+}
+
+/* A manually renamed tab is locked against AI overwrite. Marked with a hairline
+   left rule on the title so the lock is discoverable rather than hidden state. */
+.sidebar-tab-item.title-locked .sidebar-tab-item-title {
+  border-left: var(--border-hair) solid var(--accent-border);
+  padding-left: var(--space-1);
+}
+
+/* ---- Reduced motion ----
+   zz-accessibility.css already collapses every animation globally (duration
+   0.001ms, iteration 1), so no `animation: none` is needed here. What that
+   global rule cannot do is fix the resting value: the dither keyframes end at
+   opacity 0.2, which leaves the indicator nearly invisible once the animation
+   is neutered. Raising the static opacity keeps it readable as a solid marker.
+   Fill-mode is unset, so the static value applies after the collapsed run. */
+@media (prefers-reduced-motion: reduce) {
+  .activity-dither > span {
+    opacity: 0.7;
+  }
+}
+html.a11y-reduce-motion .activity-dither > span {
+  opacity: 0.7;
+}

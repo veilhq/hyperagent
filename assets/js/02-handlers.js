@@ -16,7 +16,7 @@ function msgTime() {
 
 function appendUser(text) {
   var w = msgs.querySelector('.welcome');
-  if (w) { destroyWelcomeNoise(); w.remove(); }
+  if (w) { destroyWelcomeNoise(); w.classList.add('welcome-exit'); setTimeout(function() { if (w.parentNode) w.remove(); }, 200); }
   var el = document.createElement('div');
   el.className = 'msg msg-user';
   el.innerHTML = '<span class="msg-meta"><span class="msg-role">Operator</span><span class="msg-time">' + msgTime() + '</span></span>';
@@ -276,7 +276,7 @@ function toolIcon(name) {
   if (n.indexOf('health') > -1 || n.indexOf('validate') > -1 || n.indexOf('migrate') > -1) return '!';
   if (n.indexOf('session_brief') > -1 || n.indexOf('suggest_next') > -1 || n.indexOf('recent_activity') > -1 || n.indexOf('stale') > -1) return '.';
   if (n.indexOf('hyperspace') > -1 || n.indexOf('similar') > -1 || n.indexOf('hypervisor') > -1) return '*';
-  if (n.indexOf('subagent') > -1) return '⚡';
+  if (n.indexOf('subagent') > -1) return '※';
   if (n.indexOf('todo_list') > -1 || n.indexOf('goal') > -1) return '☰';
   if (n.indexOf('introspect') > -1) return '◉';
   return '+';
@@ -331,28 +331,58 @@ window.__acpToolHint = function(data) {
 };
 
 // --- Skill activation handler ---
+// `activeSkills` is per-tab render state (swapped by 08-tabs.js), but the
+// `#skill-strip` DOM node in the topbar is a single shared element across
+// all tabs. Appending directly to it from every tab's independent dedupe
+// map causes duplicate badges when the same skill fires in more than one
+// tab. `_isActiveTab`-gated appends (see 08-tabs.js) plus a strip rebuild
+// on tab switch keep the shared strip in sync with only the active tab's
+// activated skills.
 var activeSkills = {};
 
 function getSkillStrip() {
   return document.getElementById('skill-strip');
 }
 
+// Build (but do not insert) a badge element for a skill, tracked in the
+// current tab's activeSkills map. Returns the existing badge if the skill
+// was already activated in this tab (dedup), or null if name is falsy.
+function _buildSkillBadge(name, desc) {
+  if (activeSkills[name]) return activeSkills[name];
+  var badge = document.createElement('span');
+  badge.className = 'skill-badge';
+  badge.innerHTML = '<span class="skill-badge-icon">&#9670;</span>' + name;
+  badge.title = desc;
+  activeSkills[name] = badge;
+  return badge;
+}
+
+// Rebuild the shared topbar strip from the currently-active tab's
+// activeSkills map. Called on tab switch so background-tab activations
+// (tracked but not appended) become visible when their tab is focused,
+// and other tabs' badges disappear instead of accumulating.
+window._syncSkillStripToActiveTab = function() {
+  var strip = getSkillStrip();
+  if (!strip) return;
+  strip.innerHTML = '';
+  var names = Object.keys(activeSkills);
+  for (var i = 0; i < names.length; i++) {
+    strip.appendChild(activeSkills[names[i]]);
+  }
+};
+
 window.__acpSkillActivation = function(data) {
   var name = data.name || 'unknown';
   var desc = data.description || '';
-  var strip = getSkillStrip();
 
-  // Topbar badge (deduplicate by name)
-  if (!activeSkills[name] && strip) {
-    var badge = document.createElement('span');
-    badge.className = 'skill-badge';
-    badge.innerHTML = '<span class="skill-badge-icon">&#9670;</span>' + name;
-    badge.title = desc;
-    strip.appendChild(badge);
-    activeSkills[name] = badge;
-  }
+  // Track the badge in this tab's activeSkills map (dedup within the tab).
+  // Whether it gets appended to the shared topbar strip right now is
+  // decided by the caller: 08-tabs.js appends only when this is the active
+  // tab, and calls _syncSkillStripToActiveTab() on switch to surface
+  // badges tracked while a tab was in the background.
+  _buildSkillBadge(name, desc);
 
-  // Inline skill card in message stream
+  // Inline skill card in message stream (per-tab DOM, safe to always render)
   var card = document.createElement('div');
   card.className = 'skill-card';
   card.innerHTML = '<span class="skill-card-name">&#9670; ' + name + '</span>'
@@ -531,13 +561,16 @@ window.__acpUpdate = function(update) {
           }
           // Flash the error bar briefly as a notification
           var toolLabel = tc._toolData && tc._toolData.name ? tc._toolData.name : 'Tool';
-          errorBar.textContent = toolLabel + ' failed';
-          errorBar.classList.add('visible');
-          if (_toolFailTimer) clearTimeout(_toolFailTimer);
-          _toolFailTimer = setTimeout(function() {
-            // Only dismiss if it's still showing our tool failure message
-            if (errorBar.textContent.indexOf('failed') > -1) errorBar.classList.remove('visible');
-          }, 3000);
+          // Don't steal the bar from a crash that's offering a Reconnect action —
+          // a transient tool failure is far less important than the recovery path.
+          if (!window.HaErrorBar.hasAction()) {
+            window.HaErrorBar.setMessage(toolLabel + ' failed');
+            if (_toolFailTimer) clearTimeout(_toolFailTimer);
+            _toolFailTimer = setTimeout(function() {
+              // Only dismiss if it's still showing our tool failure message
+              if (window.HaErrorBar.getMessage().indexOf('failed') > -1) window.HaErrorBar.hide();
+            }, 3000);
+          }
         }
       }
       break;
@@ -688,15 +721,23 @@ window.__acpStateChange = function(data) {
       splashCrash.classList.add('hidden');
       setTimeout(function() { if (splashCrash.parentNode) splashCrash.parentNode.removeChild(splashCrash); }, 700);
     }
-    // Only set generic message if no specific error already displayed
-    if (!errorBar.classList.contains('visible')) {
-      errorBar.innerHTML = 'Connection lost. <a href="#" onclick="pywebview.api.reconnect();return false">Reconnect</a>';
-    } else if (errorBar.innerHTML.indexOf('Reconnect') === -1) {
-      errorBar.innerHTML += ' <a href="#" onclick="pywebview.api.reconnect();return false">Reconnect</a>';
+    // Only set a generic message if a specific error hasn't already been shown.
+    if (!window.HaErrorBar.getMessage()) {
+      window.HaErrorBar.setMessage('Connection lost.');
     }
-    errorBar.classList.add('visible');
-  } else {
-    errorBar.classList.remove('visible');
+    // The action lives in its own slot, so a subsequent __acpError message
+    // cannot destroy it. Reconnect is scoped to the tab that actually crashed
+    // rather than whichever tab happens to be active.
+    var crashedTabId = (data && data._tabId) || null;
+    window.HaErrorBar.setAction('Reconnect', function() {
+      window.HaErrorBar.setMessage('Reconnecting...');
+      window.HaErrorBar.clearAction();
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.reconnect) {
+        pywebview.api.reconnect(crashedTabId);
+      }
+    });
+  } else if (state === 'ready' || state === 'starting') {
+    window.HaErrorBar.hide();
   }
 };
 
@@ -704,8 +745,8 @@ window.__acpStateChange = function(data) {
 window.__acpError = function(data) {
   var msg = (data && data.error) ? String(data.error) : 'Unknown error';
   var source = (data && data.source) ? String(data.source) : '';
-  errorBar.classList.add('visible');
-  errorBar.textContent = msg;
+  // Message slot only — leaves any existing action (e.g. Reconnect) intact.
+  window.HaErrorBar.setMessage(msg);
   // Also mirror to the JS console so failures show up under devtools without
   // needing to reach for the hyperagent.log file.
   try { console.error('[acp-error]', source ? '(' + source + ')' : '', msg, data); } catch (e) {}

@@ -40,7 +40,7 @@ ICON_FILE = HYPERVISOR_DIR / "assets" / "ha-box.ico"
 # Structured logging (shared ecosystem logger)
 # ---------------------------------------------------------------------------
 
-sys.path.insert(0, str(HYPERSPACE_ROOT))
+sys.path.insert(0, str(HYPERSPACE_ROOT / ".hyperkit" / "python"))
 from hyper_logging import setup_logger, TRACE  # noqa: E402
 
 # Log level is env-configurable. Default is INFO — the lifecycle timeline.
@@ -166,6 +166,57 @@ def get_model_rates():
         return _MODEL_RATES_CACHE
 
 
+# ---------------------------------------------------------------------------
+# Title-subprocess crash correlation registry
+#
+# DIAGNOSTIC (see WI: ai-title crash triage). `_ai_title` spawns a third
+# kiro-cli process alongside the per-tab bridge processes. Bridge processes have
+# been observed segfaulting (0xC0000005 / 3221225786) ~5-7s after a title spawn.
+# The specific shared resource being corrupted is NOT yet proven — this registry
+# exists to establish whether the title subprocess is reliably in flight at the
+# moment bridges die, and how far into its lifetime the crash lands.
+#
+# Remove (or downgrade to TRACE) once the mechanism is confirmed and the
+# persistent utility-agent replacement lands.
+# ---------------------------------------------------------------------------
+
+_TITLE_INFLIGHT = {}          # pid -> dict(started, session_id, tab_states)
+_TITLE_INFLIGHT_LOCK = threading.Lock()
+_TITLE_SPAWN_SEQ = 0          # monotonic counter for correlating spawn/exit pairs
+
+
+def _title_inflight_register(pid, session_id, tab_states):
+    """Record a title subprocess as in flight. Returns its correlation seq."""
+    global _TITLE_SPAWN_SEQ
+    with _TITLE_INFLIGHT_LOCK:
+        _TITLE_SPAWN_SEQ += 1
+        seq = _TITLE_SPAWN_SEQ
+        _TITLE_INFLIGHT[pid] = {
+            "seq": seq,
+            "started": time.monotonic(),
+            "session_id": session_id,
+            "tab_states": tab_states,
+        }
+    return seq
+
+
+def _title_inflight_release(pid):
+    """Remove a title subprocess from the in-flight set. Returns its record."""
+    with _TITLE_INFLIGHT_LOCK:
+        return _TITLE_INFLIGHT.pop(pid, None)
+
+
+def _title_inflight_snapshot():
+    """Return a list of (pid, age_seconds, seq, session_id, tab_states) for all
+    currently in-flight title subprocesses. Used by the crash handler."""
+    now = time.monotonic()
+    with _TITLE_INFLIGHT_LOCK:
+        return [
+            (pid, round(now - rec["started"], 3), rec["seq"],
+             rec["session_id"], rec["tab_states"])
+            for pid, rec in _TITLE_INFLIGHT.items()
+        ]
+
 
 # ---------------------------------------------------------------------------
 # Skill metadata cache
@@ -210,15 +261,33 @@ _SKILL_MD_PATTERN = re.compile(r"[/\\]\.kiro[/\\]skills[/\\]([^/\\]+)[/\\]SKILL\
 # Auth helpers
 # ---------------------------------------------------------------------------
 
-def _check_auth():
-    """Return True if kiro-cli is already authenticated.
+AUTH_OK = True
+AUTH_NO = False
+AUTH_UNKNOWN = None   # exe transiently locked — auth state could not be determined
 
-    Retries transparently on WinError 32 (file lock) which can appear briefly
-    after a kiro-cli crash while Windows releases the .exe handle. A locked
-    executable is NOT an auth failure; distinguishing the two prevents a
-    cascading login-retry storm during recovery.
+
+def _check_auth():
+    """Determine kiro-cli auth state. Tri-state return:
+
+        True  (AUTH_OK)      — logged in
+        False (AUTH_NO)      — definitively not logged in
+        None  (AUTH_UNKNOWN) — could not determine; the .exe was locked
+
+    Why tri-state: immediately after a kiro-cli crash, Windows holds the .exe
+    open and every spawn raises WinError 32. The previous version collapsed that
+    into False, so callers concluded "not authenticated" and launched an
+    interactive login console during what was actually a crash recovery
+    (observed 2026-07-23T07:47 in hyperagent.log). A lock says nothing about
+    auth and must not be reported as a logout.
+
+    Backoff is sized from observed behavior: on 2026-07-28 the post-crash lock
+    outlived the old 5x200ms (1s) budget entirely and only cleared ~7s after the
+    crash. The schedule below spans ~7.75s for that reason — it tracks a measured
+    lock window, not a guess.
     """
-    for attempt in range(5):
+    delays = (0.25, 0.5, 1.0, 2.0, 4.0)
+    locked = False
+    for attempt, delay in enumerate(delays + (None,)):
         try:
             si = subprocess.STARTUPINFO()
             si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
@@ -227,21 +296,25 @@ def _check_auth():
                 ["kiro-cli", "whoami"],
                 capture_output=True, text=True, startupinfo=si, timeout=10
             )
-            return r.returncode == 0 and "Logged in" in r.stdout
+            return AUTH_OK if (r.returncode == 0 and "Logged in" in r.stdout) else AUTH_NO
         except OSError as e:
-            # WinError 32 → executable transiently locked (recent crash).
-            # Retry with short backoff; only treat as auth failure if it persists.
-            if getattr(e, "winerror", None) == 32 and attempt < 4:
-                logger.warning("_check_auth: exe locked (WinError 32), retry %d/4 in 200ms", attempt + 1)
-                time.sleep(0.2)
-                continue
+            if getattr(e, "winerror", None) == 32:
+                locked = True
+                if delay is not None:
+                    logger.warning(
+                        "_check_auth: exe locked (WinError 32), retry %d/%d in %.2fs",
+                        attempt + 1, len(delays), delay,
+                    )
+                    time.sleep(delay)
+                    continue
+                logger.warning("_check_auth: exe locked through full backoff (~7.75s) — auth state UNKNOWN")
+                return AUTH_UNKNOWN
             logger.error("_check_auth error (attempt %d): %s", attempt + 1, e)
-            return False
+            return AUTH_NO
         except Exception as e:
             logger.error("_check_auth error: %s", e)
-            return False
-    logger.error("_check_auth: exe locked through all retries, giving up")
-    return False
+            return AUTH_NO
+    return AUTH_UNKNOWN if locked else AUTH_NO
 
 
 def _do_login(window=None):
@@ -348,6 +421,11 @@ class ACPClient:
         self._available_models = []
         self._prompt_start = None  # timing anchor for prompt duration logs
         self._write_lock = threading.Lock()  # serialize socket writes (multi-threaded _send)
+        # Auto-recovery: bounded automatic restart after an unexpected child
+        # exit. Reset once the client reaches `ready` so a later, unrelated
+        # crash gets a fresh budget rather than inheriting an exhausted one.
+        self._auto_recover_attempts = 0
+        self._auto_recover_lock = threading.Lock()
 
     def _tab_ctx(self):
         """Return '[tab=abcdef]' prefix for logs. Empty string if no tab_id assigned."""
@@ -370,12 +448,24 @@ class ACPClient:
         # Auth gate: ensure login is valid before spawning the hidden subprocess.
         # This prevents kiro-cli from hanging/crashing inside the bridge due to
         # expired AWS credentials that need interactive login.
-        if not _check_auth():
+        #
+        # AUTH_UNKNOWN (exe locked) must NOT take the login path — during crash
+        # recovery the .exe is briefly held by the dying process, and launching a
+        # visible login console there is both wrong and disruptive. Proceed to
+        # spawn instead: if credentials really are bad, kiro-cli surfaces it
+        # through the normal error channel.
+        auth = _check_auth()
+        if auth is AUTH_UNKNOWN:
+            logger.warning(
+                "%sstart_process: auth state unknown (exe locked) — spawning anyway, "
+                "skipping login path", self._tab_ctx(),
+            )
+        elif auth is AUTH_NO:
             logger.warning("%sstart_process: not authenticated, triggering visible login", self._tab_ctx())
             if self._window:
                 self._push_js("__acpAuthRequired", {"url": None})
             success = _do_login_visible()
-            if not success or not _check_auth():
+            if not success or _check_auth() is not AUTH_OK:
                 logger.error("%sstart_process: login failed", self._tab_ctx())
                 self._state = "crashed"
                 if self._window:
@@ -433,6 +523,57 @@ class ACPClient:
         self.start_process()
         if self._window:
             self.connect()
+
+    AUTO_RECOVER_MAX = 2
+
+    def _auto_recover(self, exit_code):
+        """Attempt a bounded automatic restart after an unexpected child exit.
+
+        Recovery previously required the user to close and reopen the tab. This
+        makes the common case self-healing while keeping the manual Reconnect
+        action available as a fallback.
+
+        No sleep is needed before retrying: start_process() calls _check_auth(),
+        whose backoff already waits out the post-crash .exe lock (WinError 32)
+        that would otherwise make an immediate respawn fail.
+
+        Bounded to AUTO_RECOVER_MAX so a reproducible crash-on-start cannot
+        become a respawn loop. The counter resets on reaching `ready`.
+        """
+        with self._auto_recover_lock:
+            if self._auto_recover_attempts >= self.AUTO_RECOVER_MAX:
+                logger.warning(
+                    "%sauto-recover: budget exhausted (%d/%d), leaving crashed for manual reconnect",
+                    self._tab_ctx(), self._auto_recover_attempts, self.AUTO_RECOVER_MAX,
+                )
+                self._push_js("__acpRecovery", {
+                    "phase": "exhausted",
+                    "attempts": self._auto_recover_attempts,
+                    "exitCode": exit_code,
+                })
+                return
+            self._auto_recover_attempts += 1
+            attempt = self._auto_recover_attempts
+
+        logger.info("%sauto-recover: attempt %d/%d after exit code=%s",
+                    self._tab_ctx(), attempt, self.AUTO_RECOVER_MAX, exit_code)
+        self._push_js("__acpRecovery", {
+            "phase": "attempting",
+            "attempt": attempt,
+            "max": self.AUTO_RECOVER_MAX,
+            "exitCode": exit_code,
+        })
+
+        def _run():
+            try:
+                self.start()
+            except Exception as e:
+                logger.error("%sauto-recover: restart failed: %s", self._tab_ctx(), e)
+                self._state = "crashed"
+                self._push_state()
+                self._push_js("__acpRecovery", {"phase": "failed", "attempt": attempt})
+
+        threading.Thread(target=_run, daemon=True).start()
 
     def stop(self):
         self._state = "stopped"
@@ -735,6 +876,27 @@ class ACPClient:
         if method == "_bridge/child_exited":
             exit_code = msg.get("params", {}).get("exitCode")
             logger.warning("%skiro-cli exited: code=%s (state was %s)", self._tab_ctx(), exit_code, self._state)
+            # DIAGNOSTIC: correlate this exit against any in-flight title
+            # subprocess. 3221225786 == 0xC0000005 (access violation). If a
+            # title subprocess is reliably in flight here, that confirms the
+            # spawn as the trigger and justifies the utility-agent rework.
+            try:
+                _inflight = _title_inflight_snapshot()
+                if _inflight:
+                    for _pid, _age, _seq, _sid, _tabs in _inflight:
+                        logger.warning(
+                            "%sCRASH-CORRELATION code=%s | title subprocess IN FLIGHT "
+                            "seq=%d pid=%d age=%.3fs spawn_session=%s spawn_tabs=%s",
+                            self._tab_ctx(), exit_code, _seq, _pid, _age, _sid, _tabs,
+                        )
+                else:
+                    logger.warning(
+                        "%sCRASH-CORRELATION code=%s | no title subprocess in flight "
+                        "(last spawn seq=%d)",
+                        self._tab_ctx(), exit_code, _TITLE_SPAWN_SEQ,
+                    )
+            except Exception as _ce:
+                logger.error("%sCRASH-CORRELATION logging failed: %s", self._tab_ctx(), _ce)
             if self._state not in ("stopped", "crashed"):
                 self._state = "crashed"
                 self._push_state()
@@ -742,6 +904,9 @@ class ACPClient:
                     "error": f"kiro-cli exited (code={exit_code})",
                     "source": "child_exited",
                 })
+                # Self-heal rather than requiring the user to close and reopen
+                # the tab. Manual Reconnect remains available if this fails.
+                self._auto_recover(exit_code)
             return
         if method == "session/update":
             # Suppress all session updates after cancel until next prompt
@@ -911,6 +1076,14 @@ class ACPClient:
         if self._state != prev:
             logger.info("%sstate: %s -> %s", self._tab_ctx(), prev or "-", self._state)
             self._last_logged_state = self._state
+            # A successful recovery restores the auto-recover budget, so a later
+            # unrelated crash isn't denied a retry by an earlier one.
+            if self._state == "ready" and prev == "starting":
+                with self._auto_recover_lock:
+                    if self._auto_recover_attempts:
+                        logger.info("%sauto-recover: reached ready, resetting budget", self._tab_ctx())
+                        self._auto_recover_attempts = 0
+                        self._push_js("__acpRecovery", {"phase": "recovered"})
         self._push_js("__acpStateChange", {"state": self._state})
 
     # --- Session persistence ---
@@ -1343,6 +1516,19 @@ class HyperagentAPI:
             title = user_message.strip()[:30]
         return title or user_message[:30]
 
+    def _tab_state_snapshot(self):
+        """DIAGNOSTIC: compact snapshot of every tab's ACP state, for correlating
+        a title-subprocess spawn against bridge processes that later crash.
+        Returns e.g. {'658336': 'ready', '6d2de2': 'prompting'}."""
+        try:
+            return {
+                str(tid)[:6]: getattr(c, "_state", "?")
+                for tid, c in list(self._pool._clients.items())
+            }
+        except Exception as e:
+            logger.debug("_tab_state_snapshot failed: %s", e)
+            return {}
+
     def _ai_title(self, user_message, session_id=None):
         """Ask kiro-cli for a descriptive 2-5 word title. Returns None on failure.
 
@@ -1378,14 +1564,49 @@ class HyperagentAPI:
             si = subprocess.STARTUPINFO()
             si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             si.wShowWindow = subprocess.SW_HIDE
+
+            # DIAGNOSTIC: snapshot live bridge/tab state at spawn time so a
+            # subsequent crash can be correlated against what was running.
+            tab_states = self._tab_state_snapshot()
+
+            # Popen (not run) so we can capture the PID for crash correlation.
             # Force UTF-8 decoding — Windows default codepage mangles kiro-cli's
             # unicode footer glyphs (▸ •) into mojibake that leaks into titles.
-            result = subprocess.run(
+            proc = subprocess.Popen(
                 [kiro, "chat", "--no-interactive", prompt],
-                capture_output=True, text=True, timeout=60,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                 encoding="utf-8", errors="replace",
                 startupinfo=si,
                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+            )
+            seq = _title_inflight_register(proc.pid, session_id, tab_states)
+            logger.info(
+                "_ai_title SPAWN seq=%d pid=%d session=%s tabs=%s",
+                seq, proc.pid, session_id, tab_states,
+            )
+            _t0 = time.monotonic()
+            try:
+                stdout, stderr = proc.communicate(timeout=60)
+            except subprocess.TimeoutExpired:
+                # subprocess.run() kills on timeout; Popen does not. Match the
+                # old behavior so a hung title process can't linger and keep
+                # contending with the bridge processes.
+                logger.warning("_ai_title TIMEOUT seq=%d pid=%d — killing", seq, proc.pid)
+                try:
+                    proc.kill()
+                    proc.communicate(timeout=5)
+                except Exception as _ke:
+                    logger.error("_ai_title: kill failed pid=%d: %s", proc.pid, _ke)
+                raise
+            finally:
+                _rec = _title_inflight_release(proc.pid)
+                logger.info(
+                    "_ai_title EXIT  seq=%s pid=%d rc=%s dur=%.2fs",
+                    _rec["seq"] if _rec else "?", proc.pid,
+                    proc.returncode, time.monotonic() - _t0,
+                )
+            result = subprocess.CompletedProcess(
+                proc.args, proc.returncode, stdout, stderr
             )
             output = (result.stdout or "") + "\n" + (result.stderr or "")
             # Strip ANSI escape codes
@@ -1495,12 +1716,29 @@ class HyperagentAPI:
             return
 
         def _run():
+            _t0 = time.monotonic()
+            # Announce the background work so the UI can surface it. Title
+            # generation was previously invisible — the tab title just mutated
+            # some seconds after the first turn with no indication why.
+            client._push_js("__acpTitleActivity", {
+                "phase": "start",
+                "label": "title",
+            })
             try:
                 # Prefer an AI-generated 2-5 word title; fall back to heuristic
                 # if kiro-cli is unavailable, times out, or returns junk.
-                title = self._ai_title(user_message, session_id=client._session_id) or self._heuristic_title(user_message)
+                ai = self._ai_title(user_message, session_id=client._session_id)
+                title = ai or self._heuristic_title(user_message)
+                source = "ai" if ai else "heuristic"
 
-                client._push_js("__acpSessionTitle", {"title": title})
+                client._push_js("__acpSessionTitle", {"title": title, "source": source})
+                client._push_js("__acpTitleActivity", {
+                    "phase": "done",
+                    "label": "title",
+                    "title": title,
+                    "source": source,
+                    "durationMs": int((time.monotonic() - _t0) * 1000),
+                })
                 # Persist title for sidebar and tab
                 client._tab_title = title  # For tab persistence
                 if client._session_id:
@@ -1511,9 +1749,17 @@ class HyperagentAPI:
                     client._save_prefs(prefs)
                 self._pool.save_tab_state()
             except Exception as e:
-                logger.error(f"generate_title error: {e}")
+                logger.error("generate_title error: %s", e)
                 fallback = self._heuristic_title(user_message)
-                client._push_js("__acpSessionTitle", {"title": fallback})
+                client._push_js("__acpSessionTitle", {"title": fallback, "source": "heuristic"})
+                client._push_js("__acpTitleActivity", {
+                    "phase": "failed",
+                    "label": "title",
+                    "title": fallback,
+                    "source": "heuristic",
+                    "reason": str(e)[:200],
+                    "durationMs": int((time.monotonic() - _t0) * 1000),
+                })
         threading.Thread(target=_run, daemon=True).start()
 
     def reconnect(self, tab_id=None):
@@ -2004,7 +2250,10 @@ class HyperagentAPI:
 
     def list_sessions(self):
         """List sessions by reading metadata directly from the filesystem."""
-        if not _check_auth():
+        # Only a definitive AUTH_NO gates the list. AUTH_UNKNOWN (exe locked
+        # during crash recovery) would otherwise render a spurious "login
+        # required" sidebar while the user is simply mid-reconnect.
+        if _check_auth() is AUTH_NO:
             return {"sessions": [], "active": None, "auth_required": True}
         try:
             sessions_dir = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "sessions" / "cli"

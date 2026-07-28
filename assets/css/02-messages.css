@@ -339,6 +339,13 @@
   animation: fadeSlideIn var(--motion-slow) var(--ease) var(--motion-base) forwards,
              emote-glow 8s infinite ease-in-out;
 }
+/* Welcome exit — fade out when first message arrives */
+.welcome.welcome-exit {
+  opacity: 0;
+  transform: scale(0.97);
+  transition: opacity var(--motion-fast) var(--ease),
+              transform var(--motion-fast) var(--ease);
+}
 .welcome-prompts {
   display: flex;
   flex-wrap: wrap;

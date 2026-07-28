@@ -179,3 +179,44 @@
   padding: var(--space-2) var(--space-1-25);
 }
 .error-bar a { color: var(--bg); text-decoration: underline; }
+
+/* ---- Error bar slots ----
+   Two independent regions: message (flexible, truncates) and actions (fixed).
+   Separation is deliberate — the crash path writes the message and the action
+   from two different events, and a single node let the later write destroy the
+   earlier one. See window.HaErrorBar in 00-core.js. */
+.error-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.error-bar-msg {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.error-bar-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.error-bar-action {
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bg);
+  background: none;
+  border: var(--border-hair) solid var(--bg);
+  padding: 0.1rem var(--space-2);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+}
+.error-bar-action:hover {
+  background: var(--bg);
+  color: var(--comp);
+}

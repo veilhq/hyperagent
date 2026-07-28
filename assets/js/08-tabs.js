@@ -36,7 +36,17 @@ function _newRenderState() {
     currentThoughtBodyEl: null,
     currentThoughtCountEl: null,
     thoughtCharCount: 0,
-    thoughtIdleTimer: null
+    thoughtIdleTimer: null,
+    // Status-bar metrics (per-tab) — session credits/tokens/turns and the
+    // context-usage percentage. These were plain globals in 00-core.js
+    // shared across every tab; isolating them here (plus the resync in
+    // switchTab()) stops one tab's turn from updating the badge bar while
+    // a different tab is active.
+    sessionCredits: 0,
+    sessionTokensIn: 0,
+    sessionTokensOut: 0,
+    sessionTurns: 0,
+    ctxPercentage: null
   };
 }
 
@@ -66,7 +76,13 @@ function _saveRenderState(tabId) {
     currentThoughtBodyEl: currentThoughtBodyEl,
     currentThoughtCountEl: currentThoughtCountEl,
     thoughtCharCount: thoughtCharCount,
-    thoughtIdleTimer: thoughtIdleTimer
+    thoughtIdleTimer: thoughtIdleTimer,
+    // Status-bar metrics
+    sessionCredits: sessionCredits,
+    sessionTokensIn: sessionTokensIn,
+    sessionTokensOut: sessionTokensOut,
+    sessionTurns: sessionTurns,
+    ctxPercentage: ctxPercentage
   };
 }
 
@@ -95,6 +111,25 @@ function _loadRenderState(tabId) {
   currentThoughtCountEl = rs.currentThoughtCountEl;
   thoughtCharCount = rs.thoughtCharCount;
   thoughtIdleTimer = rs.thoughtIdleTimer;
+  // Restore status-bar metrics
+  sessionCredits = rs.sessionCredits;
+  sessionTokensIn = rs.sessionTokensIn;
+  sessionTokensOut = rs.sessionTokensOut;
+  sessionTurns = rs.sessionTurns;
+  ctxPercentage = rs.ctxPercentage;
+}
+
+// Push the currently-loaded tab's status metrics (session credits/tokens/
+// turns + context meter) into the shared badge-bar DOM. Must be called
+// after _loadRenderState() so the globals it reads are already the target
+// tab's values. Mirrors _syncSkillStripToActiveTab()'s role for skills.
+function _syncStatusMetricsToActiveTab() {
+  if (typeof updateStatusCenter === 'function') updateStatusCenter();
+  if (ctxPercentage == null) {
+    if (typeof clearCtxMeter === 'function') clearCtxMeter();
+  } else if (typeof updateCtxMeter === 'function') {
+    updateCtxMeter(ctxPercentage);
+  }
 }
 
 // Update task panel DOM to reflect the active tab's task state.
@@ -210,7 +245,7 @@ function _addTabToUI(tabId, title, sessionId) {
 
   // Create sidebar tab item — 3-column grid: [chip] [title] [close]
   var tabEl = document.createElement('div');
-  tabEl.className = 'sidebar-tab-item';
+  tabEl.className = 'hv-tab sidebar-tab-item';
   tabEl.setAttribute('data-tab-id', tabId);
   tabEl.innerHTML = '<span class="sidebar-tab-dither"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>'
     + '<span class="sidebar-tab-item-title">' + _escTabHtml(title || 'New Chat') + '</span>'
@@ -263,6 +298,16 @@ function switchTab(tabId) {
 
   // Load the new tab's render state
   _loadRenderState(tabId);
+
+  // Rebuild the shared topbar skill strip from this tab's own activeSkills
+  // map — clears badges left over from the previously active tab and
+  // surfaces any skills that activated while this tab was in the background.
+  if (window._syncSkillStripToActiveTab) window._syncSkillStripToActiveTab();
+
+  // Push this tab's own session credits/tokens/turns and context-usage
+  // percentage into the shared badge bar — otherwise the bar keeps
+  // showing whichever tab last finished a turn instead of the active tab.
+  _syncStatusMetricsToActiveTab();
 
   // Sync task panel DOM to the new active tab's task state
   _syncTaskPanelToActiveTab();
@@ -332,10 +377,14 @@ function closeTab(tabId) {
     pywebview.api.close_tab(tabId);
   }
 
-  // Remove DOM
-  tabs[tabId].el.remove();
-  tabs[tabId].msgsEl.remove();
+  // Animate sidebar tab out, then remove DOM
+  var tabEl = tabs[tabId].el;
+  var tabMsgs = tabs[tabId].msgsEl;
+  tabEl.classList.add('tab-removing');
+  tabMsgs.remove();
   delete tabs[tabId];
+
+  setTimeout(function() { if (tabEl.parentNode) tabEl.remove(); }, 200);
 
   // If this was the active tab, switch to another
   if (activeTabId === tabId) {
@@ -345,6 +394,13 @@ function closeTab(tabId) {
   }
 
   _updateTabBadge();
+
+  // The closed tab's session (if any) is no longer "open" — surface it back
+  // in the Sessions list immediately instead of waiting for the sidebar to
+  // be toggled closed/reopened.
+  if (typeof refreshSessions === 'function' && sidebar && sidebar.classList.contains('open')) {
+    refreshSessions();
+  }
 }
 
 function _escTabHtml(str) {
@@ -544,6 +600,9 @@ window.__acpSessionIdChanged = function(data) {
 
 window.__acpSessionTitle = function(data) {
   var tabId = data && data._tabId;
+  // Respect a manual rename — a generated title arriving after the user typed
+  // their own name must not overwrite it.
+  if (tabId && tabs[tabId] && tabs[tabId].titleLocked) return;
   // Update sidebar tab title
   if (tabId && tabs[tabId]) {
     var title = data.title || 'New Chat';
@@ -588,9 +647,18 @@ window.__acpSessionLoaded = function(data) {
 window.__acpSkillActivation = function(data) {
   if (_isActiveTab(data)) {
     if (_origAcpSkillActivation) _origAcpSkillActivation(data);
+    // Active tab (or legacy no-tab-routing case): surface immediately in
+    // the shared topbar strip. _origAcpSkillActivation only tracks the
+    // badge in activeSkills — appending is this wrapper's job so the
+    // shared strip always reflects just the active tab's skills.
+    if (window._syncSkillStripToActiveTab) window._syncSkillStripToActiveTab();
   } else {
     var tabId = data && data._tabId;
     if (tabId && tabs[tabId]) {
+      // Background tab: track the badge in that tab's own activeSkills
+      // map (via context swap) but do not touch the shared strip — it
+      // will be rebuilt from this tab's activeSkills when the user
+      // switches to it (see switchTab()).
       _withTabContext(tabId, function() {
         if (_origAcpSkillActivation) _origAcpSkillActivation(data);
       });
@@ -698,7 +766,7 @@ function _registerInitialTab(tabId) {
 
   // Create sidebar tab item for initial tab — 3-column grid: [chip] [title] [close]
   var tabEl = document.createElement('div');
-  tabEl.className = 'sidebar-tab-item active';
+  tabEl.className = 'hv-tab sidebar-tab-item active';
   tabEl.setAttribute('data-tab-id', tabId);
   tabEl.innerHTML = '<span class="sidebar-tab-dither"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>'
     + '<span class="sidebar-tab-item-title">New Chat</span>'
@@ -756,7 +824,17 @@ function _makeTabTitleEditable(tabEl, tabId) {
       titleEl.textContent = newTitle;
       titleEl.style.display = '';
       if (inp.parentNode) inp.parentNode.removeChild(inp);
-      if (tabs[tabId]) tabs[tabId].title = newTitle;
+      if (tabs[tabId]) {
+        tabs[tabId].title = newTitle;
+        // Lock the tab against AI title overwrite. Title generation runs in a
+        // background thread that can land seconds after the user renames, which
+        // previously clobbered the manual name with no indication why.
+        tabs[tabId].titleLocked = true;
+        tabEl.classList.add('title-locked');
+        tabEl.classList.remove('title-pending');
+      }
+      // A pending generation for this tab is now moot — drop its activity badge.
+      if (window.HaActivity) window.HaActivity.clear('title:' + tabId);
       // Persist via rename_session
       if (window.pywebview && window.pywebview.api && window.pywebview.api.rename_session) {
         pywebview.api.rename_session(null, newTitle);
