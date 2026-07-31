@@ -300,26 +300,9 @@ window.cancel = cancel;
 window.newSession = newSession;
 
 // --- Cursor companion box ---
+// Relocated to Hyperkit (WI-142 follow-up) — window.HvCursorBox is loaded
+// before this file. Edit the module in .hyperkit/js/cursor-box.js, not here.
 (function() {
-  var box = document.createElement('div');
-  box.className = 'cursor-box';
-  document.body.appendChild(box);
-  var CLICKABLE = 'a, button, [role="button"], .session-item, .session-item-title, .session-delete-btn, .search-close, .input-icon-btn, #send-btn, #cancel-btn, .msg-copy, .welcome-chip, .tool-card';
-  var hovering = false;
-  document.addEventListener('mousemove', function(e) {
-    box.style.left = (e.clientX + 14) + 'px';
-    box.style.top = (e.clientY - 4) + 'px';
-    var over = document.elementFromPoint(e.clientX, e.clientY);
-    var hit = over && over.closest(CLICKABLE);
-    if (hit && !hovering) { hovering = true; box.classList.add('visible'); }
-    else if (!hit && hovering) { hovering = false; box.classList.remove('visible', 'blink'); }
-  });
-  document.addEventListener('mousedown', function(e) {
-    var over = document.elementFromPoint(e.clientX, e.clientY);
-    if (!over || !over.closest(CLICKABLE)) return;
-    box.classList.remove('blink');
-    void box.offsetWidth;
-    box.classList.add('blink');
-    setTimeout(function() { box.classList.remove('blink'); }, 350);
-  });
+  if (!window.HvCursorBox) return;
+  HvCursorBox.start(document.body);
 })();

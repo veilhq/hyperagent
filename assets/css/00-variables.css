@@ -24,24 +24,8 @@ textarea, input[type="text"], input[type="search"] {
 *:disabled { cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23666666' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><path d='m4.9 4.9 14.2 14.2'/></svg>") 10 10, not-allowed !important; }
 
 /* ---- Cursor companion box ---- */
-.cursor-box {
-  position: fixed;
-  width: 8px;
-  height: 8px;
-  border: var(--border-hair) solid var(--cool);
-  background: transparent;
-  pointer-events: none;
-  z-index: var(--z-cursor);
-  opacity: 0;
-  transition: opacity var(--motion-fast) var(--ease), background var(--motion-tick) var(--ease);
-}
-.cursor-box.visible { opacity: 1; }
-.cursor-box.blink { animation: cursorBoxBlink var(--motion-slow) ease-out 1; }
-@keyframes cursorBoxBlink {
-  0%, 30%  { background: var(--cool); }
-  50%      { background: transparent; }
-  70%, 100% { background: var(--cool); }
-}
+/* Relocated to Hyperkit (.hyperkit/css/primitives.css) — was byte-identical
+   between Hypervisor and Hyperagent. Edit there, not here. */
 
 body {
   font-family: var(--font);

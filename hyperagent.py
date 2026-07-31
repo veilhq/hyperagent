@@ -218,6 +218,26 @@ def _title_inflight_snapshot():
         ]
 
 
+def _kill_inflight_title_subprocesses():
+    """Kill all in-flight title subprocesses and clear the registry.
+
+    Returns the number of processes killed. On Windows, os.kill(pid, 9) calls
+    TerminateProcess which immediately releases DLL handles held by the target.
+    """
+    killed = 0
+    with _TITLE_INFLIGHT_LOCK:
+        for pid in list(_TITLE_INFLIGHT.keys()):
+            try:
+                os.kill(pid, 9)
+                killed += 1
+                logger.info("_kill_inflight_title: terminated pid=%d", pid)
+            except OSError as e:
+                # Process already exited — not an error
+                logger.debug("_kill_inflight_title: pid=%d already gone: %s", pid, e)
+        _TITLE_INFLIGHT.clear()
+    return killed
+
+
 # ---------------------------------------------------------------------------
 # Skill metadata cache
 # ---------------------------------------------------------------------------
@@ -533,9 +553,14 @@ class ACPClient:
         makes the common case self-healing while keeping the manual Reconnect
         action available as a fallback.
 
-        No sleep is needed before retrying: start_process() calls _check_auth(),
-        whose backoff already waits out the post-crash .exe lock (WinError 32)
-        that would otherwise make an immediate respawn fail.
+        Before spawning, kills any in-flight title subprocesses and waits
+        briefly for Windows to release shared DLL handles. Exit code
+        0xC0000138 (DLL Not Found) is reliably correlated with a concurrent
+        title subprocess holding a DLL that the new kiro-cli process needs.
+
+        After title cleanup, start_process() calls _check_auth(), whose backoff
+        already waits out the post-crash .exe lock (WinError 32) that would
+        otherwise make an immediate respawn fail.
 
         Bounded to AUTO_RECOVER_MAX so a reproducible crash-on-start cannot
         become a respawn loop. The counter resets on reaching `ready`.
@@ -565,6 +590,16 @@ class ACPClient:
         })
 
         def _run():
+            # Kill any in-flight title subprocesses that may be holding shared
+            # DLLs. On Windows, concurrent kiro-cli processes contend over the
+            # same DLLs; 0xC0000138 crashes are reliably correlated with a
+            # title subprocess in flight at crash time.
+            killed = _kill_inflight_title_subprocesses()
+            if killed:
+                logger.info("%sauto-recover: killed %d title subprocess(es), waiting for DLL release",
+                            self._tab_ctx(), killed)
+                time.sleep(3)  # let Windows release DLL handles
+
             try:
                 self.start()
             except Exception as e:
@@ -749,7 +784,7 @@ class ACPClient:
             err = result["error"]
             err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
             self._push_js("__acpError", {"error": f"Prompt failed: {err_msg}", "source": "jsonrpc"})
-            logger.warning("%sprompt failed: %s", self._tab_ctx(), err_msg)
+            logger.error("%sprompt failed: %s | full payload: %s", self._tab_ctx(), err_msg, json.dumps(result))
         else:
             # An "internal error" from kiro-cli may arrive as a non-end_turn
             # stopReason rather than as a JSON-RPC error field. Anything outside
@@ -875,7 +910,7 @@ class ACPClient:
             return
         if method == "_bridge/child_exited":
             exit_code = msg.get("params", {}).get("exitCode")
-            logger.warning("%skiro-cli exited: code=%s (state was %s)", self._tab_ctx(), exit_code, self._state)
+            logger.error("%skiro-cli exited: code=%s (state was %s)", self._tab_ctx(), exit_code, self._state)
             # DIAGNOSTIC: correlate this exit against any in-flight title
             # subprocess. 3221225786 == 0xC0000005 (access violation). If a
             # title subprocess is reliably in flight here, that confirms the
@@ -884,13 +919,13 @@ class ACPClient:
                 _inflight = _title_inflight_snapshot()
                 if _inflight:
                     for _pid, _age, _seq, _sid, _tabs in _inflight:
-                        logger.warning(
+                        logger.error(
                             "%sCRASH-CORRELATION code=%s | title subprocess IN FLIGHT "
                             "seq=%d pid=%d age=%.3fs spawn_session=%s spawn_tabs=%s",
                             self._tab_ctx(), exit_code, _seq, _pid, _age, _sid, _tabs,
                         )
                 else:
-                    logger.warning(
+                    logger.error(
                         "%sCRASH-CORRELATION code=%s | no title subprocess in flight "
                         "(last spawn seq=%d)",
                         self._tab_ctx(), exit_code, _TITLE_SPAWN_SEQ,
@@ -1923,42 +1958,38 @@ class HyperagentAPI:
 
     # --- Gradient map presets (mirrors theme.js GRADIENT_MAPS) ---
     GRADIENT_MAPS = {
-        "phosphor": {"accent": "#00ff41", "warm": "#ffb000", "cool": "#00cccc", "comp": "#ff3333",
-                     "semantics": {"success": "#00ff41", "warning": "#ffb000", "error": "#ff3333", "info": "#00cccc"}},
-        "blade-runner": {"accent": "#ff6ac1", "warm": "#ffd700", "cool": "#7dcfff", "comp": "#ff2e63",
-                         "semantics": {"success": "#5af78e", "warning": "#ffd700", "error": "#ff2e63", "info": "#7dcfff"}},
-        "ocean-depth": {"accent": "#00bfff", "warm": "#f0a500", "cool": "#4de0d0", "comp": "#ff6b6b",
-                        "semantics": {"success": "#4de0d0", "warning": "#f0a500", "error": "#ff6b6b", "info": "#00bfff"}},
-        "amber-terminal": {"accent": "#ffb000", "warm": "#ff6b35", "cool": "#ffe066", "comp": "#ff4444",
-                           "semantics": {"success": "#7ddb57", "warning": "#ffe066", "error": "#ff4444", "info": "#66ccff"}},
-        "ultraviolet": {"accent": "#b266ff", "warm": "#ff66b2", "cool": "#66ccff", "comp": "#ff4466",
-                        "semantics": {"success": "#66ffb2", "warning": "#ffcc66", "error": "#ff4466", "info": "#66ccff"}},
-        "solar-flare": {"accent": "#ff6600", "warm": "#ff3366", "cool": "#ffcc00", "comp": "#ff0044",
-                        "semantics": {"success": "#66ff66", "warning": "#ffcc00", "error": "#ff0044", "info": "#33ccff"}},
-        "arctic": {"accent": "#66ffee", "warm": "#aaddff", "cool": "#88ffcc", "comp": "#ff6688",
-                   "semantics": {"success": "#88ffcc", "warning": "#ffdd66", "error": "#ff6688", "info": "#66ffee"}},
-        "neon-noir": {"accent": "#39ff14", "warm": "#ff073a", "cool": "#00fff7", "comp": "#ff00ff",
-                      "semantics": {"success": "#39ff14", "warning": "#ffdd00", "error": "#ff073a", "info": "#00fff7"}},
-        "rust": {"accent": "#e65c00", "warm": "#e04000", "cool": "#ff9933", "comp": "#ff2200",
-                 "semantics": {"success": "#66cc66", "warning": "#ff9933", "error": "#ff2200", "info": "#5599cc"}},
-        "synthwave": {"accent": "#f72585", "warm": "#b44aff", "cool": "#4cc9f0", "comp": "#ff006e",
-                      "semantics": {"success": "#72efdd", "warning": "#ffc300", "error": "#ff006e", "info": "#4cc9f0"}},
-        "dracula": {"accent": "#bd93f9", "warm": "#ff79c6", "cool": "#8be9fd", "comp": "#ff5555",
-                    "semantics": {"success": "#50fa7b", "warning": "#f1fa8c", "error": "#ff5555", "info": "#8be9fd"}},
-        "monokai": {"accent": "#a6e22e", "warm": "#fd971f", "cool": "#66d9ef", "comp": "#f92672",
-                    "semantics": {"success": "#a6e22e", "warning": "#e6db74", "error": "#f92672", "info": "#66d9ef"}},
-        "gruvbox": {"accent": "#fabd2f", "warm": "#fe8019", "cool": "#83a598", "comp": "#fb4934",
-                    "semantics": {"success": "#b8bb26", "warning": "#fabd2f", "error": "#fb4934", "info": "#83a598"}},
-        "catppuccin": {"accent": "#cba6f7", "warm": "#f9e2af", "cool": "#89dceb", "comp": "#f38ba8",
-                       "semantics": {"success": "#a6e3a1", "warning": "#f9e2af", "error": "#f38ba8", "info": "#89dceb"}},
-        "nord": {"accent": "#88c0d0", "warm": "#ebcb8b", "cool": "#a3be8c", "comp": "#bf616a",
-                 "semantics": {"success": "#a3be8c", "warning": "#ebcb8b", "error": "#bf616a", "info": "#88c0d0"}},
-        "tokyo-night": {"accent": "#7aa2f7", "warm": "#e0af68", "cool": "#73daca", "comp": "#f7768e",
-                        "semantics": {"success": "#9ece6a", "warning": "#e0af68", "error": "#f7768e", "info": "#7aa2f7"}},
+        "frost2": {"accent": "#d2ebfe", "warm": "#c0caff", "cool": "#ceb0e4", "comp": "#ff0059",
+                    "semantics": {"success": "#1dff7d", "warning": "#fdca18", "error": "#fb110b", "info": "#1be1fd"}},
         "cyberdeck": {"accent": "#00ff9f", "warm": "#ffe600", "cool": "#00e5ff", "comp": "#ff003c",
-                      "semantics": {"success": "#00ff9f", "warning": "#ffe600", "error": "#ff003c", "info": "#00e5ff"}},
-        "vaporwave": {"accent": "#ff71ce", "warm": "#b967ff", "cool": "#01cdfe", "comp": "#ff71ce",
-                      "semantics": {"success": "#05ffa1", "warning": "#fffb96", "error": "#ff71ce", "info": "#01cdfe"}},
+                       "semantics": {"success": "#1efea0", "warning": "#fee51b", "error": "#fc113e", "info": "#1de5fe"}},
+        "thermal": {"accent": "#ffc250", "warm": "#fb5a46", "cool": "#5480c7", "comp": "#d10054",
+                     "semantics": {"success": "#21ff7b", "warning": "#fdca18", "error": "#fd1369", "info": "#086ffd"}},
+        "tundra": {"accent": "#d2ebfe", "warm": "#c0caff", "cool": "#ceb0e4", "comp": "#c8ff5c",
+                    "semantics": {"success": "#bffe1c", "warning": "#fdb015", "error": "#fd154c", "info": "#1be1fd"}},
+        "cryo": {"accent": "#d2ebfe", "warm": "#c8d8ff", "cool": "#c0b8e8", "comp": "#a855f7",
+                  "semantics": {"success": "#1efea1", "warning": "#fdb015", "error": "#fd154c", "info": "#a01efd"}},
+        "nordic": {"accent": "#b8ccd8", "warm": "#a8b8c8", "cool": "#c0d0dc", "comp": "#ffb000",
+                    "semantics": {"success": "#1dfd91", "warning": "#fdb015", "error": "#fc5c0d", "info": "#0f9afc"}},
+        "frostbite": {"accent": "#c2e8ff", "warm": "#a0d0f0", "cool": "#8ac0e8", "comp": "#00c0ff",
+                       "semantics": {"success": "#1efea1", "warning": "#fdb015", "error": "#fd154c", "info": "#15bffc"}},
+        "hazmat": {"accent": "#c8ff00", "warm": "#ffea00", "cool": "#00ff88", "comp": "#ff00cc",
+                    "semantics": {"success": "#c8fe1c", "warning": "#ffea1c", "error": "#fe13cb", "info": "#15c1fd"}},
+        "laser": {"accent": "#00ff41", "warm": "#ff0044", "cool": "#0044ff", "comp": "#8b00ff",
+                   "semantics": {"success": "#1dfd46", "warning": "#ffea1c", "error": "#fc1145", "info": "#1f5efc"}},
+        "prism": {"accent": "#ff2020", "warm": "#ffea00", "cool": "#00e0ff", "comp": "#ff00e5",
+                   "semantics": {"success": "#1dfd49", "warning": "#ffea1c", "error": "#fd151a", "info": "#1adffd"}},
+        "emergency": {"accent": "#ff5500", "warm": "#ffd500", "cool": "#00ff44", "comp": "#ff003c",
+                       "semantics": {"success": "#1dfd49", "warning": "#fdd419", "error": "#fc113e", "info": "#15c1fd"}},
+        "ignite": {"accent": "#4a4a4a", "warm": "#ff6600", "cool": "#ffea00", "comp": "#ff003c",
+                    "semantics": {"success": "#1dfd49", "warning": "#ffea1c", "error": "#fc113e", "info": "#15c1fd"}},
+        "bloom": {"accent": "#4a4a4a", "warm": "#ff00d4", "cool": "#a855f7", "comp": "#ff77e9",
+                   "semantics": {"success": "#1dfe8a", "warning": "#ffea1c", "error": "#fe18d3", "info": "#a01efd"}},
+        "verdigris": {"accent": "#4a4a4a", "warm": "#00ff88", "cool": "#00e0ff", "comp": "#c8ff00",
+                       "semantics": {"success": "#1dfe8a", "warning": "#fdca18", "error": "#fd154c", "info": "#1adffd"}},
+        "spectra": {"accent": "#4a4a4a", "warm": "#ff2020", "cool": "#00e0ff", "comp": "#c8ff00",
+                     "semantics": {"success": "#c8fe1c", "warning": "#ffea1c", "error": "#fd151a", "info": "#1adffd"}},
+        "coldsnap": {"accent": "#4a4a4a", "warm": "#7cffb0", "cool": "#7a8cff", "comp": "#c0a0ff",
+                      "semantics": {"success": "#1dfd95", "warning": "#ffea1c", "error": "#fd154c", "info": "#5155fd"}},
     }
 
     def get_accent(self):
