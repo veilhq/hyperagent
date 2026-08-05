@@ -3,6 +3,17 @@
 function send() {
   var text = input.value.trim();
   if (!text) return;
+
+  // /hs prefix: run semantic search locally without agent round-trip
+  if (text.toLowerCase().startsWith('/hs ')) {
+    var hsQuery = text.slice(4).trim();
+    if (!hsQuery) return;
+    input.value = '';
+    input.style.height = 'auto';
+    _handleHsSearch(hsQuery);
+    return;
+  }
+
   // If currently prompting, cancel first then send (interrupt)
   if (state === 'prompting') {
     input.value = '';
@@ -298,6 +309,84 @@ cancelBtn.addEventListener('click', cancel);
 window.send = send;
 window.cancel = cancel;
 window.newSession = newSession;
+
+// --- Launch Hypereye ---
+function launchHypereye() {
+  if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.launch_hypereye) {
+    if (window.HvToast) HvToast.show({ variant: 'warn', message: 'Hypereye launch requires the desktop app' });
+    return;
+  }
+  window.pywebview.api.launch_hypereye().then(function (result) {
+    if (result && result.ok) {
+      if (window.HvToast) HvToast.show({ variant: 'ok', message: 'Hypereye launched' });
+    } else {
+      if (window.HvToast) HvToast.show({ variant: 'error', message: 'Failed: ' + (result && result.error || 'unknown') });
+    }
+  });
+}
+window.launchHypereye = launchHypereye;
+
+// --- /hs prefix: zero-token semantic search (no agent round-trip) ---
+function _handleHsSearch(query) {
+  if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.semantic_search) {
+    if (window.HvToast) HvToast.show({ variant: 'warn', message: '/hs requires the desktop app bridge' });
+    return;
+  }
+
+  // Show the query as a user message styled differently
+  var el = document.createElement('div');
+  el.className = 'msg msg-user msg-hs';
+  el.innerHTML = '<span class="msg-meta"><span class="msg-role">/hs</span></span>';
+  var body = document.createElement('span');
+  body.className = 'msg-body';
+  body.textContent = query;
+  el.appendChild(body);
+  msgs.appendChild(el);
+  scrollBottom();
+
+  // Run the search
+  pywebview.api.semantic_search(query, 5).then(function(results) {
+    var panel = document.createElement('div');
+    panel.className = 'hs-results';
+
+    if (!results || !results.length) {
+      panel.innerHTML = '<div class="hs-empty">no semantic matches</div>';
+    } else {
+      var header = document.createElement('div');
+      header.className = 'hs-header';
+      header.textContent = results.length + ' match' + (results.length > 1 ? 'es' : '');
+      panel.appendChild(header);
+
+      for (var i = 0; i < results.length; i++) {
+        var r = results[i];
+        var row = document.createElement('div');
+        row.className = 'hs-result';
+        var path = r.path || '';
+        var section = r.section ? ' §' + r.section : '';
+        var score = r.similarity != null ? r.similarity.toFixed(2) : '';
+        var snippet = r.content ? r.content.substring(0, 150) : '';
+        if (r.content && r.content.length > 150) snippet += '...';
+        row.innerHTML =
+          '<div class="hs-result-header">' +
+            '<span class="hv-chip hv-chip-outlined-muted">' + path.split('/').pop().replace('.md', '') + '</span>' +
+            '<span class="hs-section">' + section + '</span>' +
+            '<span class="hs-score">' + score + '</span>' +
+          '</div>' +
+          '<div class="hs-snippet">' + snippet + '</div>';
+        panel.appendChild(row);
+      }
+    }
+
+    msgs.appendChild(panel);
+    scrollBottom();
+  }).catch(function(err) {
+    var errPanel = document.createElement('div');
+    errPanel.className = 'hs-results';
+    errPanel.innerHTML = '<div class="hs-empty">search failed</div>';
+    msgs.appendChild(errPanel);
+    scrollBottom();
+  });
+}
 
 // --- Cursor companion box ---
 // Relocated to Hyperkit (WI-142 follow-up) — window.HvCursorBox is loaded

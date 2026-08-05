@@ -214,3 +214,99 @@ window.__acpRecovery = function (data) {
     }
   }
 };
+
+
+/* ---- Self-update detection (0xC0000138) ----
+   Pushed by ACPClient._handle_update_restart() when kiro-cli exits with
+   STATUS_DLL_NOT_FOUND — the signature of the auto-updater replacing the
+   binary in-place. Shows a calm "updating" banner instead of the alarming
+   crash state, and auto-dismisses once the tab reaches ready.
+
+   Phases: waiting | reconnecting | timeout */
+
+window.__acpUpdating = function (data) {
+  if (!data) return;
+  var phase = data.phase;
+  var key = 'update:' + (data._tabId || 'active');
+
+  if (phase === 'waiting') {
+    window.HaActivity.start(key, 'updating');
+    if (window.HaErrorBar) {
+      var msg = 'Kiro CLI is updating';
+      if (data.poll && data.max) {
+        msg += ' (' + data.poll + '/' + data.max + ')';
+      }
+      msg += ' — will reconnect automatically';
+      window.HaErrorBar.setMessage(msg);
+      window.HaErrorBar.clearAction();
+    }
+    // Add updating class to error bar for calm styling
+    if (errorBar) errorBar.classList.add('is-updating');
+    return;
+  }
+
+  if (phase === 'reconnecting') {
+    window.HaActivity.start(key, 'reconnecting');
+    if (window.HaErrorBar) {
+      window.HaErrorBar.setMessage('Update complete — reconnecting...');
+      window.HaErrorBar.clearAction();
+    }
+    return;
+  }
+
+  if (phase === 'timeout') {
+    window.HaActivity.fail(key);
+    if (errorBar) errorBar.classList.remove('is-updating');
+    if (window.HaErrorBar) {
+      window.HaErrorBar.setMessage('Update timed out — kiro-cli may still be installing.');
+      var tabId = data._tabId || null;
+      window.HaErrorBar.setAction('Reconnect', function () {
+        window.HaErrorBar.setMessage('Reconnecting...');
+        window.HaErrorBar.clearAction();
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.reconnect) {
+          pywebview.api.reconnect(tabId);
+        }
+      });
+    }
+    if (window.HvToast) {
+      window.HvToast.show({ variant: 'error', message: 'Update timeout — try Reconnect' });
+    }
+  }
+};
+
+/* Hook into __acpStateChange to clean up updating UI when ready is reached. */
+(function () {
+  var _origStateChange = window.__acpStateChange;
+  window.__acpStateChange = function (data) {
+    // Dismiss updating banner on successful reconnect
+    if (data && data.state === 'ready' && errorBar && errorBar.classList.contains('is-updating')) {
+      errorBar.classList.remove('is-updating');
+      window.HaActivity.done('update:' + (data._tabId || 'active'));
+      // Toast with version if available (set by __acpCliVersion which fires just before this)
+      var ver = window._kiroCliVersion || '';
+      var msg = ver ? 'Updated to v' + ver : 'Updated and reconnected';
+      if (window.HvToast) {
+        window.HvToast.show({ variant: 'success', message: msg });
+      }
+    }
+    // Delegate to original handler
+    if (_origStateChange) _origStateChange(data);
+  };
+})();
+
+
+/* ---- CLI version badge ----
+   Pushed by ACPClient._push_state() on every ready transition.
+   Populates the #cli-version chip in the status cluster. */
+
+window._kiroCliVersion = '';
+
+window.__acpCliVersion = function (data) {
+  if (!data || !data.version) return;
+  window._kiroCliVersion = data.version;
+  var badge = document.getElementById('cli-version');
+  if (badge) {
+    badge.textContent = 'v' + data.version;
+    badge.title = 'Kiro CLI v' + data.version;
+  }
+};

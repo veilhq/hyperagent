@@ -291,9 +291,10 @@
   border: var(--border-hair) solid var(--border);
   background: var(--bg-card);
   cursor: pointer;
-  transition: background var(--motion-fast) var(--ease),
-              border-color var(--motion-fast) var(--ease),
-              transform var(--motion-fast) var(--ease),
+  transition: transform var(--motion-base) var(--ease),
+              border-color var(--motion-base) var(--ease),
+              box-shadow var(--motion-base) var(--ease),
+              background var(--motion-fast) var(--ease),
               opacity var(--motion-base) var(--ease);
 }
 .session-item.stagger-in {
@@ -306,8 +307,6 @@
 }
 .session-item:hover {
   background: var(--bg-card-hover);
-  border-color: var(--accent-border);
-  transform: translateY(-1px);
 }
 .session-item:hover .session-item-title { color: var(--accent); }
 .session-item.active {

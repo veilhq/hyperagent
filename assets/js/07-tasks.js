@@ -10,7 +10,7 @@ function createTaskPanel() {
   taskPanel = document.createElement('div');
   taskPanel.id = 'task-panel';
   taskPanel.className = 'task-panel';
-  taskPanel.innerHTML = '<div class="task-panel-header">Tasks</div><div class="task-panel-body" id="task-panel-body"></div>';
+  taskPanel.innerHTML = '<div class="hv-panel-header task-panel-header">Tasks</div><div class="task-panel-body" id="task-panel-body"></div>';
   // Toggle collapse on header click
   taskPanel.querySelector('.task-panel-header').addEventListener('click', function() {
     taskPanel.classList.toggle('collapsed');

@@ -68,8 +68,6 @@
   padding: 0.5rem 0.75rem;
   border-bottom: 1px solid var(--accent-border);
   font-size: 0.6rem;
-  color: var(--text-dim);
-  text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 

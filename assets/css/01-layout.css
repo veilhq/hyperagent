@@ -88,6 +88,17 @@
 }
 .status-center-item:empty { display: none; }
 
+/* ---- CLI version badge — quiet muted outline, hidden until populated ---- */
+.cli-version {
+  color: var(--text-dim);
+  background: transparent;
+  border-color: var(--border);
+  text-transform: none;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+.cli-version:empty { display: none; }
+
 /* ---- plan credits label — filled, state color reflects usage ---- */
 .plan-credits-label {
   color: var(--bg);
@@ -117,7 +128,7 @@
   color: var(--accent);
   border-color: var(--accent);
 }
-.plan-credits-refresh.spinning {
+.plan-credits-refresh.spinning svg {
   animation: spin 0.6s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -161,11 +172,19 @@
 .ctx-meter-fill.warn     { background: var(--warm); }
 .ctx-meter-fill.critical { background: var(--comp); }
 
-/* Error bar */
+/* Error bar
+   The bar is the first flow element in #app, so it shares the top band with
+   the position:fixed .status-cluster. Without a reservation the bar's
+   right-aligned actions (e.g. RECONNECT on a crash) render underneath the
+   cluster's chips — the model picker in particular — making them unclickable.
+   --ha-cluster-w is measured from the live cluster in 00-core.js (it changes
+   width with the model name, skill strip, and credits chip) and reserved here
+   as padding so both the message and the actions stay clear of it. */
 .error-bar {
   max-height: 0;
   overflow: hidden;
-  padding: 0 var(--space-1-25);
+  padding-left: var(--space-1-25);
+  padding-right: calc(var(--ha-cluster-w, 0px) + var(--space-1-25));
   background: var(--comp);
   color: var(--bg);
   font-size: 0.68rem;
@@ -176,7 +195,8 @@
 .error-bar.visible {
   max-height: 3rem;
   opacity: 1;
-  padding: var(--space-2) var(--space-1-25);
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-2);
 }
 .error-bar a { color: var(--bg); text-decoration: underline; }
 
@@ -219,4 +239,21 @@
 .error-bar-action:hover {
   background: var(--bg);
   color: var(--comp);
+}
+
+/* ---- Update-in-progress (calm variant) ----
+   When kiro-cli is self-updating, the error bar recolors from alarming red to
+   muted accent — signals "routine, wait a moment" rather than "something broke". */
+.error-bar.is-updating {
+  background: var(--surface-1);
+  color: var(--text);
+  border-bottom: var(--border-hair) solid var(--accent-border);
+}
+.error-bar.is-updating .error-bar-action {
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+.error-bar.is-updating .error-bar-action:hover {
+  background: var(--accent);
+  color: var(--bg);
 }

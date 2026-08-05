@@ -96,6 +96,28 @@ window.HaErrorBar = {
     if (errorBarActions) errorBarActions.textContent = '';
   }
 };
+
+/* Keep --ha-cluster-w in sync with the fixed status cluster's real width.
+   The error bar shares the top band with the cluster, so it reserves this
+   width as padding-right (see .error-bar in 01-layout.css) to stop its
+   RECONNECT action from rendering underneath the model picker. The cluster
+   resizes whenever the model name, skill strip, or credits chip changes,
+   hence the observer rather than a one-shot measurement. */
+(function () {
+  var cluster = $('.status-cluster');
+  if (!cluster) return;
+  function sync() {
+    document.documentElement.style.setProperty(
+      '--ha-cluster-w', Math.ceil(cluster.getBoundingClientRect().width) + 'px'
+    );
+  }
+  sync();
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(sync).observe(cluster);
+  } else {
+    window.addEventListener('resize', sync);
+  }
+})();
 const app = $('#app');
 const ctxLabel = $('#ctx-label');
 const ctxFill = $('#ctx-fill');

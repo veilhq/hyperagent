@@ -39,12 +39,13 @@
         <svg class="model-picker-caret" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="model-picker-dropdown hv-dropdown" id="model-picker-dropdown" hidden>
-        <div class="model-picker-header">
+        <div class="hv-panel-header model-picker-header">
           <span class="model-picker-default-label">default: <span id="model-picker-default">—</span></span>
         </div>
         <div class="model-picker-list" id="model-picker-list"></div>
       </div>
     </div>
+    <span class="ha-cluster-chip cli-version" id="cli-version" title="Kiro CLI version"></span>
   </div>
   <div class="error-bar"><span class="error-bar-msg"></span><span class="error-bar-actions"></span></div>
   <div class="main-layout">
@@ -77,6 +78,10 @@
     <button class="input-icon-btn" onclick="createTab()" title="New tab (Ctrl+T)">
       <!-- Lucide plus (stroke 1.5, round caps) -->
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+    </button>
+    <button class="input-icon-btn" id="hypereye-btn" onclick="launchHypereye()" title="Launch Hypereye">
+      <!-- Lucide eye (stroke 1.5, round caps) -->
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
     </button>
     <div class="input-wrap">
       <textarea id="input" class="hv-input" rows="1" placeholder="Message Hyperagent..."></textarea>

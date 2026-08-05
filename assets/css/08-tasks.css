@@ -26,14 +26,8 @@
 .task-panel-header {
   padding: var(--space-0-4) var(--space-0-6);
   font-size: 0.6rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
   color: var(--text-muted);
-  border-bottom: var(--border-hair) solid var(--border);
   cursor: var(--cursor-pointer);
-  display: flex;
-  align-items: center;
   justify-content: space-between;
   user-select: none;
 }

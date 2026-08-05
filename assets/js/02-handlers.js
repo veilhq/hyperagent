@@ -9,6 +9,62 @@ function collapseToolRow() {
   }
 }
 
+function _renderTraceCard() {
+  // Collect semantic_search results from this turn's tool cards
+  var sources = [];
+  for (var id in toolCards) {
+    var card = toolCards[id];
+    if (!card || !card._toolData) continue;
+    var name = (card._toolData.name || '').toLowerCase();
+    if (name !== 'semantic_search') continue;
+    var output = card._toolData.output;
+    if (!output) continue;
+    var items = [];
+    try { items = typeof output === 'string' ? JSON.parse(output) : output; } catch (e) { continue; }
+    if (!Array.isArray(items)) {
+      // MCP returns [{content:[{text:"[...]"}]}] — unwrap if nested
+      if (items.content && Array.isArray(items.content)) {
+        for (var ci = 0; ci < items.content.length; ci++) {
+          try { items = JSON.parse(items.content[ci].text || '[]'); } catch (e2) { items = []; }
+        }
+      } else { continue; }
+    }
+    for (var j = 0; j < items.length; j++) sources.push(items[j]);
+  }
+  if (!sources.length) return;
+
+  var trace = document.createElement('div');
+  trace.className = 'trace-card';
+
+  var header = document.createElement('div');
+  header.className = 'trace-header';
+  header.innerHTML = '<span class="trace-toggle">&#9656;</span> TRACE [' + sources.length + ']';
+  header.addEventListener('click', function () {
+    trace.classList.toggle('trace-expanded');
+    header.querySelector('.trace-toggle').innerHTML = trace.classList.contains('trace-expanded') ? '&#9662;' : '&#9656;';
+  });
+  trace.appendChild(header);
+
+  var body = document.createElement('div');
+  body.className = 'trace-body';
+  for (var k = 0; k < sources.length; k++) {
+    var s = sources[k];
+    var row = document.createElement('div');
+    row.className = 'trace-source';
+    var path = s.path || '';
+    var section = s.section ? ' §' + s.section : '';
+    var score = s.similarity != null ? s.similarity.toFixed(2) : '';
+    row.innerHTML =
+      '<span class="hv-chip hv-chip-outlined-muted trace-chip">' + path.split('/').pop().replace('.md', '') + '</span>' +
+      '<span class="trace-section">' + section + '</span>' +
+      '<span class="trace-dots"></span>' +
+      '<span class="trace-score">' + score + '</span>';
+    body.appendChild(row);
+  }
+  trace.appendChild(body);
+  msgs.appendChild(trace);
+}
+
 function msgTime() {
   var d = new Date();
   return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
@@ -19,7 +75,7 @@ function appendUser(text) {
   if (w) { destroyWelcomeNoise(); w.classList.add('welcome-exit'); setTimeout(function() { if (w.parentNode) w.remove(); }, 200); }
   var el = document.createElement('div');
   el.className = 'msg msg-user';
-  el.innerHTML = '<span class="msg-meta"><span class="msg-role">Operator</span><span class="msg-time">' + msgTime() + '</span></span>';
+  el.innerHTML = '<span class="msg-meta"><span class="msg-role">(一︿一+ )</span><span class="msg-time">' + msgTime() + '</span></span>';
   var body = document.createElement('span');
   body.className = 'msg-body';
   body.textContent = text;
@@ -657,6 +713,10 @@ window.__acpTurnEnd = function(data) {
   div.className = 'turn-end';
   div.textContent = '— done' + (parts.length ? ' · ' + parts.join(' · ') : '');
   msgs.appendChild(div);
+
+  // Trace card: if semantic_search was called this turn, render retrieval sources
+  _renderTraceCard();
+
   scrollBottom();
 
   currentMsgEl = null;
@@ -848,7 +908,7 @@ window.__acpSessionLoaded = function(data) {
         var tSpan = tStr ? '<span class="msg-time">' + tStr + '</span>' : '';
         if (m.role === 'user') {
           el.className = 'msg msg-user';
-          el.innerHTML = '<span class="msg-meta"><span class="msg-role">Operator</span>' + tSpan + '</span>';
+          el.innerHTML = '<span class="msg-meta"><span class="msg-role">(一︿一+ )</span>' + tSpan + '</span>';
           var body = document.createElement('span');
           body.className = 'msg-body';
           body.textContent = m.text;
