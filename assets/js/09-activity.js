@@ -224,12 +224,17 @@ window.__acpRecovery = function (data) {
 
    Phases: waiting | reconnecting | timeout */
 
+// Global flag: set true when an update-restart is in flight.
+// Survives error-bar DOM manipulation and intermediate state transitions.
+window._updateRestartInFlight = false;
+
 window.__acpUpdating = function (data) {
   if (!data) return;
   var phase = data.phase;
   var key = 'update:' + (data._tabId || 'active');
 
   if (phase === 'waiting') {
+    window._updateRestartInFlight = true;
     window.HaActivity.start(key, 'updating');
     if (window.HaErrorBar) {
       var msg = 'Kiro CLI is updating';
@@ -255,6 +260,7 @@ window.__acpUpdating = function (data) {
   }
 
   if (phase === 'timeout') {
+    window._updateRestartInFlight = false;
     window.HaActivity.fail(key);
     if (errorBar) errorBar.classList.remove('is-updating');
     if (window.HaErrorBar) {
@@ -279,8 +285,11 @@ window.__acpUpdating = function (data) {
   var _origStateChange = window.__acpStateChange;
   window.__acpStateChange = function (data) {
     // Dismiss updating banner on successful reconnect
-    if (data && data.state === 'ready' && errorBar && errorBar.classList.contains('is-updating')) {
-      errorBar.classList.remove('is-updating');
+    var isUpdate = window._updateRestartInFlight ||
+                   (errorBar && errorBar.classList.contains('is-updating'));
+    if (data && data.state === 'ready' && isUpdate) {
+      window._updateRestartInFlight = false;
+      if (errorBar) errorBar.classList.remove('is-updating');
       window.HaActivity.done('update:' + (data._tabId || 'active'));
       // Toast with version if available (set by __acpCliVersion which fires just before this)
       var ver = window._kiroCliVersion || '';

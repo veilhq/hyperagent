@@ -185,6 +185,94 @@ def _get_parent_pid(pid):
 
 
 # ---------------------------------------------------------------------------
+# MCP Service Fallback — launch the shared HTTP MCP server if Hypervisor
+# hasn't already started it. Whichever app starts first owns the process.
+# ---------------------------------------------------------------------------
+
+import subprocess as _subprocess
+import sys as _sys
+
+_MCP_SERVER_SCRIPT = HYPERVISOR_DIR / "mcp-server.py"
+_MCP_LOCK_FILE = HYPERVISOR_DIR / ".mcp_service_running"
+_mcp_service_proc: _subprocess.Popen | None = None
+
+
+def _ensure_mcp_service():
+    """Launch the shared MCP HTTP service if not already running."""
+    global _mcp_service_proc
+
+    if _MCP_LOCK_FILE.exists():
+        try:
+            import ctypes
+            lines = _MCP_LOCK_FILE.read_text(encoding="utf-8").strip().split("\n")
+            pid = int(lines[0])
+            kernel32 = ctypes.windll.kernel32
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+            if handle:
+                kernel32.CloseHandle(handle)
+                logger.info("MCP service already running (PID %d), skipping launch", pid)
+                return
+            _MCP_LOCK_FILE.unlink(missing_ok=True)
+        except (ValueError, OSError, IndexError):
+            _MCP_LOCK_FILE.unlink(missing_ok=True)
+
+    # Launch — NOT detached, so it dies when Hyperagent exits
+    logger.info("launching MCP HTTP service (fallback — Hypervisor not running)")
+    _mcp_service_proc = _subprocess.Popen(
+        [_sys.executable, str(_MCP_SERVER_SCRIPT), "--http"],
+        cwd=str(_MCP_SERVER_SCRIPT.parent),
+        stdout=_subprocess.DEVNULL,
+        stderr=_subprocess.DEVNULL,
+        stdin=_subprocess.DEVNULL,
+    )
+    logger.info("MCP service launched (PID %d)", _mcp_service_proc.pid)
+
+    # Wait for the service to become ready (port accepting connections)
+    import socket as _socket
+    for _ in range(20):  # up to 10 seconds
+        time.sleep(0.5)
+        if _mcp_service_proc.poll() is not None:
+            logger.error(
+                "MCP service exited during startup (code %d). "
+                "Hypervisor tools will be unavailable.",
+                _mcp_service_proc.returncode,
+            )
+            _mcp_service_proc = None
+            return
+        try:
+            sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+            sock.settimeout(0.3)
+            sock.connect(("127.0.0.1", 8321))
+            sock.close()
+            logger.info("MCP service ready (port 8321 accepting connections)")
+            return
+        except (OSError, ConnectionRefusedError):
+            pass
+
+    logger.warning(
+        "MCP service did not become ready within 10s. "
+        "Tools might be temporarily unavailable."
+    )
+
+
+def _stop_mcp_service():
+    """Terminate the MCP service subprocess if we own it."""
+    global _mcp_service_proc
+    if _mcp_service_proc is not None:
+        logger.info("stopping MCP service (PID %d)", _mcp_service_proc.pid)
+        try:
+            _mcp_service_proc.terminate()
+            _mcp_service_proc.wait(timeout=5)
+        except (_subprocess.TimeoutExpired, OSError):
+            try:
+                _mcp_service_proc.kill()
+            except OSError:
+                pass
+        _mcp_service_proc = None
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -218,6 +306,8 @@ def main():
     # Clean up orphaned lock files from force-closed sessions
     _cleanup_stale_locks(sessions_dir)
 
+    # Each tab owns a full stack (acp_bridge + kiro-cli + its MCP servers),
+    # roughly 350-500 MB. Capped at 3 to bound idle memory footprint.
     pool = ACPClientPool(max_tabs=5)
     api = HyperagentAPI(pool)
 
@@ -242,12 +332,15 @@ def main():
         _apply_window_chrome("Hyperagent", str(ICON_FILE))
         pool.set_window(window)
         logger.info("on_start: window ready, connecting protocol")
+        # Ensure shared MCP service is available before connecting tabs
+        _ensure_mcp_service()
         pool.connect_tab(initial_tab)
         _start_theme_watcher(window, api)
 
     webview.start(on_start, icon=icon_path, debug=False)
     pool.save_tab_state()
     pool.stop_all()
+    _stop_mcp_service()
 
 
 if __name__ == "__main__":

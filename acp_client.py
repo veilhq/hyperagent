@@ -596,10 +596,13 @@ class ACPClient:
             if self._state not in ("stopped", "crashed"):
                 self._state = "crashed"
                 self._push_state()
-                self._push_js("__acpError", {
-                    "error": f"kiro-cli exited (code={exit_code})",
-                    "source": "child_exited",
-                })
+                # Suppress the raw error push for self-update exits — the
+                # update handler pushes a calm "updating" message instead.
+                if exit_code != self._UPDATE_EXIT_CODE:
+                    self._push_js("__acpError", {
+                        "error": f"kiro-cli exited (code={exit_code})",
+                        "source": "child_exited",
+                    })
                 self._auto_recover(exit_code)
             return
         if method == "session/update":
