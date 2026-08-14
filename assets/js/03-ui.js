@@ -27,6 +27,7 @@ function send() {
         clearInterval(pollReady);
         appendUser(text);
         if (!sessionTitle) firstPrompt = text;
+        window._lastUserPrompt = text;
         pywebview.api.send_prompt(text);
       } else if (attempts > 40) {
         // Safety: give up after ~2s
@@ -41,6 +42,7 @@ function send() {
   appendUser(text);
   input.value = '';
   input.style.height = 'auto';
+  window._lastUserPrompt = text;
   pywebview.api.send_prompt(text);
 }
 
@@ -231,13 +233,14 @@ var welcomeGreetingsFallback = ['ready when you are.'];
 var welcomePrompts = [
   'What\'s in flight right now?',
   'Let\'s review a PR.',
-  'Run a health check.'
+  'Run a health check.',
+  { text: 'Check logs', action: '_showRecentLogs' }
 ];
 
 function showWelcome() {
   var w = document.createElement('div');
   w.className = 'welcome hv-noise-field';
-  w.innerHTML = '<svg class="welcome-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108.28 108.28" fill="currentColor"><path d="M107.94,71.76l-35.71-35.71-.04-.04h-34.8c-.63,0-1.14-.51-1.14-1.14V1.14c0-.63-.51-1.14-1.14-1.14H1.14C.51,0,0,.51,0,1.14v34.58c0,.3.12.59.33.8l33.56,33.56c.72.72.21,1.94-.8,1.94H1.14c-.63,0-1.14.51-1.14,1.14v33.98c0,.63.51,1.14,1.14,1.14h33.98c.63,0,1.14-.51,1.14-1.14v-33.73c0-.63.51-1.14,1.14-1.14h33.48c.63,0,1.14.51,1.14,1.14v33.73c0,.63.51,1.14,1.14,1.14h33.98c.63,0,1.14-.51,1.14-1.14v-34.58c0-.3-.12-.59-.33-.8Z"/><path d="M72.67,18.01l7.88,3.11c2.6,1.03,4.66,3.08,5.68,5.68l3.11,7.87c.18.45.82.45,1,0l3.11-7.87c1.03-2.6,3.08-4.66,5.68-5.68l7.88-3.11c.45-.18.45-.82,0-1l-7.88-3.11c-2.6-1.03-4.66-3.08-5.68-5.68l-3.11-7.87c-.18-.45-.82-.45-1,0l-3.11,7.87c-1.03,2.6-3.08,4.66-5.68,5.68l-7.88,3.11c-.45.18-.45.82,0,1Z"/></svg>'
+  w.innerHTML = '<svg class="welcome-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35.02 35.02" fill="currentColor"><path d="M13.58,20.85c.19,0,.28-.23.15-.36,0,0-5.08-5.08-6.1-6.11-.11-.11-.27-.14-.42-.09L.34,17.01c-.45.18-.45.82,0,1l7.05,2.79c.11.04.22.06.33.06.98,0,5.85,0,5.85,0Z"/><path d="M20.85,27.42v-6.3c0-.12-.1-.21-.21-.21h-6.26c-.12,0-.21.1-.21.21v6.3s0,.03-.01.05l2.85,7.21c.18.45.82.45,1,0l2.85-7.21s-.01-.03-.01-.05Z"/><path d="M34.68,17.01l-7.87-3.11c-2.6-1.03-4.66-3.08-5.68-5.68L18.01.34c-.18-.45-.82-.45-1,0l-2.85,7.21s.01.03.01.05v6.3c0,.12.1.21.21.21h6.09c.27,0,.52.11.71.3,1.14,1.14,5.26,5.26,6.2,6.2.12.12.29.15.44.09l6.85-2.71c.45-.18.45-.82,0-1Z"/></svg>'
     + '<span class="welcome-text"></span>'
     + '<div class="welcome-prompts"></div>';
   var greetingEl = w.querySelector('.welcome-text');
@@ -250,8 +253,13 @@ function showWelcome() {
   welcomePrompts.forEach(function(p) {
     var chip = document.createElement('button');
     chip.className = 'welcome-chip';
-    chip.textContent = p;
-    chip.onclick = function() { input.value = p; send(); };
+    if (typeof p === 'string') {
+      chip.textContent = p;
+      chip.onclick = function() { input.value = p; send(); };
+    } else {
+      chip.textContent = p.text;
+      chip.onclick = function() { if (window[p.action]) window[p.action](); };
+    }
     chips.appendChild(chip);
   });
   msgs.appendChild(w);
@@ -387,6 +395,46 @@ function _handleHsSearch(query) {
     scrollBottom();
   });
 }
+
+// --- Check Logs (welcome chip action) ---
+function _showRecentLogs() {
+  if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.get_recent_logs) {
+    if (window.HvToast) HvToast.show({ variant: 'warn', message: 'Log reader requires the desktop app bridge' });
+    return;
+  }
+
+  // Remove welcome screen
+  var w = msgs.querySelector('.welcome');
+  if (w) {
+    destroyWelcomeNoise(true);
+    w.remove();
+  }
+
+  pywebview.api.get_recent_logs(40).then(function(results) {
+    if (!results || !results.length) {
+      if (window.HvToast) HvToast.show({ variant: 'warn', message: 'No log files found' });
+      return;
+    }
+    for (var i = 0; i < results.length; i++) {
+      var logFile = results[i];
+      var panel = document.createElement('div');
+      panel.className = 'log-panel';
+      var header = document.createElement('div');
+      header.className = 'log-panel-header';
+      header.textContent = logFile.file;
+      panel.appendChild(header);
+      var body = document.createElement('pre');
+      body.className = 'log-panel-body';
+      body.textContent = logFile.lines.join('\n');
+      panel.appendChild(body);
+      msgs.appendChild(panel);
+    }
+    scrollBottom();
+  }).catch(function(err) {
+    if (window.HvToast) HvToast.show({ variant: 'error', message: 'Failed to read logs' });
+  });
+}
+window._showRecentLogs = _showRecentLogs;
 
 // --- Cursor companion box ---
 // Relocated to Hyperkit (WI-142 follow-up) — window.HvCursorBox is loaded

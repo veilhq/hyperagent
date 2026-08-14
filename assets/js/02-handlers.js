@@ -683,6 +683,40 @@ window.__acpTurnEnd = function(data) {
     return;
   }
 
+  // If the prompt failed (server-side error), show inline error with retry
+  if (data._failed) {
+    var failMsg = data._failedMessage || 'Unknown error';
+    var fdiv = document.createElement('div');
+    fdiv.className = 'turn-end turn-failed';
+    var ftext = document.createElement('span');
+    ftext.textContent = '\u2014 failed: ' + failMsg;
+    fdiv.appendChild(ftext);
+    // Retry button — sends a continuation nudge (agent has session context)
+    if (window._lastUserPrompt) {
+      var retryBtn = document.createElement('button');
+      retryBtn.type = 'button';
+      retryBtn.className = 'retry-btn';
+      retryBtn.textContent = 'Continue';
+      retryBtn.addEventListener('click', function() {
+        if (state === 'ready') {
+          var continuePrompt = 'You were interrupted, please continue.';
+          appendUser(continuePrompt);
+          window._lastUserPrompt = continuePrompt;
+          pywebview.api.send_prompt(continuePrompt);
+        }
+      });
+      fdiv.appendChild(retryBtn);
+    }
+    msgs.appendChild(fdiv);
+    scrollBottom();
+    currentMsgEl = null;
+    currentMsgText = '';
+    toolCards = {};
+    currentToolRow = null;
+    resetThoughtStream();
+    return;
+  }
+
   // Request AI-generated title after first turn
   if (firstPrompt && !sessionTitle) {
     // Pass the originating tab_id so the title lands on the tab that sent
@@ -742,6 +776,11 @@ window.__acpStateChange = function(data) {
   // Thinking indicator
   if (state === 'prompting') {
     showThinking();
+    // Clear prompt-failure error bar when user sends a new prompt
+    if (window._errorBarPromptFailed) {
+      window._errorBarPromptFailed = false;
+      window.HaErrorBar.hide();
+    }
   } else {
     hideThinking();
   }
@@ -751,7 +790,7 @@ window.__acpStateChange = function(data) {
     var splash = document.createElement('div');
     splash.id = 'ha-splash';
     splash.className = 'ha-splash';
-    splash.innerHTML = '<div class="ha-splash-flag"><svg class="ha-splash-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108.28 108.28" fill="currentColor"><path d="M107.94,71.76l-35.71-35.71-.04-.04h-34.8c-.63,0-1.14-.51-1.14-1.14V1.14c0-.63-.51-1.14-1.14-1.14H1.14C.51,0,0,.51,0,1.14v34.58c0,.3.12.59.33.8l33.56,33.56c.72.72.21,1.94-.8,1.94H1.14c-.63,0-1.14.51-1.14,1.14v33.98c0,.63.51,1.14,1.14,1.14h33.98c.63,0,1.14-.51,1.14-1.14v-33.73c0-.63.51-1.14,1.14-1.14h33.48c.63,0,1.14.51,1.14,1.14v33.73c0,.63.51,1.14,1.14,1.14h33.98c.63,0,1.14-.51,1.14-1.14v-34.58c0-.3-.12-.59-.33-.8Z"/><path d="M72.67,18.01l7.88,3.11c2.6,1.03,4.66,3.08,5.68,5.68l3.11,7.87c.18.45.82.45,1,0l3.11-7.87c1.03-2.6,3.08-4.66,5.68-5.68l7.88-3.11c.45-.18.45-.82,0-1l-7.88-3.11c-2.6-1.03-4.66-3.08-5.68-5.68l-3.11-7.87c-.18-.45-.82-.45-1,0l-3.11,7.87c-1.03,2.6-3.08,4.66-5.68,5.68l-7.88,3.11c-.45.18-.45.82,0,1Z"/></svg></div>'
+    splash.innerHTML = '<div class="ha-splash-flag"><svg class="ha-splash-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35.02 35.02" fill="currentColor"><path d="M13.58,20.85c.19,0,.28-.23.15-.36,0,0-5.08-5.08-6.1-6.11-.11-.11-.27-.14-.42-.09L.34,17.01c-.45.18-.45.82,0,1l7.05,2.79c.11.04.22.06.33.06.98,0,5.85,0,5.85,0Z"/><path d="M20.85,27.42v-6.3c0-.12-.1-.21-.21-.21h-6.26c-.12,0-.21.1-.21.21v6.3s0,.03-.01.05l2.85,7.21c.18.45.82.45,1,0l2.85-7.21s-.01-.03-.01-.05Z"/><path d="M34.68,17.01l-7.87-3.11c-2.6-1.03-4.66-3.08-5.68-5.68L18.01.34c-.18-.45-.82-.45-1,0l-2.85,7.21s.01.03.01.05v6.3c0,.12.1.21.21.21h6.09c.27,0,.52.11.71.3,1.14,1.14,5.26,5.26,6.2,6.2.12.12.29.15.44.09l6.85-2.71c.45-.18.45-.82,0-1Z"/></svg></div>'
       + '<div class="ha-splash-loading">Loading session history</div>'
       + '<div class="ha-splash-pct" id="ha-splash-pct">0%</div>';
     document.body.appendChild(splash);
@@ -797,7 +836,12 @@ window.__acpStateChange = function(data) {
       }
     });
   } else if (state === 'ready' || state === 'starting') {
-    window.HaErrorBar.hide();
+    // Don't auto-dismiss if the error bar is showing a prompt failure — the
+    // user needs to see it. It gets cleared on the next successful prompt or
+    // when the user manually retries.
+    if (!window._errorBarPromptFailed) {
+      window.HaErrorBar.hide();
+    }
   }
 };
 
@@ -805,6 +849,8 @@ window.__acpStateChange = function(data) {
 window.__acpError = function(data) {
   var msg = (data && data.error) ? String(data.error) : 'Unknown error';
   var source = (data && data.source) ? String(data.source) : '';
+  // Track prompt failures so the error bar persists through the ready state change
+  window._errorBarPromptFailed = (source === 'jsonrpc');
   // Message slot only — leaves any existing action (e.g. Reconnect) intact.
   window.HaErrorBar.setMessage(msg);
   // Also mirror to the JS console so failures show up under devtools without

@@ -583,6 +583,27 @@ class HyperagentAPI:
     }
 
 
+    def get_recent_logs(self, lines=40):
+        """Read the last N lines from hyperagent.log and bridge.log."""
+        logs_dir = HYPERSPACE_ROOT / ".logs"
+        results = []
+        for name in ("hyperagent.log", "bridge.log"):
+            log_file = logs_dir / name
+            if not log_file.exists():
+                continue
+            try:
+                with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+                    all_lines = f.readlines()
+                tail = all_lines[-lines:] if len(all_lines) > lines else all_lines
+                results.append({
+                    "file": name,
+                    "lines": [ln.rstrip("\n") for ln in tail],
+                })
+            except Exception as e:
+                results.append({"file": name, "lines": [f"[read error: {e}]"]})
+        logger.info("get_recent_logs: returned %d files", len(results))
+        return results
+
     def semantic_search(self, query, top_k=5):
         """Search hyperspace by meaning — direct call to the RAG engine."""
         try:

@@ -460,6 +460,8 @@ class ACPClient:
         if isinstance(result, dict) and "error" in result:
             err = result["error"]
             err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+            data["_failed"] = True
+            data["_failedMessage"] = err_msg
             self._push_js("__acpError", {"error": f"Prompt failed: {err_msg}", "source": "jsonrpc"})
             logger.error("%sprompt failed: %s | full payload: %s", self._tab_ctx(), err_msg, json.dumps(result))
         else:

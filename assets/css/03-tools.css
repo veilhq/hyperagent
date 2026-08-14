@@ -158,6 +158,26 @@
   opacity: 0;
   animation: fadeSlideIn var(--motion-slow) var(--ease) forwards;
 }
+.turn-end.turn-failed {
+  color: var(--comp);
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+.turn-end.turn-failed .retry-btn {
+  font-family: var(--font);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--bg);
+  background: var(--comp);
+  border: none;
+  padding: 0.2rem 0.7rem;
+  cursor: pointer;
+  transition: opacity var(--motion-fast) var(--ease);
+}
+.turn-end.turn-failed .retry-btn:hover { opacity: 0.8; }
 
 
 .tool-card.tc-subagent { border-color: var(--comp); }

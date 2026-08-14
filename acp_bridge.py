@@ -23,7 +23,7 @@ HYPERSPACE_ROOT = Path(__file__).parent.parent.resolve()
 # ---------------------------------------------------------------------------
 
 sys.path.insert(0, str(HYPERSPACE_ROOT / ".hyperkit" / "python"))
-from hyper_logging import setup_logger, TRACE  # noqa: E402
+from hyper_logging import setup_logger, set_output_level, TRACE  # noqa: E402
 
 # Bridge log level is env-configurable; INFO default keeps the log to lifecycle events.
 # Set HYPERAGENT_LOG_LEVEL=DEBUG or TRACE to enable relay byte counts.
@@ -34,8 +34,10 @@ _LEVEL_MAP = {"TRACE": TRACE, "DEBUG": _logging.DEBUG, "INFO": _logging.INFO,
 _env_level = _os.environ.get("HYPERAGENT_LOG_LEVEL", "INFO").upper()
 _log_level = _LEVEL_MAP.get(_env_level, _logging.INFO)
 logger = setup_logger("bridge", level=_log_level)
-for _h in logger.handlers:
-    _h.setLevel(_log_level)
+# Re-assert via the helper rather than looping over logger.handlers: setting every
+# handler directly would also raise the flight recorder's level and stop it
+# capturing the TRACE/DEBUG context it replays when an error fires.
+set_output_level(logger, _log_level)
 
 
 def find_kiro():

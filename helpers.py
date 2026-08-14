@@ -26,14 +26,14 @@ PORTAL_ROOT = HYPERSPACE_ROOT.parent
 HYPERVISOR_DIR = HYPERSPACE_ROOT / ".hypervisor"
 SKILLS_DIR = PORTAL_ROOT / ".kiro" / "skills"
 PREFS_FILE = HYPERAGENT_DIR / "preferences.json"
-ICON_FILE = HYPERVISOR_DIR / "assets" / "ha-box.ico"
+ICON_FILE = HYPERAGENT_DIR / "assets" / "hyperagent.ico"
 
 # ---------------------------------------------------------------------------
 # Structured logging (shared ecosystem logger)
 # ---------------------------------------------------------------------------
 
 sys.path.insert(0, str(HYPERSPACE_ROOT / ".hyperkit" / "python"))
-from hyper_logging import setup_logger, TRACE  # noqa: E402
+from hyper_logging import setup_logger, set_output_level, TRACE  # noqa: E402
 
 import logging as _logging
 
@@ -47,8 +47,10 @@ _LEVEL_MAP = {
 _env_level = os.environ.get("HYPERAGENT_LOG_LEVEL", "INFO").upper()
 _log_level = _LEVEL_MAP.get(_env_level, _logging.INFO)
 logger = setup_logger("hyperagent", level=_log_level)
-for _h in logger.handlers:
-    _h.setLevel(_log_level)
+# Re-assert the level via the helper rather than looping over logger.handlers:
+# setting every handler directly would also raise the flight recorder's level and
+# stop it capturing the TRACE/DEBUG context it replays when an error fires.
+set_output_level(logger, _log_level)
 
 
 # ---------------------------------------------------------------------------

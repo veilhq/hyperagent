@@ -7,17 +7,19 @@ function renderMarkdown(text) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-  // Code blocks (fenced)
+  // Code blocks (fenced) — stash in placeholders to protect from later transforms
+  var codeBlocks = [];
   html = html.replace(/```(\w*)\n([\s\S]*?)```/g, function(_, lang, code) {
     var label = lang ? '<span class="code-lang">' + lang + '</span>' : '';
     var body = code.trimEnd();
-    // Stash raw code (base64) on the button so the copy handler doesn't
-    // have to re-decode HTML entities from the DOM.
     var raw;
     try { raw = btoa(unescape(encodeURIComponent(body))); } catch (_e) { raw = ''; }
-    return '<div class="code-block">' + label
+    var block = '<div class="code-block">' + label
       + '<button class="code-copy" data-code="' + raw + '">Copy</button>'
       + '<pre><code>' + body + '</code></pre></div>';
+    var placeholder = '\x00CODEBLOCK' + codeBlocks.length + '\x00';
+    codeBlocks.push(block);
+    return placeholder;
   });
 
   // Inline code (protect from further transforms)
@@ -95,6 +97,11 @@ function renderMarkdown(text) {
   html = html.replace(emotePattern, function(m) {
     return '<span class="emote">' + m + '</span>';
   });
+
+  // Restore code blocks from placeholders
+  for (var _i = 0; _i < codeBlocks.length; _i++) {
+    html = html.replace('\x00CODEBLOCK' + _i + '\x00', codeBlocks[_i]);
+  }
 
   return html;
 }
