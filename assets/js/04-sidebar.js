@@ -160,6 +160,14 @@ function refreshSessions() {
   });
 }
 
+// Backend reaped a scratch session created to satisfy the session-load protocol.
+// The list is only rebuilt on request, so re-query rather than leave a stale entry.
+window.__acpSessionsChanged = function(data) {
+  if (typeof refreshSessions !== 'function') return;
+  if (!sidebar || !sidebar.classList.contains('open')) return;
+  refreshSessions();
+};
+
 function loadSession(id) {
   // Block updates until history render completes
   _loadingHistory = true;

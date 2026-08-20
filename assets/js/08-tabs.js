@@ -423,8 +423,13 @@ function _showWelcomeInTab(container) {
   welcomePrompts.forEach(function(p) {
     var chip = document.createElement('button');
     chip.className = 'welcome-chip';
-    chip.textContent = p;
-    chip.onclick = function() { input.value = p; send(); };
+    if (typeof p === 'string') {
+      chip.textContent = p;
+      chip.onclick = function() { input.value = p; send(); };
+    } else {
+      chip.textContent = p.text;
+      chip.onclick = function() { if (window[p.action]) window[p.action](); };
+    }
     chips.appendChild(chip);
   });
   container.appendChild(w);

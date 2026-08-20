@@ -140,8 +140,7 @@ class HyperagentAPI:
                         client._owned_sessions.add(throwaway_id)
                         def on_load_and_clean(res):
                             on_load_result(res)
-                            if throwaway_id:
-                                self._delete_session_files(throwaway_id)
+                            client._reap_scratch_session(throwaway_id)
                         client._request("session/load", {
                             "sessionId": session_id,
                             "cwd": str(PORTAL_ROOT).replace("\\", "/"),
@@ -723,7 +722,7 @@ class HyperagentAPI:
             sessions_dir = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "sessions" / "cli"
             if not sessions_dir.exists():
                 return {"sessions": [], "active": self._acp._session_id}
-            project_cwd = str(PORTAL_ROOT).replace("\\", "/")
+            project_cwd = self._norm_cwd(PORTAL_ROOT)
             sessions = []
             now = datetime.now(timezone.utc)
             for meta_file in sessions_dir.glob("*.json"):
@@ -731,7 +730,7 @@ class HyperagentAPI:
                     data = json.loads(meta_file.read_text(encoding="utf-8"))
                 except (json.JSONDecodeError, OSError):
                     continue
-                if data.get("cwd", "").rstrip("/") != project_cwd.rstrip("/"):
+                if self._norm_cwd(data.get("cwd", "")) != project_cwd:
                     continue
                 sid = meta_file.stem
                 title = data.get("title", "(no title)") or "(no title)"
@@ -764,6 +763,19 @@ class HyperagentAPI:
         except Exception as e:
             logger.error(f"list_sessions error: {e}")
             return {"sessions": [], "active": None}
+
+    @staticmethod
+    def _norm_cwd(value):
+        """Canonicalize a session cwd so comparisons ignore separator style.
+
+        Sessions are created over ACP with a forward-slash cwd, but kiro-cli
+        rewrites the path to the platform's native separators before persisting
+        it to session metadata — so it reads back with backslashes on Windows.
+        Comparing the raw strings therefore matches nothing. Fold to forward
+        slashes, drop any trailing separator, and lowercase (Windows paths are
+        case-insensitive, and drive-letter casing varies by caller).
+        """
+        return str(value).replace("\\", "/").rstrip("/").lower()
 
     @staticmethod
     def _relative_age(iso_str, now):
@@ -841,19 +853,6 @@ class HyperagentAPI:
             return True
         except Exception:
             return False
-
-    def _delete_session_files(self, session_id):
-        """Remove session files from disk (used to clean up throwaway sessions)."""
-        try:
-            sessions_dir = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "sessions" / "cli"
-            for f in sessions_dir.glob(f"{session_id}*"):
-                if f.is_dir():
-                    shutil.rmtree(f, ignore_errors=True)
-                else:
-                    f.unlink(missing_ok=True)
-        except Exception:
-            pass
-
 
     def get_session_history(self, session_id):
         """Read messages from a session's JSONL file."""
@@ -949,8 +948,10 @@ class HyperagentAPI:
             else:
                 self._acp._session_id = session_id
                 self._acp._save_session_id(session_id)
-                if throwaway_to_clean[0]:
-                    self._delete_session_files(throwaway_to_clean[0])
+            # Reap on both outcomes — a failed load leaves the scratch session
+            # on disk just the same, where it surfaces as an empty list entry.
+            self._acp._reap_scratch_session(throwaway_to_clean[0])
+            throwaway_to_clean[0] = None
             self._acp._state = "ready"
             self._acp._push_state()
 

@@ -27,6 +27,7 @@ HYPERVISOR_DIR = HYPERSPACE_ROOT / ".hypervisor"
 SKILLS_DIR = PORTAL_ROOT / ".kiro" / "skills"
 PREFS_FILE = HYPERAGENT_DIR / "preferences.json"
 ICON_FILE = HYPERAGENT_DIR / "assets" / "hyperagent.ico"
+SESSIONS_DIR = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "sessions" / "cli"
 
 # ---------------------------------------------------------------------------
 # Structured logging (shared ecosystem logger)
@@ -64,6 +65,30 @@ def _find_kiro():
         return found
     fallback = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "bin" / "kiro-cli.exe"
     return str(fallback) if fallback.exists() else None
+
+
+# ---------------------------------------------------------------------------
+# Session file cleanup
+# ---------------------------------------------------------------------------
+
+def delete_session_files(session_id):
+    """Remove a session's files (.json / .jsonl / .lock) from disk.
+
+    Used to reap scratch sessions. Loading an existing session over ACP requires
+    protocol state that only session/new establishes, so a scratch session is
+    created and discarded on every load — and its metadata .json is written
+    immediately, which makes it visible in the session list until removed.
+    """
+    if not session_id:
+        return
+    try:
+        for f in SESSIONS_DIR.glob(f"{session_id}*"):
+            if f.is_dir():
+                shutil.rmtree(f, ignore_errors=True)
+            else:
+                f.unlink(missing_ok=True)
+    except OSError as e:
+        logger.warning("delete_session_files(%s) failed: %s", session_id, e)
 
 
 # ---------------------------------------------------------------------------

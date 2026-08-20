@@ -32,6 +32,7 @@ from helpers import (
     AUTH_OK,
     AUTH_NO,
     AUTH_UNKNOWN,
+    delete_session_files,
     get_kiro_version,
     get_model_rates,
     invalidate_kiro_version_cache,
@@ -214,9 +215,15 @@ class ACPClient:
 
         Does NOT consume the normal auto-recover budget. Pushes a friendly
         'updating' UI state instead of the alarming crash/error sequence.
+
+        After reconnecting, reloads the previous session so the user doesn't
+        lose their conversation context (session IDs from before the update
+        no longer exist on the new kiro-cli process).
         """
         logger.info("%supdate-restart: kiro-cli self-update detected (exit 0xC0000138)",
                     self._tab_ctx())
+        # Capture the session we need to reload BEFORE start() clears anything
+        stale_session = self._session_id
         self._push_js("__acpUpdating", {"phase": "waiting"})
 
         def _poll_and_reconnect():
@@ -264,11 +271,18 @@ class ACPClient:
                     invalidate_kiro_version_cache()
                     self._push_js("__acpUpdating", {"phase": "reconnecting"})
                     try:
+                        # Suppress the normal on_init ready transition — we need
+                        # to reload the session before marking ready.
+                        if stale_session:
+                            self._suppress_init_ready = True
                         self.start()
+                        if stale_session:
+                            self._reload_session_after_update(stale_session)
                         return
                     except Exception as e:
                         logger.error("%supdate-restart: reconnect failed: %s",
                                      self._tab_ctx(), e)
+                        self._suppress_init_ready = False
                         # Fall through to retry on next poll
                         stable_count = 0
                         continue
@@ -293,6 +307,61 @@ class ACPClient:
             self._push_js("__acpUpdating", {"phase": "timeout"})
 
         threading.Thread(target=_poll_and_reconnect, daemon=True).start()
+
+    def _reload_session_after_update(self, session_id):
+        """Reload a session on a fresh kiro-cli process after self-update.
+
+        Uses session/new to initialize protocol state, then session/load to
+        switch into the previous session. If the session no longer exists on
+        disk, clears session_id and marks ready with a clean slate.
+        """
+        logger.info("%supdate-restart: reloading session %s on new process",
+                    self._tab_ctx(), session_id[:8])
+
+        scratch = [None]
+
+        def on_load_result(result):
+            if isinstance(result, dict) and "error" in result:
+                err = result["error"]
+                err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+                logger.warning(
+                    "%supdate-restart: session reload failed (%s), starting fresh",
+                    self._tab_ctx(), err_msg,
+                )
+                self._session_id = None
+                self._clear_session_id()
+                self._push_js("__acpError", {
+                    "error": "Previous session unavailable after update — started fresh",
+                    "source": "update_restart",
+                })
+            else:
+                logger.info("%supdate-restart: session %s reloaded successfully",
+                            self._tab_ctx(), session_id[:8])
+                self._set_session_id(session_id)
+                self._capture_and_push_models(result)
+                self._apply_preferred_model()
+            # Reap on both outcomes — a failed load leaves the scratch session
+            # on disk just the same, where it surfaces as an empty list entry.
+            self._reap_scratch_session(scratch[0])
+            scratch[0] = None
+            self._state = "ready"
+            self._push_state()
+
+        def on_scratch_session(result):
+            scratch_id = result.get("sessionId") if isinstance(result, dict) else None
+            if scratch_id:
+                self._owned_sessions.add(scratch_id)
+                scratch[0] = scratch_id
+            cwd = str(PORTAL_ROOT).replace("\\", "/")
+            self._request("session/load", {
+                "sessionId": session_id,
+                "cwd": cwd,
+                "mcpServers": []
+            }, on_load_result)
+
+        # Create a scratch session to initialize protocol, then load the real one
+        cwd = str(PORTAL_ROOT).replace("\\", "/")
+        self._request("session/new", {"cwd": cwd, "mcpServers": []}, on_scratch_session)
 
     def stop(self):
         self._state = "stopped"
@@ -388,6 +457,20 @@ class ACPClient:
             self._save_session_id(session_id)
         self._push_js("__acpSessionIdChanged", {"sessionId": session_id})
 
+    def _reap_scratch_session(self, session_id):
+        """Delete a scratch session's files and tell the sidebar to re-query.
+
+        session/new writes its metadata .json before returning, so the scratch
+        session appears in the session list the moment it is created. Removing
+        the files is not enough on its own — the list is only rebuilt when the
+        frontend asks for it, so push the signal too.
+        """
+        if not session_id:
+            return
+        self._owned_sessions.discard(session_id)
+        delete_session_files(session_id)
+        self._push_js("__acpSessionsChanged", {"removed": session_id})
+
     def _on_session(self, result):
         logger.debug("%s_on_session: %s", self._tab_ctx(), result)
         if isinstance(result, dict) and "sessionId" in result:
@@ -460,6 +543,15 @@ class ACPClient:
         if isinstance(result, dict) and "error" in result:
             err = result["error"]
             err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+            err_data = err.get("data", "") if isinstance(err, dict) else ""
+
+            # Safety net: detect orphaned session and auto-reload
+            if "no session found" in str(err_data).lower() or "no session found" in err_msg.lower():
+                logger.warning("%sprompt failed with orphaned session, attempting auto-reload",
+                               self._tab_ctx())
+                self._attempt_session_reload()
+                return
+
             data["_failed"] = True
             data["_failedMessage"] = err_msg
             self._push_js("__acpError", {"error": f"Prompt failed: {err_msg}", "source": "jsonrpc"})
@@ -481,6 +573,71 @@ class ACPClient:
         self._todo_tool_ids.clear()
         self._push_js("__acpTurnEnd", data)
         self._push_state()
+
+    def _attempt_session_reload(self):
+        """Safety net: reload a session that the new kiro-cli process doesn't recognize.
+
+        Called when session/prompt returns 'No session found'. Uses the same
+        session/new + session/load pattern as update-restart recovery.
+        """
+        session_id = self._session_id
+        if not session_id:
+            logger.warning("%s_attempt_session_reload: no session_id to reload", self._tab_ctx())
+            self._push_state()
+            return
+
+        logger.info("%s_attempt_session_reload: reloading session %s", self._tab_ctx(), session_id[:8])
+        self._state = "starting"
+        self._push_state()
+        self._push_js("__acpUpdating", {"phase": "reconnecting"})
+
+        scratch = [None]
+
+        def on_load_result(result):
+            if isinstance(result, dict) and "error" in result:
+                err = result["error"]
+                err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+                logger.warning(
+                    "%s_attempt_session_reload: reload failed (%s), clearing session",
+                    self._tab_ctx(), err_msg,
+                )
+                self._session_id = None
+                self._clear_session_id()
+                self._push_js("__acpError", {
+                    "error": "Session lost — please start a new conversation or reload from sidebar",
+                    "source": "session_reload",
+                })
+            else:
+                logger.info("%s_attempt_session_reload: session %s restored",
+                            self._tab_ctx(), session_id[:8])
+                self._set_session_id(session_id)
+                self._capture_and_push_models(result)
+                self._apply_preferred_model()
+                self._push_js("__acpError", {
+                    "error": "Session recovered — please resend your last message",
+                    "source": "session_reload",
+                })
+            # Reap on both outcomes — a failed load leaves the scratch session
+            # on disk just the same, where it surfaces as an empty list entry.
+            self._reap_scratch_session(scratch[0])
+            scratch[0] = None
+            self._state = "ready"
+            self._push_state()
+
+        def on_scratch_session(result):
+            scratch_id = result.get("sessionId") if isinstance(result, dict) else None
+            if scratch_id:
+                self._owned_sessions.add(scratch_id)
+                scratch[0] = scratch_id
+            cwd = str(PORTAL_ROOT).replace("\\", "/")
+            self._request("session/load", {
+                "sessionId": session_id,
+                "cwd": cwd,
+                "mcpServers": []
+            }, on_load_result)
+
+        cwd = str(PORTAL_ROOT).replace("\\", "/")
+        self._request("session/new", {"cwd": cwd, "mcpServers": []}, on_scratch_session)
 
     def cancel(self, reason=None):
         reason = reason or "user"
