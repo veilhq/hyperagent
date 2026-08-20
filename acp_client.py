@@ -455,6 +455,7 @@ class ACPClient:
         if session_id:
             self._owned_sessions.add(session_id)
             self._save_session_id(session_id)
+            self._register_owned_session(session_id)
         self._push_js("__acpSessionIdChanged", {"sessionId": session_id})
 
     def _reap_scratch_session(self, session_id):
@@ -1005,6 +1006,26 @@ class ACPClient:
     def _save_session_id(self, sid):
         prefs = self._load_prefs()
         prefs["sessionId"] = sid
+        self._save_prefs(prefs)
+
+    def _register_owned_session(self, sid):
+        """Add a session to the ownedSessions set in preferences.
+
+        Only user-created sessions are registered. Ephemeral (automation)
+        sessions are excluded so they never appear in the sidebar.
+        """
+        prefs = self._load_prefs()
+        owned = set(prefs.get("ownedSessions", []))
+        owned.add(sid)
+        prefs["ownedSessions"] = sorted(owned)
+        self._save_prefs(prefs)
+
+    def _unregister_owned_session(self, sid):
+        """Remove a session from the ownedSessions set in preferences."""
+        prefs = self._load_prefs()
+        owned = set(prefs.get("ownedSessions", []))
+        owned.discard(sid)
+        prefs["ownedSessions"] = sorted(owned)
         self._save_prefs(prefs)
 
     def _clear_session_id(self):

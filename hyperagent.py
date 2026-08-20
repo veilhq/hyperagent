@@ -297,6 +297,13 @@ def main():
                 if key in prefs:
                     del prefs[key]
                     changed = True
+            # Seed ownedSessions from sessionTitles on first run after migration.
+            # Sessions that have titles were created by Hyperagent (user sessions).
+            if "ownedSessions" not in prefs and "sessionTitles" in prefs:
+                prefs["ownedSessions"] = sorted(prefs["sessionTitles"].keys())
+                changed = True
+                logger.info("startup: seeded ownedSessions from %d titled sessions",
+                            len(prefs["ownedSessions"]))
             if changed:
                 PREFS_FILE.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
                 logger.info("startup: cleared stale tab associations from preferences")

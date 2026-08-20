@@ -34,15 +34,25 @@ def concat_files(pattern):
 
 
 def concat_hyperkit_css():
-    """Read Hyperkit's tokens.css + primitives.css. Fails loudly if missing."""
+    """Read Hyperkit's shared CSS modules in cascade order. Fails loudly if missing."""
     parts = []
-    for name in ("tokens.css", "primitives.css"):
+    hyperkit_css_order = (
+        "tokens.css",
+        "primitives.css",
+        "globals.css",
+        "components.css",
+        "content.css",
+        "cards.css",
+        "features.css",
+        "accessibility.css",
+    )
+    for name in hyperkit_css_order:
         f = HYPERKIT_CSS_DIR / name
         if not f.exists():
             raise FileNotFoundError(
                 f"Hyperkit CSS file missing: {f}\n"
-                "Hyperagent's build.py requires .hyperspace/.hyperkit/css/tokens.css "
-                "and primitives.css. Run WI-142 setup or restore the .hyperkit/ directory."
+                "Hyperagent's build.py requires all shared CSS modules in "
+                ".hyperspace/.hyperkit/css/. Restore the .hyperkit/ directory."
             )
         parts.append(f.read_text(encoding="utf-8"))
     return "\n".join(parts)

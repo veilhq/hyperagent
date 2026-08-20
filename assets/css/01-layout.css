@@ -28,6 +28,11 @@
   align-items: center;
   gap: var(--space-1);
 }
+/* Normalize all chip heights inside the cluster */
+.status-cluster .hv-chip {
+  height: 20px;
+  line-height: 20px;
+}
 .status-center {
   display: flex;
   align-items: center;
@@ -139,6 +144,7 @@
   align-items: center;
   gap: var(--space-1);
   height: 20px;
+  min-height: 20px;
   padding: 0 var(--space-2);
   background: var(--bg-surface);
   border: var(--border-hair) solid var(--border);
@@ -155,6 +161,7 @@
 }
 .ctx-meter-bar {
   width: 40px;
+  min-width: 40px;
   height: 4px;
   background: var(--border);
   position: relative;

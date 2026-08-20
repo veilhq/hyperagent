@@ -715,7 +715,11 @@ class HyperagentAPI:
         return pids
 
     def list_sessions(self):
-        """List sessions by reading metadata directly from the filesystem."""
+        """List sessions by reading metadata directly from the filesystem.
+
+        Only shows sessions registered in ownedSessions (user-created).
+        Automation/ephemeral sessions are excluded from the sidebar.
+        """
         if _check_auth() is AUTH_NO:
             return {"sessions": [], "active": None, "auth_required": True}
         try:
@@ -723,6 +727,7 @@ class HyperagentAPI:
             if not sessions_dir.exists():
                 return {"sessions": [], "active": self._acp._session_id}
             project_cwd = self._norm_cwd(PORTAL_ROOT)
+            owned = set(self._acp._load_prefs().get("ownedSessions", []))
             sessions = []
             now = datetime.now(timezone.utc)
             for meta_file in sessions_dir.glob("*.json"):
@@ -733,6 +738,9 @@ class HyperagentAPI:
                 if self._norm_cwd(data.get("cwd", "")) != project_cwd:
                     continue
                 sid = meta_file.stem
+                # Only show sessions Hyperagent owns (user-created)
+                if owned and sid not in owned:
+                    continue
                 title = data.get("title", "(no title)") or "(no title)"
                 if len(title) > 40:
                     title = title[:40].rstrip() + "..."
@@ -850,6 +858,7 @@ class HyperagentAPI:
                     shutil.rmtree(f, ignore_errors=True)
                 else:
                     f.unlink(missing_ok=True)
+            self._acp._unregister_owned_session(session_id)
             return True
         except Exception:
             return False
