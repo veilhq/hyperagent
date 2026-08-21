@@ -18,6 +18,15 @@ from pathlib import Path
 PORTAL_ROOT = Path(__file__).parent.parent.parent.resolve()
 HYPERSPACE_ROOT = Path(__file__).parent.parent.resolve()
 
+# Workspace agent to run the ACP session under. Selected because the built-in
+# default agent cannot carry hooks — hooks are only definable in an agent config
+# file — and this workspace relies on a preToolUse hook to validate document
+# writes. Resolved by kiro-cli from `.kiro/agents/<name>.json` relative to the
+# spawn cwd (PORTAL_ROOT below). If the config is absent, kiro-cli logs a warning
+# and falls back to its default agent, so a missing file degrades rather than
+# breaking startup.
+ACP_AGENT = "hyperspace"
+
 # ---------------------------------------------------------------------------
 # Structured logging (shared ecosystem logger)
 # ---------------------------------------------------------------------------
@@ -69,7 +78,7 @@ def main():
     si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     si.wShowWindow = subprocess.SW_HIDE
     proc = subprocess.Popen(
-        [kiro, "acp", "--trust-all-tools"],
+        [kiro, "acp", "--trust-all-tools", "--agent", ACP_AGENT],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

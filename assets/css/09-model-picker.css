@@ -1,6 +1,7 @@
 /* =========================================================================
    Model Picker — topbar dropdown for switching the active kiro-cli model.
-   Composes on .ha-cluster-chip and .hv-dropdown primitives.
+   Styled to match hypervisor nav-item / hv-dropdown ecosystem patterns.
+   Uses hyperkit tokens throughout — no raw values.
    ========================================================================= */
 
 .model-picker {
@@ -9,29 +10,35 @@
   align-items: center;
 }
 
+/* ---- Trigger button — ha-cluster-chip override with interactive state ---- */
 .model-picker-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--space-1);
   cursor: pointer;
-  border: 1px solid var(--accent-border);
+  border: var(--border-hair) solid var(--border-strong);
   background: transparent;
-  color: var(--text);
-  font-family: inherit;
-  font-size: 0.7rem;
-  padding: 0.25rem 0.6rem;
-  transition: background 0.12s, border-color 0.12s;
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0 var(--space-2);
+  height: 20px;
+  line-height: 20px;
+  transition: color var(--motion-fast) var(--ease),
+              border-color var(--motion-fast) var(--ease),
+              background var(--motion-fast) var(--ease);
 }
-
 .model-picker-btn:hover {
-  background: var(--accent-dim);
+  color: var(--accent);
   border-color: var(--accent);
 }
-
 .model-picker-btn.model-picker-open {
-  background: var(--accent-dim);
-  border-color: var(--accent);
   color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-glow);
 }
 
 .model-picker-label {
@@ -45,192 +52,215 @@
 .model-picker-caret {
   opacity: 0.7;
   flex-shrink: 0;
+  transition: transform var(--motion-fast) var(--ease);
+}
+.model-picker-btn.model-picker-open .model-picker-caret {
+  transform: rotate(180deg);
 }
 
-/* Dropdown panel — composes on .hv-dropdown (fade+slide-in transition primitive).
-   Fixed width, right-anchored to the button. */
+/* ---- Dropdown panel — follows .hv-dropdown open/close via .open class ---- */
 .model-picker-dropdown {
   position: absolute;
-  top: calc(100% + 0.35rem);
+  top: calc(100% + 6px);
   right: 0;
   width: 22rem;
+  max-height: 0;
+  overflow: hidden;
+  z-index: var(--z-dropdown);
+  background: var(--bg-card);
+  border: var(--border-hair) solid var(--border-strong);
+  border-radius: var(--radius);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: max-height var(--motion-medium) var(--ease),
+              opacity var(--motion-base) var(--ease),
+              transform var(--motion-base) var(--ease);
+}
+.model-picker-dropdown.open {
   max-height: 30rem;
   overflow-y: auto;
-  z-index: 100;
-  background: var(--bg);
-  border: 1px solid var(--accent-border);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+  opacity: 1;
+  transform: translateY(0);
 }
+.model-picker-dropdown::-webkit-scrollbar { width: 3px; }
+.model-picker-dropdown::-webkit-scrollbar-track { background: var(--bg-card); }
+.model-picker-dropdown::-webkit-scrollbar-thumb { background: var(--border-strong); }
 
-.model-picker-dropdown[hidden] { display: none; }
-
+/* ---- Panel header — matches .hv-panel-header / .nav-panel-header ---- */
 .model-picker-header {
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--accent-border);
-  font-size: 0.6rem;
-  letter-spacing: 0.05em;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--border-hair) solid var(--border);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
 }
-
 .model-picker-default-label { display: inline-block; }
 .model-picker-default-label #model-picker-default {
   color: var(--text-muted);
-  font-family: inherit;
 }
 
+/* ---- Model list container ---- */
 .model-picker-list {
   display: flex;
   flex-direction: column;
+  padding: var(--space-1) 0;
 }
 
+/* ---- Group headers — matches .nav-group-label / .site-nav-header ---- */
 .model-picker-group-header {
-  padding: 0.4rem 0.75rem 0.25rem;
-  font-size: 0.55rem;
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  font-size: var(--fs-micro);
+  font-weight: 700;
   color: var(--text-dim);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  border-top: 1px solid var(--accent-border);
+  letter-spacing: 0.1em;
+  border-top: var(--border-hair) solid var(--border);
 }
 .model-picker-group-header:first-child { border-top: none; }
 
+/* ---- Model items — follows .nav-link / .site-nav-item pattern ---- */
 .model-picker-item {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.45rem 0.75rem;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  margin: var(--space-0-1) var(--space-2);
   cursor: pointer;
-  border: none;
+  border: var(--border-hair) solid transparent;
+  border-radius: var(--radius);
   background: transparent;
   color: var(--text);
-  font-family: inherit;
-  font-size: 0.7rem;
+  font-family: var(--font);
+  font-size: var(--fs-label);
   text-align: left;
-  transition: background 0.1s;
   position: relative;
+  transition: background var(--motion-fast) var(--ease),
+              color var(--motion-fast) var(--ease),
+              border-color var(--motion-fast) var(--ease);
 }
-
 .model-picker-item:hover {
-  background: var(--accent);
-  color: var(--bg);
+  background: var(--bg-card-hover);
+  border-color: var(--border);
+  color: var(--accent);
 }
 .model-picker-item:hover .model-picker-item-name {
-  color: var(--bg);
+  color: var(--accent);
 }
 .model-picker-item:hover .model-picker-item-desc {
-  color: var(--bg);
-  opacity: 0.7;
+  color: var(--text-muted);
 }
 .model-picker-item:hover .model-picker-item-rate {
-  color: var(--bg);
-  border-color: var(--bg);
-  opacity: 0.8;
+  border-color: var(--border-strong);
 }
 .model-picker-item:hover .model-picker-set-default {
-  color: var(--bg);
-  border-color: var(--bg);
-}
-.model-picker-item:hover .model-picker-item-default-badge {
-  color: var(--bg);
-  border-color: var(--bg);
+  opacity: 1;
 }
 
+/* ---- Item body (name + description) ---- */
 .model-picker-item-body { min-width: 0; }
 .model-picker-item-name {
   display: block;
-  font-size: 0.75rem;
+  font-size: var(--fs-label);
+  font-weight: 700;
   color: var(--text-bright);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: color var(--motion-fast) var(--ease);
 }
 .model-picker-item-desc {
   display: block;
-  font-size: 0.6rem;
+  font-size: var(--fs-micro);
   color: var(--text-dim);
-  margin-top: 0.15rem;
+  margin-top: var(--space-0-1);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* ---- Item meta (rate chip + default badge / set-default button) ---- */
 .model-picker-item-meta {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
-  font-size: 0.55rem;
+  gap: var(--space-1);
+  font-size: var(--fs-micro);
   color: var(--text-muted);
 }
 
-/* Credit-rate multiplier chip. Cost scale via muted->warm->comp so a glance
-   at the dropdown tells you which models are cheap vs. expensive. Colors
-   defined at three thresholds; anything else falls back to muted. */
+/* ---- Credit-rate multiplier chip ---- */
 .model-picker-item-rate {
   display: inline-block;
-  padding: 0.1rem 0.3rem;
-  border: 1px solid var(--accent-border);
+  padding: 0.1rem var(--chip-padding-x);
+  border: var(--border-hair) solid var(--border-strong);
+  border-radius: var(--radius);
+  font-family: var(--font);
+  font-size: var(--fs-micro);
+  font-weight: var(--chip-font-weight);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
   min-width: 2.4rem;
   text-align: center;
+  transition: border-color var(--motion-fast) var(--ease);
 }
-.model-picker-item-rate[data-tier="cheap"]   { color: var(--accent); border-color: var(--accent); }
+.model-picker-item-rate[data-tier="cheap"]   { color: var(--accent); border-color: var(--accent-border); }
 .model-picker-item-rate[data-tier="normal"]  { color: var(--text-muted); }
 .model-picker-item-rate[data-tier="warm"]    { color: var(--warm); border-color: var(--warm); }
 .model-picker-item-rate[data-tier="premium"] { color: var(--comp); border-color: var(--comp); }
 
-/* Current-model indicator: inverted accent row — black text on accent
-   background for unmistakable "this is active" signal. */
+/* ---- Active model — matches .site-nav-item.active / .nav-link.active ---- */
 .model-picker-item.is-current {
-  background: var(--accent);
-  border-left: 2px solid var(--accent);
-  padding-left: calc(0.75rem - 2px);
-  color: var(--bg);
+  background: var(--accent-glow);
+  border-color: var(--accent-border);
+  color: var(--accent);
 }
 .model-picker-item.is-current .model-picker-item-name {
-  color: var(--bg);
+  color: var(--accent);
 }
 .model-picker-item.is-current .model-picker-item-desc {
-  color: var(--bg);
-  opacity: 0.7;
+  color: var(--text-muted);
 }
 .model-picker-item.is-current .model-picker-item-rate {
-  color: var(--bg);
-  border-color: var(--bg);
-  opacity: 0.8;
-}
-.model-picker-item.is-current .model-picker-set-default {
-  color: var(--bg);
-  border-color: var(--bg);
+  border-color: var(--accent-border);
 }
 .model-picker-item.is-current .model-picker-item-default-badge {
-  color: var(--bg);
-  border-color: var(--bg);
+  color: var(--accent);
+  border-color: var(--accent-border);
 }
 
-/* "default" glyph next to the model that matches kiro-cli's chat.defaultModel */
+/* ---- "default" badge — outline chip, matches .hv-badge pattern ---- */
 .model-picker-item-default-badge {
   display: inline-block;
-  font-size: 0.5rem;
-  padding: 0.1rem 0.3rem;
-  border: 1px solid var(--accent-border);
+  font-family: var(--font);
+  font-size: var(--fs-micro);
+  font-weight: var(--chip-font-weight);
+  padding: 0.1rem var(--chip-padding-x);
+  border: var(--border-hair) solid var(--border-strong);
+  border-radius: var(--radius);
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--chip-letter-spacing);
 }
 
-/* "Set as default" action button — appears on hover, right-aligned */
+/* ---- "Set as default" button — appears on hover ---- */
 .model-picker-set-default {
   opacity: 0;
-  font-size: 0.55rem;
-  padding: 0.15rem 0.4rem;
-  border: 1px solid var(--accent-border);
+  font-family: var(--font);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  padding: 0.1rem var(--chip-padding-x);
+  border: var(--border-hair) solid var(--border-strong);
+  border-radius: var(--radius);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  transition: opacity 0.12s, color 0.12s, border-color 0.12s;
-  font-family: inherit;
+  letter-spacing: var(--chip-letter-spacing);
+  transition: opacity var(--motion-fast) var(--ease),
+              color var(--motion-fast) var(--ease),
+              border-color var(--motion-fast) var(--ease);
 }
 .model-picker-item:hover .model-picker-set-default,
 .model-picker-set-default:focus { opacity: 1; }
@@ -239,9 +269,16 @@
   border-color: var(--accent);
 }
 
-/* Reduced-motion: skip the hover opacity fade */
+/* ---- Reduced motion ---- */
 @media (prefers-reduced-motion: reduce) {
   .model-picker-set-default { transition: none; }
   .model-picker-item { transition: none; }
   .model-picker-btn { transition: none; }
+  .model-picker-dropdown { transition: none; }
+  .model-picker-caret { transition: none; }
 }
+html.a11y-reduce-motion .model-picker-set-default { transition: none; }
+html.a11y-reduce-motion .model-picker-item { transition: none; }
+html.a11y-reduce-motion .model-picker-btn { transition: none; }
+html.a11y-reduce-motion .model-picker-dropdown { transition: none; }
+html.a11y-reduce-motion .model-picker-caret { transition: none; }

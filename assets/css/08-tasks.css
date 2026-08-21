@@ -1,13 +1,16 @@
-/* ===== Task Panel (floating accordion) ===== */
+/* ===== Task Panel (floating accordion) =====
+   Ecosystem alignment: bg-card panel with border-strong frame, hv-panel-header,
+   nav-link-style items, hyperkit token scale throughout. */
+
 .task-panel {
   position: fixed;
   top: 2.2rem;
   right: var(--space-3);
   width: 260px;
   max-height: 50vh;
-  background: var(--bg);
-  border: var(--border-hair) solid var(--border);
-  /* Just below topbar tier — floating panel over content, not chrome */
+  background: var(--bg-card);
+  border: var(--border-hair) solid var(--border-strong);
+  border-radius: var(--radius);
   z-index: calc(var(--z-topbar) - 10);
   display: flex;
   flex-direction: column;
@@ -16,80 +19,137 @@
   transform: translateX(20px);
   opacity: 0;
   pointer-events: none;
-  transition: transform var(--motion-medium) ease, opacity var(--motion-medium) ease;
+  transition: transform var(--motion-medium) var(--ease),
+              opacity var(--motion-medium) var(--ease);
 }
 .task-panel.visible {
   transform: translateX(0);
   opacity: 1;
   pointer-events: auto;
 }
+
+/* ---- Header — matches .hv-panel-header pattern ---- */
 .task-panel-header {
-  padding: var(--space-0-4) var(--space-0-6);
-  font-size: 0.6rem;
-  color: var(--text-muted);
-  cursor: var(--cursor-pointer);
-  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
   user-select: none;
+  border-bottom: var(--border-hair) solid var(--border);
+  justify-content: space-between;
+  transition: color var(--motion-fast) var(--ease);
+}
+.task-panel-header:hover {
+  color: var(--accent);
 }
 .task-panel-header::after {
   content: '\25B4';
-  font-size: 0.6rem;
+  font-size: var(--fs-caption);
   color: var(--text-dim);
-  transition: transform var(--motion-base) ease;
+  transition: transform var(--motion-base) var(--ease);
 }
 .task-panel.collapsed .task-panel-header::after {
   transform: rotate(180deg);
 }
+
+/* ---- Description — subtle context line ---- */
 .task-panel-desc {
-  padding: 0.35rem var(--space-0-6);
-  font-size: 0.6rem;
-  color: var(--text-dim);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
   border-bottom: var(--border-hair) solid var(--border);
+  line-height: 1.4;
 }
+
+/* ---- Body — scrollable task list area ---- */
 .task-panel-body {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: var(--space-0-3) 0;
+  padding: var(--space-1) 0;
   max-height: 40vh;
-  transition: max-height var(--motion-medium) ease, padding var(--motion-medium) ease;
+  transition: max-height var(--motion-medium) var(--ease),
+              padding var(--motion-medium) var(--ease);
 }
 .task-panel.collapsed .task-panel-body {
   max-height: 0;
   padding: 0;
   overflow: hidden;
 }
+.task-panel-body::-webkit-scrollbar { width: 3px; }
+.task-panel-body::-webkit-scrollbar-track { background: var(--bg-card); }
+.task-panel-body::-webkit-scrollbar-thumb { background: var(--border-strong); }
+
+/* ---- Task list ---- */
 .task-panel-list {
   list-style: none;
   margin: 0;
   padding: 0;
 }
+
+/* ---- Task items — nav-link influenced: border + radius + hover ---- */
 .task-item {
-  padding: var(--space-0-3) var(--space-0-6);
-  font-size: 0.6rem;
+  padding: var(--space-1) var(--space-3);
+  margin: var(--space-0-1) var(--space-2);
+  font-size: var(--fs-caption);
   color: var(--text);
   display: flex;
   align-items: flex-start;
-  gap: var(--space-0-4);
-  transition: background 0.4s ease, color var(--motion-slow) ease, transform var(--motion-base) ease;
+  gap: var(--space-2);
+  border: var(--border-hair) solid transparent;
+  border-radius: var(--radius);
+  transition: background var(--motion-fast) var(--ease),
+              color var(--motion-fast) var(--ease),
+              border-color var(--motion-fast) var(--ease),
+              transform var(--motion-base) var(--ease);
+}
+.task-item:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border);
 }
 .task-item.done {
   color: var(--text-dim);
   text-decoration: line-through;
 }
+.task-item.done:hover {
+  color: var(--text-muted);
+}
+
+/* ---- Checkbox glyph ---- */
 .task-check {
   color: var(--accent);
   flex-shrink: 0;
-  transition: color var(--motion-slow) ease, transform var(--motion-base) ease;
+  transition: color var(--motion-fast) var(--ease),
+              transform var(--motion-base) var(--ease);
 }
 .task-item.done .task-check {
   color: var(--text-dim);
 }
+
+/* ---- Just-completed highlight — accent glow flash ---- */
 .task-item.just-done {
   background: var(--accent-glow);
+  border-color: var(--accent-border);
   transform: translateX(3px);
 }
 .task-item.just-done .task-check {
   color: var(--accent);
   transform: scale(1.3);
 }
+
+/* ---- Reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  .task-panel { transition: none; }
+  .task-panel-body { transition: none; }
+  .task-panel-header::after { transition: none; }
+  .task-item { transition: none; }
+  .task-check { transition: none; }
+}
+html.a11y-reduce-motion .task-panel { transition: none; }
+html.a11y-reduce-motion .task-panel-body { transition: none; }
+html.a11y-reduce-motion .task-panel-header::after { transition: none; }
+html.a11y-reduce-motion .task-item { transition: none; }
+html.a11y-reduce-motion .task-check { transition: none; }

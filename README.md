@@ -54,7 +54,7 @@ pythonw hyperagent.py
 Hyperagent is not self-contained — it depends on **Hyperkit**, the shared design system package at `.hyperspace/.hyperkit/`. Hyperkit supplies:
 
 - `css/tokens.css` + `css/primitives.css` — the universal `:root` custom properties and shared component classes (`hv-chip`, `hv-row`, `hv-button`, etc.), prepended ahead of every file in `assets/css/`
-- Four JS modules (`noise-field.js`, `greeting.js`, `cursor-trail.js`, `toast.js`) — inlined as `<script>` blocks before any file in `assets/js/`
+- Five JS modules (`cursor-box.js`, `noise-field.js`, `greeting.js`, `cursor-trail.js`, `toast.js`) — inlined as `<script>` blocks before any file in `assets/js/`
 - `python/hyper_logging.py` — the structured logging setup imported by `hyperagent.py` and `acp_bridge.py`
 
 This isn't a pip package — it's a sibling directory that must physically exist at `.hyperspace/.hyperkit/` relative to this repo. If you're cloning Hyperagent standalone into a workspace that doesn't already have `.hyperkit/`, copy or clone it in before running `build.py`. `build.py` raises `FileNotFoundError` immediately (not a silent fallback) if any required Hyperkit file is missing.
@@ -101,7 +101,7 @@ The frontend reacts to state transitions pushed from Python via `window.evaluate
 ### Build Pipeline
 
 ```
-.hyperspace/.hyperkit/     ← Shared tokens.css, primitives.css, 4 JS modules (WI-142)
+.hyperspace/.hyperkit/     ← Shared tokens.css, primitives.css, 5 JS modules
                            ↓ read first, before any local file
 assets/shell.html          ← HTML skeleton with {{CSS}} and {{JS_BLOCKS}} placeholders
 assets/css/*.css           ← concatenated in sorted order → replaces {{CSS}}
@@ -112,14 +112,18 @@ build.py                   → generated_html.py (HTML as Python string literal)
 hyperagent.py imports HTML → passes to webview.create_window(html=HTML)
 ```
 
-No runtime file serving — the entire UI is a single inline HTML string passed to PyWebView. Each JS module (Hyperkit's four plus every app-local file) is emitted as its own `<script>` block (WI-118) so a parse error in one module doesn't take down the app.
+No runtime file serving — the entire UI is a single inline HTML string passed to PyWebView. Each JS module (Hyperkit's five plus every app-local file) is emitted as its own `<script>` block so a parse error in one module doesn't take down the app.
 
 ## Project Structure
 
 ```
 .hyperagent/
 ├── hyperagent.py          ← Main app: ACPClient, HyperagentAPI, PyWebView setup
+├── acp_client.py          ← ACPClient class: JSON-RPC state machine over TCP
+├── acp_pool.py            ← ACP connection pool management
 ├── acp_bridge.py          ← TCP ↔ stdio relay subprocess
+├── bridge_api.py          ← Bridge API: theme, palette, accent sync, gradient maps
+├── helpers.py             ← Shared utilities: OKLCh palette generation, color math
 ├── build.py               ← Concatenates CSS/JS into generated_html.py (prepends Hyperkit — see below)
 ├── assets/
 │   ├── shell.html         ← HTML template
@@ -135,7 +139,6 @@ No runtime file serving — the entire UI is a single inline HTML string passed 
 │   │   ├── 07-skills.css      ← Skill activation strip
 │   │   ├── 07-tabs.css        ← Per-tab message containers
 │   │   ├── 08-tasks.css       ← Task sidebar panel
-│   │   ├── 10-toast.css       ← Toast notifications
 │   │   └── zz-accessibility.css ← A11y overrides (loads last)
 │   ├── js/
 │   │   ├── 00-core.js         ← DOM refs, state, accent sync, PyWebView bridge detection
@@ -153,7 +156,7 @@ No runtime file serving — the entire UI is a single inline HTML string passed 
 
 ### Hyperkit (WI-142)
 
-Four ecosystem JS modules (`HvNoiseField`, `HvGreeting`, `HvCursorTrail`, `HvToast`) and the shared CSS (`tokens.css`, `primitives.css`) no longer live inside `.hyperagent/`. They live one directory up at `.hyperspace/.hyperkit/`, shared verbatim with Hypervisor. `build.py` reads them from there and emits them first — before any file in `assets/`. See `.hyperspace/.hyperkit/README.md` for the full consumption pattern and override rules. Edit those four JS files and the two CSS files in `.hyperkit/`, never as a local copy inside `.hyperagent/assets/`.
+Five ecosystem JS modules (`HvCursorBox`, `HvNoiseField`, `HvGreeting`, `HvCursorTrail`, `HvToast`) and the shared CSS (`tokens.css`, `primitives.css`) no longer live inside `.hyperagent/`. They live one directory up at `.hyperspace/.hyperkit/`, shared verbatim with Hypervisor. `build.py` reads them from there and emits them first — before any file in `assets/`. See `.hyperspace/.hyperkit/README.md` for the full consumption pattern and override rules. Edit those five JS files and the two CSS files in `.hyperkit/`, never as a local copy inside `.hyperagent/assets/`.
 
 ## Features
 

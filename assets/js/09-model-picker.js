@@ -201,7 +201,7 @@
 
   function isOpen() {
     var dd = document.getElementById("model-picker-dropdown");
-    return dd && !dd.hasAttribute("hidden");
+    return dd && dd.classList.contains("open");
   }
 
   function openDropdown() {
@@ -209,7 +209,7 @@
     var btn = document.getElementById("model-picker-btn");
     if (!dd || !btn) return;
     renderDropdown();
-    dd.removeAttribute("hidden");
+    dd.classList.add("open");
     btn.classList.add("model-picker-open");
     // Delay attaching the outside-click closer until after this click bubbles.
     setTimeout(function () {
@@ -221,7 +221,7 @@
   function closeDropdown() {
     var dd = document.getElementById("model-picker-dropdown");
     var btn = document.getElementById("model-picker-btn");
-    if (dd) dd.setAttribute("hidden", "");
+    if (dd) dd.classList.remove("open");
     if (btn) btn.classList.remove("model-picker-open");
     document.removeEventListener("click", onDocClick, true);
     document.removeEventListener("keydown", onKeydown, true);

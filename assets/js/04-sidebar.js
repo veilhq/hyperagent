@@ -128,13 +128,13 @@ function refreshSessions() {
       el.setAttribute('data-session-id', s.id);
 
       // Build stacked row: title on top, meta strip (chip + age) below, delete btn top-right
-      var chipHtml = renderChip('outlined-muted', escapeHtml(s.msgs), 'session-item-chip');
+      var chipHtml = renderChip('outlined-muted', HvUtils.escapeHtml(s.msgs), 'session-item-chip');
       var lockHtml = s.locked ? ' ' + renderChip('outlined-muted', 'IN USE', 'session-lock') : '';
       el.innerHTML =
-        '<span class="session-item-title">' + escapeHtml(s.title) + '</span>' +
+        '<span class="session-item-title">' + HvUtils.escapeHtml(s.title) + '</span>' +
         '<div class="session-item-meta">' +
           chipHtml + lockHtml +
-          '<span class="session-item-age">' + escapeHtml(s.age) + '</span>' +
+          '<span class="session-item-age">' + HvUtils.escapeHtml(s.age) + '</span>' +
         '</div>' +
         '<button class="session-delete-btn" title="Delete">&times;</button>';
 
@@ -223,10 +223,6 @@ function deleteSession(id, el) {
   }).catch(function() {
     if (window.HvToast) window.HvToast.show({ variant: 'error', message: 'session delete failed' });
   });
-}
-
-function escapeHtml(str) {
-  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 // Keyboard shortcuts

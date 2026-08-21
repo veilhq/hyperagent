@@ -36,6 +36,7 @@ from helpers import (
     build_palette_oklch,
     build_palette_hsl,
 )
+from palette import GRADIENT_MAPS  # noqa: E402 — shared preset data from hyperkit
 from acp_pool import ACPClientPool
 
 
@@ -545,43 +546,6 @@ class HyperagentAPI:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-    # --- Gradient map presets (mirrors theme.js GRADIENT_MAPS) ---
-    GRADIENT_MAPS = {
-        "frost2": {"accent": "#d2ebfe", "warm": "#c0caff", "cool": "#ceb0e4", "comp": "#ff0059",
-                    "semantics": {"success": "#1dff7d", "warning": "#fdca18", "error": "#fb110b", "info": "#1be1fd"}},
-        "cyberdeck": {"accent": "#00ff9f", "warm": "#ffe600", "cool": "#00e5ff", "comp": "#ff003c",
-                       "semantics": {"success": "#1efea0", "warning": "#fee51b", "error": "#fc113e", "info": "#1de5fe"}},
-        "thermal": {"accent": "#ffc250", "warm": "#fb5a46", "cool": "#5480c7", "comp": "#d10054",
-                     "semantics": {"success": "#21ff7b", "warning": "#fdca18", "error": "#fd1369", "info": "#086ffd"}},
-        "tundra": {"accent": "#d2ebfe", "warm": "#c0caff", "cool": "#ceb0e4", "comp": "#c8ff5c",
-                    "semantics": {"success": "#bffe1c", "warning": "#fdb015", "error": "#fd154c", "info": "#1be1fd"}},
-        "cryo": {"accent": "#d2ebfe", "warm": "#c8d8ff", "cool": "#c0b8e8", "comp": "#a855f7",
-                  "semantics": {"success": "#1efea1", "warning": "#fdb015", "error": "#fd154c", "info": "#a01efd"}},
-        "nordic": {"accent": "#b8ccd8", "warm": "#a8b8c8", "cool": "#c0d0dc", "comp": "#ffb000",
-                    "semantics": {"success": "#1dfd91", "warning": "#fdb015", "error": "#fc5c0d", "info": "#0f9afc"}},
-        "frostbite": {"accent": "#c2e8ff", "warm": "#a0d0f0", "cool": "#8ac0e8", "comp": "#00c0ff",
-                       "semantics": {"success": "#1efea1", "warning": "#fdb015", "error": "#fd154c", "info": "#15bffc"}},
-        "hazmat": {"accent": "#c8ff00", "warm": "#ffea00", "cool": "#00ff88", "comp": "#ff00cc",
-                    "semantics": {"success": "#c8fe1c", "warning": "#ffea1c", "error": "#fe13cb", "info": "#15c1fd"}},
-        "laser": {"accent": "#00ff41", "warm": "#ff0044", "cool": "#0044ff", "comp": "#8b00ff",
-                   "semantics": {"success": "#1dfd46", "warning": "#ffea1c", "error": "#fc1145", "info": "#1f5efc"}},
-        "prism": {"accent": "#ff2020", "warm": "#ffea00", "cool": "#00e0ff", "comp": "#ff00e5",
-                   "semantics": {"success": "#1dfd49", "warning": "#ffea1c", "error": "#fd151a", "info": "#1adffd"}},
-        "emergency": {"accent": "#ff5500", "warm": "#ffd500", "cool": "#00ff44", "comp": "#ff003c",
-                       "semantics": {"success": "#1dfd49", "warning": "#fdd419", "error": "#fc113e", "info": "#15c1fd"}},
-        "ignite": {"accent": "#4a4a4a", "warm": "#ff6600", "cool": "#ffea00", "comp": "#ff003c",
-                    "semantics": {"success": "#1dfd49", "warning": "#ffea1c", "error": "#fc113e", "info": "#15c1fd"}},
-        "bloom": {"accent": "#4a4a4a", "warm": "#ff00d4", "cool": "#a855f7", "comp": "#ff77e9",
-                   "semantics": {"success": "#1dfe8a", "warning": "#ffea1c", "error": "#fe18d3", "info": "#a01efd"}},
-        "verdigris": {"accent": "#4a4a4a", "warm": "#00ff88", "cool": "#00e0ff", "comp": "#c8ff00",
-                       "semantics": {"success": "#1dfe8a", "warning": "#fdca18", "error": "#fd154c", "info": "#1adffd"}},
-        "spectra": {"accent": "#4a4a4a", "warm": "#ff2020", "cool": "#00e0ff", "comp": "#c8ff00",
-                     "semantics": {"success": "#c8fe1c", "warning": "#ffea1c", "error": "#fd151a", "info": "#1adffd"}},
-        "coldsnap": {"accent": "#4a4a4a", "warm": "#7cffb0", "cool": "#7a8cff", "comp": "#c0a0ff",
-                      "semantics": {"success": "#1dfd95", "warning": "#ffea1c", "error": "#fd154c", "info": "#5155fd"}},
-    }
-
-
     def get_recent_logs(self, lines=40):
         """Read the last N lines from hyperagent.log and bridge.log."""
         logs_dir = HYPERSPACE_ROOT / ".logs"
@@ -627,7 +591,7 @@ class HyperagentAPI:
             gradient_map = data.get("hypervisor-gradient-map", "")
 
             if theme_mode == "preset" and gradient_map:
-                preset = self.GRADIENT_MAPS.get(gradient_map)
+                preset = GRADIENT_MAPS.get(gradient_map)
                 if not preset:
                     preset = data.get("userGradientMaps", {}).get(gradient_map)
                 if preset:
