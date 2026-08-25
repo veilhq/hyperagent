@@ -38,6 +38,7 @@ def concat_hyperkit_css():
     parts = []
     hyperkit_css_order = (
         "tokens.css",
+        "keyframes.css",
         "primitives.css",
         "globals.css",
         "components.css",

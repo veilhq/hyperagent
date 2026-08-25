@@ -140,16 +140,4 @@
   transform: scale(1.3);
 }
 
-/* ---- Reduced motion ---- */
-@media (prefers-reduced-motion: reduce) {
-  .task-panel { transition: none; }
-  .task-panel-body { transition: none; }
-  .task-panel-header::after { transition: none; }
-  .task-item { transition: none; }
-  .task-check { transition: none; }
-}
-html.a11y-reduce-motion .task-panel { transition: none; }
-html.a11y-reduce-motion .task-panel-body { transition: none; }
-html.a11y-reduce-motion .task-panel-header::after { transition: none; }
-html.a11y-reduce-motion .task-item { transition: none; }
-html.a11y-reduce-motion .task-check { transition: none; }
+/* ---- Reduced motion: handled by Hyperkit accessibility.css blanket ---- */

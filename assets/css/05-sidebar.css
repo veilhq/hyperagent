@@ -74,11 +74,7 @@
 }
 .session-refresh-btn:hover { color: var(--accent); }
 .session-refresh-btn:active { transform: rotate(180deg); }
-.session-refresh-btn.spinning svg { animation: session-refresh-spin 0.6s linear; }
-@keyframes session-refresh-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
+.session-refresh-btn.spinning svg { animation: spin 0.6s linear; } /* off-scale: spinner cadence */
 
 /* ---- Tab cards ----
    Clipped-corner cards with dither grid and title.
@@ -140,7 +136,7 @@
 
 /* Prompting: run chase */
 .sidebar-tab-item.prompting .sidebar-tab-dither > span {
-  animation: tab-dither-pulse 1s linear infinite;
+  animation: tab-dither-pulse 1s linear infinite; /* off-scale: 1s perimeter chase cycle, delays are 1/8 divisions */
 }
 .sidebar-tab-item.prompting .sidebar-tab-dither > span:nth-child(1) { animation-delay: 0s; }
 .sidebar-tab-item.prompting .sidebar-tab-dither > span:nth-child(2) { animation-delay: 0.125s; }

@@ -55,6 +55,7 @@ var THINKING_FRAG = [
   'uniform vec2 u_resolution;',
   'uniform float u_time;',
   'uniform vec3 u_color;',
+  'uniform vec3 u_bg;',
   'out vec4 fragColor;',
   '',
   'float bayer8(vec2 pos) {',
@@ -87,7 +88,7 @@ var THINKING_FRAG = [
   '    float val = g1 * 0.5 + g2 * 0.25 + g3 * 0.25;',
   '    val = val * val;',
   '    float threshold = bayer8(gl_FragCoord.xy / cell);',
-  '    if (val < threshold) { fragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }',
+  '    if (val < threshold) { fragColor = vec4(u_bg, 1.0); return; }',
   '    fragColor = vec4(u_color * 0.78, 1.0);',
   '}'
 ].join('\n');
@@ -145,6 +146,10 @@ function thinkingDitherFrame() {
   gl.uniform2f(gl.getUniformLocation(thinkingProg, 'u_resolution'), w, h);
   gl.uniform1f(gl.getUniformLocation(thinkingProg, 'u_time'), thinkingTime);
   gl.uniform3f(gl.getUniformLocation(thinkingProg, 'u_color'), thinkColorR/255, thinkColorG/255, thinkColorB/255);
+  // Read current bg color for off-pixels (responds to light mode)
+  var bgHex = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#030305';
+  var bgArr = hexToRgbArr(bgHex);
+  gl.uniform3f(gl.getUniformLocation(thinkingProg, 'u_bg'), bgArr[0]/255, bgArr[1]/255, bgArr[2]/255);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 
   thinkingTime += 0.05;

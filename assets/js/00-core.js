@@ -214,36 +214,65 @@ window.refreshPlanCredits = refreshPlanCredits;
 // Apply palette from hypervisor theme
 function applyAccent(palette) {
   var hex = typeof palette === 'string' ? palette : palette.accent;
-  var r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
-  var root = document.documentElement.style;
-  root.setProperty('--accent', hex);
-  root.setProperty('--accent-dim', hex + 'cc');
-  root.setProperty('--accent-glow', 'rgba('+r+','+g+','+b+',0.06)');
-  root.setProperty('--accent-border', 'rgba('+r+','+g+','+b+',0.15)');
+  var root = document.documentElement;
+  var rs = root.style;
+
+  // Sync light mode class first
   if (typeof palette === 'object') {
-    root.setProperty('--warm', palette.warm);
-    root.setProperty('--cool', palette.cool);
-    root.setProperty('--comp', palette.comp);
-    // Apply semantic overrides from presets, or reset to defaults
-    if (palette.semantics) {
-      if (palette.semantics.success) root.setProperty('--success', palette.semantics.success);
-      if (palette.semantics.warning) root.setProperty('--warning', palette.semantics.warning);
-      if (palette.semantics.error) root.setProperty('--error', palette.semantics.error);
-      if (palette.semantics.info) root.setProperty('--info', palette.semantics.info);
+    if (palette.lightMode) {
+      root.classList.add('a11y-bw-theme');
     } else {
-      root.setProperty('--success', '#00ff41');
-      root.setProperty('--warning', '#ffb000');
-      root.setProperty('--error', '#ff3333');
-      root.setProperty('--info', '#00cccc');
+      root.classList.remove('a11y-bw-theme');
     }
-    root.setProperty('--highlight', 'var(--accent)');
-    root.setProperty('--surface-active', 'var(--accent-glow)');
+  }
+
+  // In light mode, force blue palette + primary-color semantics
+  if (root.classList.contains('a11y-bw-theme')) {
+    hex = '#0000ff';
+    rs.setProperty('--accent', '#0000ff');
+    rs.setProperty('--accent-dim', '#0000cc');
+    rs.setProperty('--accent-glow', 'rgba(0,0,255,0.15)');
+    rs.setProperty('--accent-border', '#0000ff');
+    rs.setProperty('--warm', '#0000ff');
+    rs.setProperty('--cool', '#0000ff');
+    rs.setProperty('--comp', '#0000ff');
+    rs.setProperty('--success', '#007a00');
+    rs.setProperty('--warning', '#b35900');
+    rs.setProperty('--error', '#cc0000');
+    rs.setProperty('--info', '#0000ff');
+    rs.setProperty('--highlight', 'var(--accent)');
+    rs.setProperty('--surface-active', 'var(--accent-glow)');
+  } else {
+    var r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    rs.setProperty('--accent', hex);
+    rs.setProperty('--accent-dim', hex + 'cc');
+    rs.setProperty('--accent-glow', 'rgba('+r+','+g+','+b+',0.06)');
+    rs.setProperty('--accent-border', 'rgba('+r+','+g+','+b+',0.15)');
+    if (typeof palette === 'object') {
+      rs.setProperty('--warm', palette.warm);
+      rs.setProperty('--cool', palette.cool);
+      rs.setProperty('--comp', palette.comp);
+      // Apply semantic overrides from presets, or reset to defaults
+      if (palette.semantics) {
+        if (palette.semantics.success) rs.setProperty('--success', palette.semantics.success);
+        if (palette.semantics.warning) rs.setProperty('--warning', palette.semantics.warning);
+        if (palette.semantics.error) rs.setProperty('--error', palette.semantics.error);
+        if (palette.semantics.info) rs.setProperty('--info', palette.semantics.info);
+      } else {
+        rs.setProperty('--success', '#00ff41');
+        rs.setProperty('--warning', '#ffb000');
+        rs.setProperty('--error', '#ff3333');
+        rs.setProperty('--info', '#00cccc');
+      }
+      rs.setProperty('--highlight', 'var(--accent)');
+      rs.setProperty('--surface-active', 'var(--accent-glow)');
+    }
   }
   // Dynamic cursors synced to accent
   var ec = encodeURIComponent(hex);
-  root.setProperty('--cursor-default', "url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='" + ec + "' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z'/></svg>\") 2 2, auto");
-  root.setProperty('--cursor-pointer', "url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='" + ec + "' stroke='" + ec + "' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z'/></svg>\") 2 2, pointer");
-  root.setProperty('--cursor-text', "url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='" + ec + "' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M17 22h-1a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4h1'/><path d='M7 22h1a4 4 0 0 0 4-4V6a4 4 0 0 0-4-4H7'/></svg>\") 10 10, text");
+  rs.setProperty('--cursor-default', "url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='" + ec + "' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z'/></svg>\") 2 2, auto");
+  rs.setProperty('--cursor-pointer', "url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='" + ec + "' stroke='" + ec + "' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z'/></svg>\") 2 2, pointer");
+  rs.setProperty('--cursor-text', "url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='" + ec + "' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M17 22h-1a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4h1'/><path d='M7 22h1a4 4 0 0 0 4-4V6a4 4 0 0 0-4-4H7'/></svg>\") 10 10, text");
 }
 window.applyAccent = applyAccent;
 if (window.pywebview && window.pywebview.api) {

@@ -269,16 +269,4 @@
   border-color: var(--accent);
 }
 
-/* ---- Reduced motion ---- */
-@media (prefers-reduced-motion: reduce) {
-  .model-picker-set-default { transition: none; }
-  .model-picker-item { transition: none; }
-  .model-picker-btn { transition: none; }
-  .model-picker-dropdown { transition: none; }
-  .model-picker-caret { transition: none; }
-}
-html.a11y-reduce-motion .model-picker-set-default { transition: none; }
-html.a11y-reduce-motion .model-picker-item { transition: none; }
-html.a11y-reduce-motion .model-picker-btn { transition: none; }
-html.a11y-reduce-motion .model-picker-dropdown { transition: none; }
-html.a11y-reduce-motion .model-picker-caret { transition: none; }
+/* ---- Reduced motion: handled by Hyperkit accessibility.css blanket ---- */

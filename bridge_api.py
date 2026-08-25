@@ -587,6 +587,7 @@ class HyperagentAPI:
         prefs_file = HYPERVISOR_DIR / "preferences.json"
         try:
             data = json.loads(prefs_file.read_text(encoding="utf-8"))
+            light_mode = data.get("hypervisor-light-mode", "0") == "1"
             theme_mode = data.get("hypervisor-theme-mode", "custom")
             gradient_map = data.get("hypervisor-gradient-map", "")
 
@@ -603,14 +604,16 @@ class HyperagentAPI:
                         "semantics": preset.get("semantics"),
                         "mode": "preset",
                         "gradientMap": gradient_map,
+                        "lightMode": light_mode,
                     }
 
             accent = data.get("hypervisor-accent", "#00ff41")
             mode = data.get("hypervisor-palette-mode", "split")
         except Exception:
-            accent, mode = "#00ff41", "split"
+            accent, mode, light_mode = "#00ff41", "split", False
         palette = build_palette_oklch(accent, mode)
         palette["mode"] = "custom"
+        palette["lightMode"] = light_mode
         return palette
 
     def get_steering(self):

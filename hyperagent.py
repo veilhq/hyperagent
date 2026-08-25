@@ -87,6 +87,13 @@ def _start_theme_watcher(window, api):
                     palette = api.get_accent()
                     payload = json.dumps(palette).replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
                     window.evaluate_js(f"if(window.applyAccent)window.applyAccent(JSON.parse(`{payload}`))")
+                    # Sync light mode class across ecosystem
+                    data = json.loads(prefs_file.read_text(encoding="utf-8"))
+                    light = data.get("hypervisor-light-mode", "0")
+                    if light == "1":
+                        window.evaluate_js("document.documentElement.classList.add('a11y-bw-theme')")
+                    else:
+                        window.evaluate_js("document.documentElement.classList.remove('a11y-bw-theme')")
             except Exception:
                 pass
 
@@ -198,7 +205,15 @@ _mcp_service_proc: _subprocess.Popen | None = None
 
 
 def _ensure_mcp_service():
-    """Launch the shared MCP HTTP service if not already running."""
+    """Launch the shared MCP HTTP service if not already running.
+
+    Checks three signals in order:
+    1. Lock file with a live PID → service is running, attach.
+    2. Port 8321 accepting connections → another instance is mid-startup
+       (lock not yet written). Wait for the lock to appear rather than
+       spawning a guaranteed-loser duplicate.
+    3. Neither → launch a new instance.
+    """
     global _mcp_service_proc
 
     if _MCP_LOCK_FILE.exists():
@@ -217,6 +232,40 @@ def _ensure_mcp_service():
         except (ValueError, OSError, IndexError):
             _MCP_LOCK_FILE.unlink(missing_ok=True)
 
+    # Port probe: if 8321 is already accepting connections, another instance
+    # is in its import/startup window and hasn't written the lock yet.
+    # Wait for the lock rather than spawning a doomed duplicate.
+    import socket as _socket
+    try:
+        _probe = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+        _probe.settimeout(0.3)
+        _probe.connect(("127.0.0.1", 8321))
+        _probe.close()
+        logger.info(
+            "port 8321 is open but no lock file — another instance is starting, "
+            "waiting for lock"
+        )
+        for _wait in range(20):  # up to 10 seconds
+            time.sleep(0.5)
+            if _MCP_LOCK_FILE.exists():
+                try:
+                    lines = _MCP_LOCK_FILE.read_text(encoding="utf-8").strip().split("\n")
+                    pid = int(lines[0])
+                    logger.info(
+                        "lock appeared (PID %d) — attaching to existing service", pid
+                    )
+                    return
+                except (ValueError, OSError, IndexError):
+                    pass
+        # Lock never appeared — stray process on port, cannot safely launch
+        logger.warning(
+            "port 8321 held by unknown process with no lock file — "
+            "skipping launch to avoid conflict"
+        )
+        return
+    except (OSError, ConnectionRefusedError):
+        pass  # port free — proceed to launch
+
     # Launch — NOT detached, so it dies when Hyperagent exits
     logger.info("launching MCP HTTP service (fallback — Hypervisor not running)")
     _mcp_service_proc = _subprocess.Popen(
@@ -229,7 +278,6 @@ def _ensure_mcp_service():
     logger.info("MCP service launched (PID %d)", _mcp_service_proc.pid)
 
     # Wait for the service to become ready (port accepting connections)
-    import socket as _socket
     for _ in range(20):  # up to 10 seconds
         time.sleep(0.5)
         if _mcp_service_proc.poll() is not None:

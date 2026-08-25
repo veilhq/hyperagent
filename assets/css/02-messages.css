@@ -267,7 +267,7 @@
   height: 6px;
   background: var(--comp);
   border: none;
-  animation: splashBlink 1s step-end infinite;
+  animation: splashBlink 1s step-end infinite; /* off-scale: blink rhythm */
 }
 
 /* ---- Streaming cursor ---- */
@@ -278,14 +278,14 @@
   background: var(--accent);
   margin-left: 2px;
   vertical-align: text-bottom;
-  animation: splashBlink 0.6s step-end infinite;
+  animation: splashBlink 0.6s step-end infinite; /* off-scale: faster blink for streaming state */
 }
 
 /* ---- Stream word fade-in ---- */
 .stream-word {
   display: inline;
   opacity: 0;
-  animation: wordIn 0.5s ease-out forwards;
+  animation: wordIn 0.5s ease-out forwards; /* off-scale: tuned for reading cadence */
 }
 @keyframes wordIn {
   from { opacity: 0; }
@@ -328,8 +328,8 @@
 .hv-noise-field > canvas.fade-out,
 .welcome-canvas.fade-out { opacity: 0; }
 #messages, .tab-messages { position: relative; }
-.welcome-icon { width: 32px; height: 32px; color: var(--text-dim); opacity: 0; animation: fadeSlideIn 0.3s var(--ease) 0.1s forwards; }
-.welcome-text { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0; animation: fadeSlideIn 0.3s var(--ease) 0.2s forwards; }
+.welcome-icon { width: 32px; height: 32px; color: var(--text-dim); opacity: 0; animation: fadeSlideIn var(--motion-slow) var(--ease) 0.1s forwards; } /* 0.1s delay: stagger after canvas init */
+.welcome-text { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0; animation: fadeSlideIn var(--motion-slow) var(--ease) 0.2s forwards; } /* 0.2s delay: stagger after icon */
 /* Kaomoji greeting variant — compound selector beats plain .emote in
    specificity so the combined fadeSlideIn + emote-glow animation isn't
    overwritten by .emote's single-animation rule further down. */
@@ -354,7 +354,7 @@
   max-width: 500px;
   margin-top: var(--space-2);
   opacity: 0;
-  animation: fadeSlideIn var(--motion-slow) var(--ease) 0.35s forwards;
+  animation: fadeSlideIn var(--motion-slow) var(--ease) 0.35s forwards; /* off-scale delay: stagger after welcome text */
 }
 .welcome-chip {
   background: var(--bg-card);
@@ -371,13 +371,7 @@
 /* ---- ASCII emote glow (palette color cycling) ---- */
 .emote {
   display: inline-block;
-  animation: emote-glow 8s infinite ease-in-out;
-}
-@keyframes emote-glow {
-  0%, 100% { color: var(--accent); text-shadow: 0 0 6px var(--accent), 0 0 12px var(--accent-glow); }
-  25%      { color: var(--warm);   text-shadow: 0 0 6px var(--warm),   0 0 12px var(--warm); }
-  50%      { color: var(--cool);   text-shadow: 0 0 6px var(--cool),   0 0 12px var(--cool); }
-  75%      { color: var(--comp);   text-shadow: 0 0 6px var(--comp),   0 0 12px var(--comp); }
+  animation: emote-glow 8s infinite ease-in-out; /* off-scale: slow ambient palette cycle */
 }
 
 
@@ -514,7 +508,7 @@
    is 1 → 2 → 3 → 6 → 9 → 8 → 7 → 4. Each cell gets an animation-delay
    spaced 1/8 of the cycle so brightness sweeps around the ring. */
 .msg-thought[data-active="true"] .msg-thought-dither > span {
-  animation: msg-thought-cell-pulse 1s linear infinite;
+  animation: msg-thought-cell-pulse 1s linear infinite; /* off-scale: 1s perimeter chase cycle, delays are 1/8 divisions */
 }
 .msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(1) { animation-delay: 0s; }
 .msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(2) { animation-delay: 0.125s; }

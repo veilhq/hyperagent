@@ -25,13 +25,14 @@
   white-space: nowrap;
   color: var(--cool);
   border: var(--border-hair) solid var(--cool);
+  border-radius: var(--radius);
   animation: skillBadgeIn var(--motion-medium) var(--ease);
   box-shadow: 0 0 4px var(--cool), inset 0 0 4px rgba(0, 204, 204, 0.05);
 }
 .skill-badge-icon {
   font-size: var(--fs-micro);
   line-height: 1;
-  animation: skillIconPulse 2.5s ease-in-out infinite;
+  animation: skillIconPulse 2.5s ease-in-out infinite; /* off-scale: slow ambient glow */
 }
 
 @keyframes skillBadgeIn {
@@ -52,10 +53,17 @@
   gap: var(--space-0-4);
   padding: var(--space-0-3) var(--space-0-6);
   margin: var(--space-0-2) 0;
-  background: var(--bg-surface);
+  background: transparent;
+  border: var(--border-hair) solid var(--border);
+  border-radius: var(--radius);
   max-width: clamp(300px, 85%, 600px);
   animation: skillCardIn var(--motion-slow) var(--ease);
-  box-shadow: 0 0 6px rgba(0, 204, 204, 0.08);
+  transition: border-color var(--motion-fast) var(--ease),
+              box-shadow var(--motion-fast) var(--ease);
+}
+.skill-card:hover {
+  border-color: var(--cool);
+  box-shadow: 0 0 6px rgba(0, 204, 204, 0.15);
 }
 .skill-card-name {
   font-size: 0.6rem;
@@ -64,7 +72,7 @@
   text-transform: uppercase;
   color: var(--cool);
   white-space: nowrap;
-  animation: skillTextGlow 2s ease-in-out 1;
+  animation: skillTextGlow 2s ease-in-out 1; /* off-scale: one-shot text glow on appear */
 }
 .skill-card-desc {
   font-size: var(--fs-micro);

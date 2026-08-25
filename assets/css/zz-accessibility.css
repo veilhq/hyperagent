@@ -1,21 +1,6 @@
 /* ===== Hyperagent: Accessibility parity (WI-113 Phase 8) ===== */
 
-/* ---- Respect OS-level `prefers-reduced-motion` ----
-   Nuclear override — all animations and transitions collapse to near-zero
-   so keyframe cycles (emote-glow, splashBlink, toolPulse, streaming-cursor,
-   welcome noise field frame loop, message appear, tool card flash/shake,
-   ha-splash fade, session-item stagger-in) stop cold under the OS setting.
-   Mirrors Hypervisor's canonical rule. */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
-  }
-}
+/* ---- OS-level prefers-reduced-motion handled by Hyperkit accessibility.css ---- */
 
 /* ---- Class-based reduced-motion toggle ----
    Enables app-side "reduce motion" without depending on OS setting. No UI
@@ -52,4 +37,30 @@ html.a11y-high-contrast {
   --text-bright: #ffffff;
   --border: #444444;
   --border-strong: #666666;
+}
+
+
+/* ===== Light mode component overrides =====
+   Base tokens (--bg, --text, etc.) come from .hyperkit/css/accessibility.css.
+   These target hyperagent-specific components that need explicit overrides. */
+html.a11y-bw-theme .shortcuts-overlay {
+  background: rgba(200, 200, 200, 0.85);
+}
+html.a11y-bw-theme .sidebar {
+  background: var(--bg-surface);
+}
+html.a11y-bw-theme .model-picker-dropdown {
+  background: var(--bg-card);
+}
+html.a11y-bw-theme .task-panel {
+  background: var(--bg-card);
+}
+html.a11y-bw-theme .welcome {
+  color: var(--accent);
+}
+html.a11y-bw-theme .welcome-icon {
+  color: var(--accent);
+}
+html.a11y-bw-theme .welcome-text {
+  color: var(--accent);
 }

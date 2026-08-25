@@ -60,7 +60,7 @@
 .tool-card.running.tc-knowledge { background: var(--comp); color: var(--bg); }
 .tool-card.completed {
   opacity: 0.6;
-  animation: toolFlash 0.4s ease-out;
+  animation: toolFlash var(--motion-slow) ease-out;
 }
 @keyframes toolFlash {
   0% { opacity: 0; transform: scale(0.8); }
@@ -108,11 +108,7 @@
 
 /* Long-running warning — pulsing badge */
 .tool-card.long-running {
-  animation: toolPulse 1.5s ease-in-out infinite;
-}
-@keyframes toolPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  animation: pulse 1.5s ease-in-out infinite; /* off-scale: slow ambient pulse for running state */
 }
 
 /* ---- Tool detail panel (expandable) ---- */

@@ -52,11 +52,6 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border: var(--border-hair) solid var(--bg); }
 ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
-@keyframes fadeSlideIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
 /* ---- Shortcuts overlay — composes with .hv-overlay .hv-panel-modal ----
    Primitive provides fullscreen backdrop, blur, visible-fade.
    Specific overrides: darker backdrop (0.85 vs 0.8) + tighter panel size. */
