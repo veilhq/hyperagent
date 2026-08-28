@@ -705,8 +705,9 @@ class HyperagentAPI:
                 if self._norm_cwd(data.get("cwd", "")) != project_cwd:
                     continue
                 sid = meta_file.stem
-                # Only show sessions Hyperagent owns (user-created)
-                if owned and sid not in owned:
+                # Only show sessions Hyperagent owns (user-created).
+                # When ownedSessions is empty, show nothing — not everything.
+                if sid not in owned:
                     continue
                 title = data.get("title", "(no title)") or "(no title)"
                 if len(title) > 40:

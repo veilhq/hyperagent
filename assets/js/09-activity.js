@@ -172,7 +172,7 @@ window.__acpRecovery = function (data) {
     if (window.HaErrorBar) {
       window.HaErrorBar.setMessage(
         'Connection lost (code ' + (data.exitCode != null ? data.exitCode : '?') +
-        ') — reconnecting automatically...'
+        ') — reconnecting automatically...', 'info'
       );
       // Automatic attempt in progress; a manual button here would race it.
       window.HaErrorBar.clearAction();
@@ -198,11 +198,12 @@ window.__acpRecovery = function (data) {
       window.HaErrorBar.setMessage(
         phase === 'exhausted'
           ? 'Automatic recovery failed after ' + (data.attempts || 0) + ' attempts.'
-          : 'Automatic recovery failed.'
+          : 'Automatic recovery failed.',
+        'error'
       );
       var tabId = data._tabId || null;
       window.HaErrorBar.setAction('Reconnect', function () {
-        window.HaErrorBar.setMessage('Reconnecting...');
+        window.HaErrorBar.setMessage('Reconnecting...', 'info');
         window.HaErrorBar.clearAction();
         if (window.pywebview && window.pywebview.api && window.pywebview.api.reconnect) {
           pywebview.api.reconnect(tabId);
@@ -242,7 +243,7 @@ window.__acpUpdating = function (data) {
         msg += ' (' + data.poll + '/' + data.max + ')';
       }
       msg += ' — will reconnect automatically';
-      window.HaErrorBar.setMessage(msg);
+      window.HaErrorBar.setMessage(msg, 'info');
       window.HaErrorBar.clearAction();
     }
     // Add updating class to error bar for calm styling
@@ -253,7 +254,7 @@ window.__acpUpdating = function (data) {
   if (phase === 'reconnecting') {
     window.HaActivity.start(key, 'reconnecting');
     if (window.HaErrorBar) {
-      window.HaErrorBar.setMessage('Update complete — reconnecting...');
+      window.HaErrorBar.setMessage('Update complete — reconnecting...', 'info');
       window.HaErrorBar.clearAction();
     }
     return;
@@ -264,10 +265,10 @@ window.__acpUpdating = function (data) {
     window.HaActivity.fail(key);
     if (errorBar) errorBar.classList.remove('is-updating');
     if (window.HaErrorBar) {
-      window.HaErrorBar.setMessage('Update timed out — kiro-cli may still be installing.');
+      window.HaErrorBar.setMessage('Update timed out — kiro-cli may still be installing.', 'error');
       var tabId = data._tabId || null;
       window.HaErrorBar.setAction('Reconnect', function () {
-        window.HaErrorBar.setMessage('Reconnecting...');
+        window.HaErrorBar.setMessage('Reconnecting...', 'info');
         window.HaErrorBar.clearAction();
         if (window.pywebview && window.pywebview.api && window.pywebview.api.reconnect) {
           pywebview.api.reconnect(tabId);

@@ -7,6 +7,21 @@ function renderMarkdown(text) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
+  // Strip unicode emoji → ASCII/geometric equivalents (terminal aesthetic, no pictographs)
+  html = html
+    .replace(/\u2705/g, '\u25A0')   // ✅ → ■
+    .replace(/\u274C/g, '\u25A1')   // ❌ → □
+    .replace(/\u26A0\uFE0F?/g, '\u25B2') // ⚠️ → ▲
+    .replace(/\u2714\uFE0F?/g, '\u25A0') // ✔️ → ■
+    .replace(/\u2716\uFE0F?/g, '\u25A1') // ✖️ → □
+    .replace(/\u2728/g, '\u25C6')   // ✨ → ◆
+    .replace(/\u{1F680}/gu, '\u25B6')   // 🚀 → ▶
+    .replace(/\u{1F4A1}/gu, '\u25C7')   // 💡 → ◇
+    .replace(/\u{1F4DD}/gu, '\u25A3')   // 📝 → ▣
+    .replace(/\u{1F527}/gu, '\u25E7')   // 🔧 → ◧
+    .replace(/\u{1F6A8}/gu, '\u25B2')   // 🚨 → ▲
+    .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F1E0}-\u{1F1FF}]/gu, '');
+
   // Code blocks (fenced) — stash in placeholders to protect from later transforms
   var codeBlocks = [];
   html = html.replace(/```(\w*)\n([\s\S]*?)```/g, function(_, lang, code) {

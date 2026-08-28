@@ -180,18 +180,25 @@
    cluster's chips — the model picker in particular — making them unclickable.
    --ha-cluster-w is measured from the live cluster in 00-core.js (it changes
    width with the model name, skill strip, and credits chip) and reserved here
-   as padding so both the message and the actions stay clear of it. */
+   as padding so both the message and the actions stay clear of it.
+
+   Semantic variants: error (default), warning, info, success. Each uses a
+   tinted surface treatment (color-mix into --bg) so the status cluster chips
+   remain legible when the bar is visible. The old solid --comp fill washed out
+   muted chips in the same visual band. */
 .error-bar {
+  --_bar-color: var(--error);
   max-height: 0;
   overflow: hidden;
   padding-left: var(--space-1-25);
   padding-right: calc(var(--ha-cluster-w, 0px) + var(--space-1-25));
-  background: var(--comp);
-  color: var(--bg);
+  background: color-mix(in srgb, var(--_bar-color) 12%, var(--bg));
+  color: var(--_bar-color);
+  border-bottom: var(--border-hair) solid color-mix(in srgb, var(--_bar-color) 40%, transparent);
   font-size: 0.68rem;
   font-weight: 700;
   opacity: 0;
-  transition: max-height var(--motion-medium) var(--ease), opacity var(--motion-medium) var(--ease), padding var(--motion-medium) var(--ease);
+  transition: max-height var(--motion-medium) var(--ease), opacity var(--motion-medium) var(--ease), padding var(--motion-medium) var(--ease), background var(--motion-medium) var(--ease), color var(--motion-medium) var(--ease), border-color var(--motion-medium) var(--ease);
 }
 .error-bar.visible {
   max-height: 3rem;
@@ -199,7 +206,12 @@
   padding-top: var(--space-2);
   padding-bottom: var(--space-2);
 }
-.error-bar a { color: var(--bg); text-decoration: underline; }
+.error-bar a { color: var(--_bar-color); text-decoration: underline; }
+
+/* ---- Semantic variants ---- */
+.error-bar.is-warning { --_bar-color: var(--warning); }
+.error-bar.is-info    { --_bar-color: var(--info); }
+.error-bar.is-success { --_bar-color: var(--success); }
 
 /* ---- Error bar slots ----
    Two independent regions: message (flexible, truncates) and actions (fixed).
@@ -230,31 +242,17 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--bg);
+  color: var(--_bar-color);
   background: none;
-  border: var(--border-hair) solid var(--bg);
+  border: var(--border-hair) solid color-mix(in srgb, var(--_bar-color) 50%, transparent);
   padding: 0.1rem var(--space-2);
   cursor: pointer;
   transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
 }
 .error-bar-action:hover {
-  background: var(--bg);
-  color: var(--comp);
-}
-
-/* ---- Update-in-progress (calm variant) ----
-   When kiro-cli is self-updating, the error bar recolors from alarming red to
-   muted accent — signals "routine, wait a moment" rather than "something broke". */
-.error-bar.is-updating {
-  background: var(--surface-1);
-  color: var(--text);
-  border-bottom: var(--border-hair) solid var(--accent-border);
-}
-.error-bar.is-updating .error-bar-action {
-  color: var(--accent);
-  border-color: var(--accent-border);
-}
-.error-bar.is-updating .error-bar-action:hover {
-  background: var(--accent);
+  background: var(--_bar-color);
   color: var(--bg);
 }
+
+/* ---- Legacy alias: .is-updating maps to info variant ---- */
+.error-bar.is-updating { --_bar-color: var(--info); }

@@ -325,14 +325,30 @@ def _stop_mcp_service():
 # ---------------------------------------------------------------------------
 
 def main():
+    # Set a unique AppUserModelID so Windows treats this as a distinct taskbar
+    # entry, separate from Hypervisor and other pythonw-hosted ecosystem apps.
+    import ctypes
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Hyper.Hyperagent")
+
     logger.info("main() starting")
 
-    # Clean up empty sessions (0 messages) left over from session switching
+    # Clean up empty sessions (0 messages) left over from scratch session protocol.
+    # Only delete sessions NOT in ownedSessions — those are user-created and
+    # may legitimately have no messages yet (created but not prompted).
     sessions_dir = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "sessions" / "cli"
     if sessions_dir.exists():
+        owned = set()
+        if PREFS_FILE.exists():
+            try:
+                _p = json.loads(PREFS_FILE.read_text(encoding="utf-8"))
+                owned = set(_p.get("ownedSessions", []))
+            except Exception:
+                pass
         for jsonl in sessions_dir.glob("*.jsonl"):
             if jsonl.stat().st_size == 0:
                 sid = jsonl.stem
+                if sid in owned:
+                    continue
                 for f in sessions_dir.glob(f"{sid}*"):
                     f.unlink(missing_ok=True)
 

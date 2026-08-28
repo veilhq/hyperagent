@@ -58,10 +58,21 @@ const errorBarActions = $('.error-bar-actions');
    created and leaving closing the tab as the only way to recover. Keeping the
    slots separate makes that class of clobbering impossible. */
 window.HaErrorBar = {
-  // Set the message text. Uses textContent — never interpolate HTML here.
-  setMessage: function (msg) {
+  _variants: ['is-warning', 'is-info', 'is-success'],
+
+  // Set the message text with optional semantic variant.
+  // variant: 'error' (default) | 'warning' | 'info' | 'success'
+  // Uses textContent — never interpolate HTML here.
+  setMessage: function (msg, variant) {
     if (!errorBarMsg) return;
     errorBarMsg.textContent = msg == null ? '' : String(msg);
+    // Clear previous variant classes (default is error — no class needed)
+    for (var i = 0; i < this._variants.length; i++) {
+      errorBar.classList.remove(this._variants[i]);
+    }
+    if (variant && variant !== 'error') {
+      errorBar.classList.add('is-' + variant);
+    }
     errorBar.classList.add('visible');
   },
 
@@ -92,6 +103,9 @@ window.HaErrorBar = {
 
   hide: function () {
     errorBar.classList.remove('visible');
+    for (var i = 0; i < this._variants.length; i++) {
+      errorBar.classList.remove(this._variants[i]);
+    }
     if (errorBarMsg) errorBarMsg.textContent = '';
     if (errorBarActions) errorBarActions.textContent = '';
   }

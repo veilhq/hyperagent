@@ -355,6 +355,8 @@ function toolGroup(name) {
 function truncateDetail(data) {
   var str = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
   var esc = str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // Strip emoji from tool output (terminal aesthetic)
+  esc = esc.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F1E0}-\u{1F1FF}]/gu, '');
   if (esc.length > 600) esc = esc.slice(0, 600) + '\n… (truncated)';
   return esc;
 }
@@ -620,7 +622,7 @@ window.__acpUpdate = function(update) {
           // Don't steal the bar from a crash that's offering a Reconnect action —
           // a transient tool failure is far less important than the recovery path.
           if (!window.HaErrorBar.hasAction()) {
-            window.HaErrorBar.setMessage(toolLabel + ' failed');
+            window.HaErrorBar.setMessage(toolLabel + ' failed', 'warning');
             if (_toolFailTimer) clearTimeout(_toolFailTimer);
             _toolFailTimer = setTimeout(function() {
               // Only dismiss if it's still showing our tool failure message
@@ -852,7 +854,7 @@ window.__acpError = function(data) {
   // Track prompt failures so the error bar persists through the ready state change
   window._errorBarPromptFailed = (source === 'jsonrpc');
   // Message slot only — leaves any existing action (e.g. Reconnect) intact.
-  window.HaErrorBar.setMessage(msg);
+  window.HaErrorBar.setMessage(msg, 'error');
   // Also mirror to the JS console so failures show up under devtools without
   // needing to reach for the hyperagent.log file.
   try { console.error('[acp-error]', source ? '(' + source + ')' : '', msg, data); } catch (e) {}
