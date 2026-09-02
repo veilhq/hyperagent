@@ -1,5 +1,5 @@
 /* ===== Hyperagent: Sessions Sidebar ===== */
-/* Ecosystem-aligned (WI-113): uses hv-row, hv-chip, hv-section-quiet primitives. */
+/* Ecosystem-aligned (WI-113): uses list-row, status-chip, content-section-quiet primitives. */
 
 .main-layout {
   flex: 1;
@@ -24,7 +24,7 @@
 
 /* ---- Section layout ----
    Two sections: tabs (fixed top) and session history (scrollable bottom).
-   Each uses hv-section-quiet rail styling. */
+   Each uses content-section-quiet rail styling. */
 .sidebar-section {
   display: flex;
   flex-direction: column;
@@ -337,7 +337,7 @@
 
 /* Activity/count chip */
 .session-item-chip {
-  /* Composed with hv-chip hv-chip-outlined-muted in HTML */
+  /* Composed with status-chip status-chip-outlined-muted in HTML */
 }
 
 /* Age label */

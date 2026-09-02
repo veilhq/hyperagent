@@ -52,7 +52,7 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border: var(--border-hair) solid var(--bg); }
 ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
-/* ---- Shortcuts overlay — composes with .hv-overlay .hv-panel-modal ----
+/* ---- Shortcuts overlay — composes with .modal-overlay .modal-panel ----
    Primitive provides fullscreen backdrop, blur, visible-fade.
    Specific overrides: darker backdrop (0.85 vs 0.8) + tighter panel size. */
 .shortcuts-overlay {

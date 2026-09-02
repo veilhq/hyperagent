@@ -1,15 +1,15 @@
 /* ===== Hyperagent: Local Primitive Overrides =====
-   Shared primitives (hv-chip, hv-row, hv-button, hv-overlay, etc.) relocated
+   Shared primitives (status-chip, list-row, action-button, modal-overlay, etc.) relocated
    to .hyperkit/css/primitives.css (WI-142 Phase 1) — loaded before this file.
    This file holds only the shape-level divergence Hyperagent keeps: the
    clipped-corner tab card. See hyperkit/css/primitives.css for the shared
-   .hv-tab base (position, background, hover transition) that this extends. */
+   .nav-tab base (position, background, hover transition) that this extends. */
 
 /* ---- Tab card primitive — clipped corner card for open tabs -----------------
    Distinguished from session cards by the top-right corner notch (clip-path)
    and the dither grid. No border — the clip IS the shape language.
 */
-.hv-tab {
+.nav-tab {
   --tab-notch: 8px;
   clip-path: polygon(
     0% 0%,

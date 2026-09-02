@@ -134,8 +134,8 @@ var shortcutsEl = null;
 function toggleShortcuts() {
   if (!shortcutsEl) {
     shortcutsEl = document.createElement('div');
-    shortcutsEl.className = 'shortcuts-overlay hv-overlay';
-    shortcutsEl.innerHTML = '<div class="shortcuts-panel hv-panel-modal">'
+    shortcutsEl.className = 'shortcuts-overlay modal-overlay';
+    shortcutsEl.innerHTML = '<div class="shortcuts-panel modal-panel">'
       + '<div class="shortcuts-title">Keyboard Shortcuts</div>'
       + '<div class="shortcuts-grid">'
       + sc('/', 'Focus input')
@@ -239,7 +239,7 @@ var welcomePrompts = [
 
 function showWelcome() {
   var w = document.createElement('div');
-  w.className = 'welcome hv-noise-field';
+  w.className = 'welcome noise-field';
   w.innerHTML = '<svg class="welcome-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35.02 35.02" fill="currentColor"><path d="M13.58,20.85c.19,0,.28-.23.15-.36,0,0-5.08-5.08-6.1-6.11-.11-.11-.27-.14-.42-.09L.34,17.01c-.45.18-.45.82,0,1l7.05,2.79c.11.04.22.06.33.06.98,0,5.85,0,5.85,0Z"/><path d="M20.85,27.42v-6.3c0-.12-.1-.21-.21-.21h-6.26c-.12,0-.21.1-.21.21v6.3s0,.03-.01.05l2.85,7.21c.18.45.82.45,1,0l2.85-7.21s-.01-.03-.01-.05Z"/><path d="M34.68,17.01l-7.87-3.11c-2.6-1.03-4.66-3.08-5.68-5.68L18.01.34c-.18-.45-.82-.45-1,0l-2.85,7.21s.01.03.01.05v6.3c0,.12.1.21.21.21h6.09c.27,0,.52.11.71.3,1.14,1.14,5.26,5.26,6.2,6.2.12.12.29.15.44.09l6.85-2.71c.45-.18.45-.82,0-1Z"/></svg>'
     + '<span class="welcome-text"></span>'
     + '<div class="welcome-prompts"></div>';
@@ -376,7 +376,7 @@ function _handleHsSearch(query) {
         if (r.content && r.content.length > 150) snippet += '...';
         row.innerHTML =
           '<div class="hs-result-header">' +
-            '<span class="hv-chip hv-chip-outlined-muted">' + path.split('/').pop().replace('.md', '') + '</span>' +
+            '<span class="status-chip status-chip-outlined-muted">' + path.split('/').pop().replace('.md', '') + '</span>' +
             '<span class="hs-section">' + section + '</span>' +
             '<span class="hs-score">' + score + '</span>' +
           '</div>' +

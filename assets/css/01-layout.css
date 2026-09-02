@@ -7,7 +7,7 @@
    ============================================================================
    Hyperagent-specific chrome group. Each item is uniformly 20px tall for a
    consistent visual row. Uses a dedicated `.ha-cluster-chip` base class
-   (deliberately NOT `.hv-chip`) because the cluster's uniform-height
+   (deliberately NOT `.status-chip`) because the cluster's uniform-height
    requirement conflicts with the primitive's content-sized model — the
    cluster has no Hypervisor equivalent, so this local silhouette is fine.
    Sizing pattern: fixed height + matching line-height for pixel-perfect
@@ -24,7 +24,7 @@
   gap: var(--space-1);
 }
 /* Normalize all chip heights inside the cluster */
-.status-cluster .hv-chip {
+.status-cluster .status-chip {
   height: 20px;
   line-height: 20px;
 }

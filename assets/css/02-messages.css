@@ -315,17 +315,17 @@
   z-index: 1;
 }
 /* Noise field canvas — the shared module (HvNoiseField) creates a canvas with
-   .hv-noise-field-canvas + legacy .home-anchor-canvas classes. The primitive
-   rule `.hv-noise-field > canvas` (in 00-primitives.css) provides positioning;
+   .noise-field-canvas + legacy .home-anchor-canvas classes. The primitive
+   rule `.noise-field > canvas` (in 00-primitives.css) provides positioning;
    we add the fade transition and opacity 0/1 states here so destroyWelcomeNoise
    (fadeMs > 0) can trigger a smooth exit. Kept `.welcome-canvas` selector for
    backward-compat with any legacy path that still adds it. */
-.hv-noise-field > canvas,
+.noise-field > canvas,
 .welcome-canvas {
   opacity: 1;
   transition: opacity var(--motion-slow) var(--ease);
 }
-.hv-noise-field > canvas.fade-out,
+.noise-field > canvas.fade-out,
 .welcome-canvas.fade-out { opacity: 0; }
 #messages, .tab-messages { position: relative; }
 .welcome-icon { width: 32px; height: 32px; color: var(--text-dim); opacity: 0; animation: fadeSlideIn var(--motion-slow) var(--ease) 0.1s forwards; } /* 0.1s delay: stagger after canvas init */
@@ -438,7 +438,7 @@
    agent_thought_chunk events accumulate in a collapsed-by-default bar
    under the Agent nameplate. A Bayer-dither indicator (shared HvNoiseField
    module) animates only while chunks are actively arriving; goes static
-   under reduce-motion. Bespoke styles instead of composing .hv-section-quiet
+   under reduce-motion. Bespoke styles instead of composing .content-section-quiet
    — the surface is too small for a section-rail treatment and needs its
    own inline silhouette (follows the .ha-cluster-chip precedent from WI-113
    for intentional local overrides on tiny chrome).

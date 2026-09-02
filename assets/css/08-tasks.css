@@ -1,5 +1,5 @@
 /* ===== Task Panel (floating accordion) =====
-   Ecosystem alignment: bg-card panel with border-strong frame, hv-panel-header,
+   Ecosystem alignment: bg-card panel with border-strong frame, panel-header,
    nav-link-style items, hyperkit token scale throughout. */
 
 .task-panel {
@@ -28,7 +28,7 @@
   pointer-events: auto;
 }
 
-/* ---- Header — matches .hv-panel-header pattern ---- */
+/* ---- Header — matches .panel-header pattern ---- */
 .task-panel-header {
   padding: var(--space-2) var(--space-3);
   font-size: var(--fs-caption);

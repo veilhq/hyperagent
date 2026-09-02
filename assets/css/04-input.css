@@ -32,7 +32,7 @@
 }
 
 #input {
-  /* Composes with .hv-input — silhouette + focus ring from primitive.
+  /* Composes with .form-input — silhouette + focus ring from primitive.
      Specific: textarea-only dimensions + font shorthand for line-height. */
   font: var(--fs-label) var(--font);
   line-height: 1.4;
@@ -46,7 +46,7 @@
   transition: border-color var(--motion-base) var(--ease), box-shadow var(--motion-base) var(--ease), height var(--motion-tick) var(--ease);
 }
 
-/* Send button — composes with .hv-button. Specific: accent-glow fill + prompting state. */
+/* Send button — composes with .action-button. Specific: accent-glow fill + prompting state. */
 #send-btn {
   background: var(--accent-glow);
   border-color: var(--accent-border);
@@ -59,7 +59,7 @@
 #send-btn:disabled { opacity: 0.25; cursor: default; }
 #send-btn:disabled:hover { background: var(--accent-glow); color: var(--accent); }
 
-/* Cancel button (shown during prompting) — composes with .hv-button-danger. Specific: hidden by default + tighter padding. */
+/* Cancel button (shown during prompting) — composes with .action-button-danger. Specific: hidden by default + tighter padding. */
 #cancel-btn {
   display: none;
   padding: 0 var(--space-0-8);

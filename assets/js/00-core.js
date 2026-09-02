@@ -21,7 +21,7 @@ function renderChip(variant, text, extraClass, dataAttrs) {
   if (CHIP_VARIANTS.indexOf(variant) === -1) {
     throw new Error("Unknown chip variant '" + variant + "'; expected one of " + CHIP_VARIANTS.join(', '));
   }
-  var classes = 'hv-chip hv-chip-' + variant;
+  var classes = 'status-chip status-chip-' + variant;
   if (extraClass) classes += ' ' + String(extraClass).trim();
   var attrs = '';
   if (dataAttrs) {

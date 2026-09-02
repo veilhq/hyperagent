@@ -55,7 +55,7 @@ function _renderTraceCard() {
     var section = s.section ? ' §' + s.section : '';
     var score = s.similarity != null ? s.similarity.toFixed(2) : '';
     row.innerHTML =
-      '<span class="hv-chip hv-chip-outlined-muted trace-chip">' + path.split('/').pop().replace('.md', '') + '</span>' +
+      '<span class="status-chip status-chip-outlined-muted trace-chip">' + path.split('/').pop().replace('.md', '') + '</span>' +
       '<span class="trace-section">' + section + '</span>' +
       '<span class="trace-dots"></span>' +
       '<span class="trace-score">' + score + '</span>';

@@ -124,7 +124,7 @@ function refreshSessions() {
       if (openIds[s.id]) return;
 
       var el = document.createElement('div');
-      el.className = 'hv-hover-lift session-item stagger-in';
+      el.className = 'element-hover-lift session-item stagger-in';
       el.setAttribute('data-session-id', s.id);
 
       // Build stacked row: title on top, meta strip (chip + age) below, delete btn top-right

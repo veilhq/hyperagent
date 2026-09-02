@@ -245,7 +245,7 @@ function _addTabToUI(tabId, title, sessionId) {
 
   // Create sidebar tab item — 3-column grid: [chip] [title] [close]
   var tabEl = document.createElement('div');
-  tabEl.className = 'hv-tab sidebar-tab-item';
+  tabEl.className = 'nav-tab sidebar-tab-item';
   tabEl.setAttribute('data-tab-id', tabId);
   tabEl.innerHTML = '<span class="sidebar-tab-dither"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>'
     + '<span class="sidebar-tab-item-title">' + _escTabHtml(title || 'New Chat') + '</span>'
@@ -409,7 +409,7 @@ function _escTabHtml(str) {
 
 function _showWelcomeInTab(container) {
   var w = document.createElement('div');
-  w.className = 'welcome hv-noise-field';
+  w.className = 'welcome noise-field';
   w.innerHTML = '<svg class="welcome-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35.02 35.02" fill="currentColor"><path d="M13.58,20.85c.19,0,.28-.23.15-.36,0,0-5.08-5.08-6.1-6.11-.11-.11-.27-.14-.42-.09L.34,17.01c-.45.18-.45.82,0,1l7.05,2.79c.11.04.22.06.33.06.98,0,5.85,0,5.85,0Z"/><path d="M20.85,27.42v-6.3c0-.12-.1-.21-.21-.21h-6.26c-.12,0-.21.1-.21.21v6.3s0,.03-.01.05l2.85,7.21c.18.45.82.45,1,0l2.85-7.21s-.01-.03-.01-.05Z"/><path d="M34.68,17.01l-7.87-3.11c-2.6-1.03-4.66-3.08-5.68-5.68L18.01.34c-.18-.45-.82-.45-1,0l-2.85,7.21s.01.03.01.05v6.3c0,.12.1.21.21.21h6.09c.27,0,.52.11.71.3,1.14,1.14,5.26,5.26,6.2,6.2.12.12.29.15.44.09l6.85-2.71c.45-.18.45-.82,0-1Z"/></svg>'
     + '<span class="welcome-text"></span>'
     + '<div class="welcome-prompts"></div>';
@@ -771,7 +771,7 @@ function _registerInitialTab(tabId) {
 
   // Create sidebar tab item for initial tab — 3-column grid: [chip] [title] [close]
   var tabEl = document.createElement('div');
-  tabEl.className = 'hv-tab sidebar-tab-item active';
+  tabEl.className = 'nav-tab sidebar-tab-item active';
   tabEl.setAttribute('data-tab-id', tabId);
   tabEl.innerHTML = '<span class="sidebar-tab-dither"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>'
     + '<span class="sidebar-tab-item-title">New Chat</span>'

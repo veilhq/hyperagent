@@ -1,6 +1,6 @@
 /* =========================================================================
    Model Picker — topbar dropdown for switching the active kiro-cli model.
-   Styled to match hypervisor nav-item / hv-dropdown ecosystem patterns.
+   Styled to match hypervisor nav-item / menu-dropdown ecosystem patterns.
    Uses hyperkit tokens throughout — no raw values.
    ========================================================================= */
 
@@ -58,7 +58,7 @@
   transform: rotate(180deg);
 }
 
-/* ---- Dropdown panel — follows .hv-dropdown open/close via .open class ---- */
+/* ---- Dropdown panel — follows .menu-dropdown open/close via .open class ---- */
 .model-picker-dropdown {
   position: absolute;
   top: calc(100% + 6px);
@@ -86,7 +86,7 @@
 .model-picker-dropdown::-webkit-scrollbar-track { background: var(--bg-card); }
 .model-picker-dropdown::-webkit-scrollbar-thumb { background: var(--border-strong); }
 
-/* ---- Panel header — matches .hv-panel-header / .nav-panel-header ---- */
+/* ---- Panel header — matches .panel-header / .nav-panel-header ---- */
 .model-picker-header {
   padding: var(--space-2) var(--space-3);
   border-bottom: var(--border-hair) solid var(--border);
@@ -230,7 +230,7 @@
   border-color: var(--accent-border);
 }
 
-/* ---- "default" badge — outline chip, matches .hv-badge pattern ---- */
+/* ---- "default" badge — outline chip, matches .label-badge pattern ---- */
 .model-picker-item-default-badge {
   display: inline-block;
   font-family: var(--font);
