@@ -333,8 +333,10 @@ def main():
     logger.info("main() starting")
 
     # Clean up empty sessions (0 messages) left over from scratch session protocol.
-    # Only delete sessions NOT in ownedSessions — those are user-created and
-    # may legitimately have no messages yet (created but not prompted).
+    # Only delete sessions NOT owned by the user. Ownership is the union of the
+    # explicit ownedSessions set and every session that carries a title — a
+    # titled session was created and prompted by the user, so it is protected
+    # even if it never made it into ownedSessions (registration drift).
     sessions_dir = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "sessions" / "cli"
     if sessions_dir.exists():
         owned = set()
@@ -342,6 +344,7 @@ def main():
             try:
                 _p = json.loads(PREFS_FILE.read_text(encoding="utf-8"))
                 owned = set(_p.get("ownedSessions", []))
+                owned |= set(_p.get("sessionTitles", {}).keys())
             except Exception:
                 pass
         for jsonl in sessions_dir.glob("*.jsonl"):
@@ -361,13 +364,20 @@ def main():
                 if key in prefs:
                     del prefs[key]
                     changed = True
-            # Seed ownedSessions from sessionTitles on first run after migration.
-            # Sessions that have titles were created by Hyperagent (user sessions).
-            if "ownedSessions" not in prefs and "sessionTitles" in prefs:
-                prefs["ownedSessions"] = sorted(prefs["sessionTitles"].keys())
-                changed = True
-                logger.info("startup: seeded ownedSessions from %d titled sessions",
-                            len(prefs["ownedSessions"]))
+            # Reconcile ownedSessions with sessionTitles on every startup.
+            # A titled session is user-created by definition; union its id into
+            # ownedSessions so registration drift (e.g. sessions activated via
+            # the load path, which never called _register_owned_session) can
+            # never hide a real session from the sidebar.
+            titles = prefs.get("sessionTitles", {})
+            if titles:
+                owned = set(prefs.get("ownedSessions", []))
+                merged = owned | set(titles.keys())
+                if merged != owned:
+                    prefs["ownedSessions"] = sorted(merged)
+                    changed = True
+                    logger.info("startup: reconciled ownedSessions with titles (+%d)",
+                                len(merged) - len(owned))
             if changed:
                 PREFS_FILE.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
                 logger.info("startup: cleared stale tab associations from preferences")

@@ -808,6 +808,24 @@ window.createTab = createTab;
 window.closeTab = closeTab;
 window.switchTab = switchTab;
 
+// Mark a manually-renamed tab with a trailing comp-colored asterisk on its
+// title, signalling "edited / locked against AI overwrite". Appended as a
+// child of the title span (not a grid sibling) so it can't wrap the 2-column
+// row, and because once locked the title's textContent is never rewritten
+// (the titleLocked guard short-circuits __acpSessionTitle/__acpSessionLoaded).
+// Idempotent: safe to call on an already-marked tab.
+function _ensureEditedMark(tabEl) {
+  if (!tabEl) return;
+  var titleEl = tabEl.querySelector('.sidebar-tab-item-title');
+  if (!titleEl || titleEl.querySelector('.sidebar-tab-edited-mark')) return;
+  var mark = document.createElement('span');
+  mark.className = 'sidebar-tab-edited-mark';
+  mark.setAttribute('title', 'title locked');
+  mark.setAttribute('aria-label', 'title locked');
+  mark.textContent = '*';
+  titleEl.appendChild(mark);
+}
+
 // --- Tab title editing (double-click to rename) ---
 function _makeTabTitleEditable(tabEl, tabId) {
   var titleEl = tabEl.querySelector('.sidebar-tab-item-title');
@@ -837,6 +855,7 @@ function _makeTabTitleEditable(tabEl, tabId) {
         tabs[tabId].titleLocked = true;
         tabEl.classList.add('title-locked');
         tabEl.classList.remove('title-pending');
+        _ensureEditedMark(tabEl);
       }
       // A pending generation for this tab is now moot — drop its activity badge.
       if (window.HaActivity) window.HaActivity.clear('title:' + tabId);

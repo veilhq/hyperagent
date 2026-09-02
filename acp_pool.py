@@ -138,10 +138,14 @@ class ACPClientPool:
         """Persist session titles for sidebar display."""
         prefs = self._load_prefs()
         titles = prefs.get("sessionTitles", {})
+        owned = set(prefs.get("ownedSessions", []))
         for client in self._clients.values():
             if client._session_id and hasattr(client, '_tab_title'):
                 titles[client._session_id] = client._tab_title
+                # Titled == user-created; keep ownership in lockstep with titles.
+                owned.add(client._session_id)
         prefs["sessionTitles"] = titles
+        prefs["ownedSessions"] = sorted(owned)
         prefs.pop("tabs", None)
         prefs.pop("active_tab", None)
         self._save_prefs(prefs)

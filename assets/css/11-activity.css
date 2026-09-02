@@ -119,11 +119,14 @@
   animation: titleSettle var(--motion-slow) var(--ease);
 }
 
-/* A manually renamed tab is locked against AI overwrite. Marked with a hairline
-   left rule on the title so the lock is discoverable rather than hidden state. */
-.sidebar-tab-item.title-locked .sidebar-tab-item-title {
-  border-left: var(--border-hair) solid var(--accent-border);
-  padding-left: var(--space-1);
+/* A manually renamed tab is locked against AI overwrite. Marked with a
+   trailing comp-colored asterisk on the title so the edit is discoverable
+   rather than hidden state. Lives inline with the title text, clear of the
+   close button's top-right corner — no fade/toggle ambiguity. */
+.sidebar-tab-edited-mark {
+  margin-left: var(--space-0-2);
+  color: var(--comp);
+  font-weight: 700;
 }
 
 /* ---- Reduced motion ----

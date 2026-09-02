@@ -368,6 +368,12 @@ class HyperagentAPI:
                     titles = prefs.get("sessionTitles", {})
                     titles[client._session_id] = title
                     prefs["sessionTitles"] = titles
+                    # A titled session is a real user session — register ownership
+                    # here so the sidebar filter and startup reaper never lose it,
+                    # regardless of how the session became active.
+                    owned = set(prefs.get("ownedSessions", []))
+                    owned.add(client._session_id)
+                    prefs["ownedSessions"] = sorted(owned)
                     client._save_prefs(prefs)
                 self._pool.save_tab_state()
             except Exception as e:
@@ -684,8 +690,11 @@ class HyperagentAPI:
     def list_sessions(self):
         """List sessions by reading metadata directly from the filesystem.
 
-        Only shows sessions registered in ownedSessions (user-created).
-        Automation/ephemeral sessions are excluded from the sidebar.
+        Visibility is derived from kiro-cli's own session metadata (parent link
+        + transcript content), not from preferences.json ownership — the prefs
+        mirror is subject to cross-process write races that drop real sessions.
+        Subagent children and empty scratch sessions are excluded; the active
+        session and explicitly-owned sessions always show.
         """
         if _check_auth() is AUTH_NO:
             return {"sessions": [], "active": None, "auth_required": True}
@@ -694,7 +703,24 @@ class HyperagentAPI:
             if not sessions_dir.exists():
                 return {"sessions": [], "active": self._acp._session_id}
             project_cwd = self._norm_cwd(PORTAL_ROOT)
-            owned = set(self._acp._load_prefs().get("ownedSessions", []))
+            prefs = self._acp._load_prefs()
+            # preferences.json is an unreliable ownership source: every tab runs
+            # in its own process and each does an unlocked read-modify-write of
+            # this one file, so concurrent registrations clobber each other and
+            # real sessions silently fall out of the set. Rather than gate the
+            # sidebar on that fragile mirror, derive visibility from kiro-cli's
+            # own session metadata, which every session carries durably:
+            #   - parent_session_id present  -> spawned by the subagent tool,
+            #     an automation child; never a tab the user opened.
+            #   - zero conversation turns AND empty transcript -> scratch session
+            #     (created and discarded by the session-load protocol).
+            # A session that has no parent and holds real content is a user tab,
+            # regardless of whether its ownership write survived the race.
+            # ownedSessions/sessionTitles are still honored as an *additive*
+            # override so an explicitly registered session can never be hidden.
+            owned = set(prefs.get("ownedSessions", []))
+            owned |= set(prefs.get("sessionTitles", {}).keys())
+            active_sid = self._acp._session_id
             sessions = []
             now = datetime.now(timezone.utc)
             for meta_file in sessions_dir.glob("*.json"):
@@ -705,15 +731,6 @@ class HyperagentAPI:
                 if self._norm_cwd(data.get("cwd", "")) != project_cwd:
                     continue
                 sid = meta_file.stem
-                # Only show sessions Hyperagent owns (user-created).
-                # When ownedSessions is empty, show nothing — not everything.
-                if sid not in owned:
-                    continue
-                title = data.get("title", "(no title)") or "(no title)"
-                if len(title) > 40:
-                    title = title[:40].rstrip() + "..."
-                updated = data.get("updated_at") or data.get("created_at", "")
-                age = self._relative_age(updated, now)
                 jsonl_file = sessions_dir / f"{sid}.jsonl"
                 msg_count = 0
                 if jsonl_file.exists():
@@ -722,6 +739,19 @@ class HyperagentAPI:
                             msg_count = sum(1 for _ in f)
                     except OSError:
                         pass
+                # Visibility predicate. The currently active session and any
+                # explicitly-owned session always show; otherwise apply the
+                # metadata-derived rule.
+                if sid != active_sid and sid not in owned:
+                    if data.get("parent_session_id"):
+                        continue  # subagent/automation child
+                    if msg_count == 0:
+                        continue  # empty scratch session
+                title = data.get("title", "(no title)") or "(no title)"
+                if len(title) > 40:
+                    title = title[:40].rstrip() + "..."
+                updated = data.get("updated_at") or data.get("created_at", "")
+                age = self._relative_age(updated, now)
                 sessions.append({
                     "id": sid, "age": age,
                     "title": title, "msgs": f"{msg_count} msgs",
@@ -731,7 +761,7 @@ class HyperagentAPI:
             sessions.sort(key=lambda s: s.get("_updated", ""), reverse=True)
             for s in sessions:
                 del s["_updated"]
-            saved_titles = self._acp._load_prefs().get("sessionTitles", {})
+            saved_titles = prefs.get("sessionTitles", {})
             for s in sessions:
                 if s["id"] in saved_titles:
                     s["title"] = saved_titles[s["id"]]
