@@ -317,6 +317,14 @@ window.__acpCliVersion = function (data) {
   var badge = document.getElementById('cli-version');
   if (badge) {
     badge.textContent = 'v' + data.version;
-    badge.title = 'Kiro CLI v' + data.version;
+    // Cue unseen release notes with an accent outline until the user opens
+    // the changelog dropdown (which acknowledges the version server-side).
+    if (data.isNew) {
+      badge.classList.add('has-new');
+      badge.setAttribute('data-tooltip', 'Kiro CLI v' + data.version + ' - new release notes, click to view');
+    } else {
+      badge.classList.remove('has-new');
+      badge.setAttribute('data-tooltip', 'Kiro CLI v' + data.version + ' - click for release notes');
+    }
   }
 };

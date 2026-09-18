@@ -11,10 +11,16 @@ function createTaskPanel() {
   taskPanel.id = 'task-panel';
   taskPanel.className = 'task-panel';
   taskPanel.innerHTML = '<div class="panel-header task-panel-header">Tasks</div><div class="task-panel-body" id="task-panel-body"></div>';
-  // Toggle collapse on header click
-  taskPanel.querySelector('.task-panel-header').addEventListener('click', function() {
-    taskPanel.classList.toggle('collapsed');
-  });
+  // Toggle collapse on header click — shared HvCollapsible primitive; the panel
+  // markup is owned here, the primitive attaches only the toggle behavior.
+  var taskHeader = taskPanel.querySelector('.task-panel-header');
+  if (window.HvCollapsible) {
+    window.HvCollapsible.register({ header: taskHeader, panel: taskPanel });
+  } else {
+    taskHeader.addEventListener('click', function() {
+      taskPanel.classList.toggle('collapsed');
+    });
+  }
   document.body.appendChild(taskPanel);
   // Trigger reflow before adding visible class (enables entry animation)
   void taskPanel.offsetWidth;

@@ -1,8 +1,148 @@
 /* ===== Hyperagent: UI Interactions ===== */
 
+/* ===== Image attachments (paste + drag-drop) =============================
+   pendingAttachments holds {mimeType, dataUrl} for images staged but not yet
+   sent. Capture is gated on window._imageCapable (set from the ACP agent's
+   advertised promptCapabilities.image). Data-URI prefix is stripped to raw
+   base64 at send time — the ACP image content block wants raw base64. */
+var pendingAttachments = [];
+
+function _rawBase64(dataUrl) {
+  // "data:image/png;base64,AAAA" -> "AAAA"
+  var comma = dataUrl.indexOf(',');
+  return comma === -1 ? dataUrl : dataUrl.slice(comma + 1);
+}
+
+function renderAttachments() {
+  var strip = document.getElementById('attach-strip');
+  if (!strip) return;
+  strip.innerHTML = '';
+  if (!pendingAttachments.length) {
+    strip.classList.remove('has-items');
+    return;
+  }
+  strip.classList.add('has-items');
+  pendingAttachments.forEach(function(att, i) {
+    var chip = document.createElement('div');
+    chip.className = 'attach-chip';
+    var img = document.createElement('img');
+    img.className = 'attach-chip-thumb';
+    img.src = att.dataUrl;
+    img.alt = 'attached image';
+    var rm = document.createElement('button');
+    rm.className = 'attach-chip-remove';
+    rm.type = 'button';
+    rm.setAttribute('aria-label', 'Remove attachment');
+    rm.textContent = 'x';
+    rm.addEventListener('click', function() {
+      pendingAttachments.splice(i, 1);
+      renderAttachments();
+    });
+    chip.appendChild(img);
+    chip.appendChild(rm);
+    strip.appendChild(chip);
+  });
+}
+
+function addImageFile(file) {
+  if (!window._imageCapable) return;
+  if (!file || !/^image\//.test(file.type)) return;
+  var reader = new FileReader();
+  reader.onload = function() {
+    pendingAttachments.push({ mimeType: file.type, dataUrl: String(reader.result) });
+    renderAttachments();
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearAttachments() {
+  pendingAttachments = [];
+  renderAttachments();
+}
+
+// Clipboard paste: pull image items out of the paste event.
+input.addEventListener('paste', function(e) {
+  if (!window._imageCapable) return;
+  var items = (e.clipboardData && e.clipboardData.items) || [];
+  var found = false;
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].kind === 'file' && /^image\//.test(items[i].type)) {
+      var file = items[i].getAsFile();
+      if (file) { addImageFile(file); found = true; }
+    }
+  }
+  // Only suppress default when an image was captured, so text paste is intact.
+  if (found) e.preventDefault();
+});
+
+// Drag-and-drop: accept image files dropped onto the input wrap.
+(function wireDrop() {
+  var wrap = document.querySelector('.input-wrap');
+  if (!wrap) return;
+  var _savedPlaceholder = null;
+  function enterDropZone() {
+    wrap.classList.add('drag-over');
+    if (_savedPlaceholder === null) {
+      _savedPlaceholder = input.getAttribute('placeholder') || '';
+      input.setAttribute('placeholder', 'drop image');
+    }
+  }
+  function leaveDropZone() {
+    wrap.classList.remove('drag-over');
+    if (_savedPlaceholder !== null) {
+      input.setAttribute('placeholder', _savedPlaceholder);
+      _savedPlaceholder = null;
+    }
+  }
+  wrap.addEventListener('dragover', function(e) {
+    if (!window._imageCapable) return;
+    e.preventDefault();
+    enterDropZone();
+  });
+  wrap.addEventListener('dragleave', function(e) {
+    // Ignore leave events fired while moving onto a child (e.g. the textarea);
+    // only restore when the pointer actually exits the wrap.
+    if (e.relatedTarget && wrap.contains(e.relatedTarget)) return;
+    leaveDropZone();
+  });
+  wrap.addEventListener('drop', function(e) {
+    leaveDropZone();
+    if (!window._imageCapable) return;
+    var files = (e.dataTransfer && e.dataTransfer.files) || [];
+    var imgs = [];
+    for (var i = 0; i < files.length; i++) {
+      if (/^image\//.test(files[i].type)) imgs.push(files[i]);
+    }
+    if (imgs.length) {
+      e.preventDefault();
+      imgs.forEach(addImageFile);
+    }
+  });
+})();
+
+// Attach button -> hidden file input -> stage selected images.
+(function wireFileInput() {
+  var fi = document.getElementById('attach-file-input');
+  if (!fi) return;
+  fi.addEventListener('change', function() {
+    var files = fi.files || [];
+    for (var i = 0; i < files.length; i++) addImageFile(files[i]);
+    fi.value = '';  // allow re-selecting the same file
+  });
+})();
+
+function _collectImagesForSend() {
+  // Map pending attachments to the bridge shape {mimeType, data(rawBase64)}.
+  return pendingAttachments.map(function(att) {
+    return { mimeType: att.mimeType, data: _rawBase64(att.dataUrl) };
+  });
+}
+
 function send() {
   var text = input.value.trim();
-  if (!text) return;
+  var hasImages = pendingAttachments.length > 0;
+  // Allow an image-only send; block only when there is neither.
+  if (!text && !hasImages) return;
 
   // /hs prefix: run semantic search locally without agent round-trip
   if (text.toLowerCase().startsWith('/hs ')) {
@@ -16,8 +156,12 @@ function send() {
 
   // If currently prompting, cancel first then send (interrupt)
   if (state === 'prompting') {
+    var qText = text;
+    var qImages = _collectImagesForSend();
+    var qDataUrls = pendingAttachments.map(function(a) { return a.dataUrl; });
     input.value = '';
     input.style.height = 'auto';
+    clearAttachments();
     pywebview.api.cancel('interrupt');
     // Queue the new prompt — poll until state becomes ready
     var attempts = 0;
@@ -25,10 +169,10 @@ function send() {
       attempts++;
       if (state === 'ready') {
         clearInterval(pollReady);
-        appendUser(text);
-        if (!sessionTitle) firstPrompt = text;
-        window._lastUserPrompt = text;
-        pywebview.api.send_prompt(text);
+        appendUser(qText, qDataUrls);
+        if (!sessionTitle) firstPrompt = qText;
+        window._lastUserPrompt = qText;
+        pywebview.api.send_prompt(qText, qImages);
       } else if (attempts > 40) {
         // Safety: give up after ~2s
         clearInterval(pollReady);
@@ -39,11 +183,14 @@ function send() {
   if (state !== 'ready') return;
   if (_loadingHistory) return;
   if (!sessionTitle) firstPrompt = text;
-  appendUser(text);
+  var images = _collectImagesForSend();
+  var dataUrls = pendingAttachments.map(function(a) { return a.dataUrl; });
+  appendUser(text, dataUrls);
   input.value = '';
   input.style.height = 'auto';
+  clearAttachments();
   window._lastUserPrompt = text;
-  pywebview.api.send_prompt(text);
+  pywebview.api.send_prompt(text, images);
 }
 
 function cancel() {

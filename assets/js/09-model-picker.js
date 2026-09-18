@@ -130,7 +130,7 @@
       // ×2.2, ×0.25 etc. Format: strip trailing zeros without over-trimming.
       var rmText = (rm === Math.floor(rm)) ? rm.toString() : rm.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
       rate.textContent = "\u00d7" + rmText;
-      rate.title = "Credit rate multiplier (" + tier + ")";
+      rate.setAttribute("data-tooltip", "Credit rate multiplier (" + tier + ")");
       meta.appendChild(rate);
     }
 
@@ -144,7 +144,7 @@
       setDefault.className = "model-picker-set-default";
       setDefault.type = "button";
       setDefault.textContent = "set default";
-      setDefault.title = "Make this the kiro-cli global default (chat.defaultModel)";
+      setDefault.setAttribute("data-tooltip", "Make this the kiro-cli global default (chat.defaultModel)");
       setDefault.addEventListener("click", function (e) {
         e.stopPropagation();
         onSetDefault(model.modelId, setDefault);
@@ -162,11 +162,11 @@
 
   function onPickModel(modelId) {
     if (!modelId || modelId === latest.currentModelId) {
-      closeDropdown();
+      picker.close();
       return;
     }
     if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.set_model) {
-      closeDropdown();
+      picker.close();
       return;
     }
     // Optimistic: update the button label immediately, Python will re-push
@@ -174,7 +174,7 @@
     latest.currentModelId = modelId;
     updateButtonLabel();
     renderDropdown();
-    closeDropdown();
+    picker.close();
     window.pywebview.api.set_model(modelId).catch(function (err) {
       if (window.HvToast) window.HvToast.error("Model switch failed: " + err);
     });
@@ -197,48 +197,21 @@
     });
   }
 
-  // --- Dropdown open/close ---
+  // --- Dropdown open/close (behavior via HvDisclosure) ---
 
-  function isOpen() {
-    var dd = document.getElementById("model-picker-dropdown");
-    return dd && dd.classList.contains("open");
-  }
+  var picker = HvDisclosure.register({
+    trigger: "model-picker-btn",
+    panel: "model-picker-dropdown",
+    host: "model-picker",
+    triggerOpenClass: "model-picker-open",
+    onOpen: function () { renderDropdown(); }
+  });
 
-  function openDropdown() {
-    var dd = document.getElementById("model-picker-dropdown");
-    var btn = document.getElementById("model-picker-btn");
-    if (!dd || !btn) return;
-    renderDropdown();
-    dd.classList.add("open");
-    btn.classList.add("model-picker-open");
-    // Delay attaching the outside-click closer until after this click bubbles.
-    setTimeout(function () {
-      document.addEventListener("click", onDocClick, true);
-      document.addEventListener("keydown", onKeydown, true);
-    }, 0);
-  }
-
-  function closeDropdown() {
-    var dd = document.getElementById("model-picker-dropdown");
-    var btn = document.getElementById("model-picker-btn");
-    if (dd) dd.classList.remove("open");
-    if (btn) btn.classList.remove("model-picker-open");
-    document.removeEventListener("click", onDocClick, true);
-    document.removeEventListener("keydown", onKeydown, true);
-  }
-
-  function onDocClick(e) {
-    var host = document.getElementById("model-picker");
-    if (host && !host.contains(e.target)) closeDropdown();
-  }
-
-  function onKeydown(e) {
-    if (e.key === "Escape") { closeDropdown(); }
-  }
+  function isOpen() { return picker.isOpen(); }
 
   window.toggleModelPicker = function (e) {
     if (e && e.stopPropagation) e.stopPropagation();
-    if (isOpen()) { closeDropdown(); } else { openDropdown(); }
+    picker.toggle();
   };
 
   // --- Backend event handler ---

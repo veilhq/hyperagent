@@ -4,7 +4,7 @@ function scrollBottom() { msgs.scrollTo({ top: msgs.scrollHeight, behavior: 'smo
 
 function collapseToolRow() {
   if (currentToolRow) {
-    var cards = currentToolRow.querySelectorAll('.tool-card.show-label');
+    var cards = currentToolRow.querySelectorAll('.tool-indicator.show-label');
     for (var i = 0; i < cards.length; i++) cards[i].classList.remove('show-label');
   }
 }
@@ -70,16 +70,41 @@ function msgTime() {
   return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
 }
 
-function appendUser(text) {
+// Shared markup for the broken/missing-media placeholder primitive
+// (.hv-media-missing lives in hyperkit/css/primitives.css). Used when a
+// prior-turn image cannot be rehydrated from session history. Lucide image-off.
+function mediaMissingHTML() {
+  return '<div class="hv-media-missing" role="img" aria-label="image not available">'
+    + '<svg class="hv-media-missing-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="2" x2="22" y1="2" y2="22"/><path d="M10.41 10.41a2 2 0 1 1-2.83-2.83"/><line x1="13.5" x2="6" y1="13.5" y2="21"/><line x1="18" x2="21" y1="12" y2="15"/><path d="M3.59 3.59A1.99 1.99 0 0 0 3 5v14a2 2 0 0 0 2 2h14c.55 0 1.052-.22 1.41-.59"/><path d="M21 15V5a2 2 0 0 0-2-2H9"/></svg>'
+    + '<span class="hv-media-missing-label">image not available</span>'
+    + '</div>';
+}
+
+function appendUser(text, images) {
   var w = msgs.querySelector('.welcome');
   if (w) { destroyWelcomeNoise(); w.classList.add('welcome-exit'); setTimeout(function() { if (w.parentNode) w.remove(); }, 200); }
   var el = document.createElement('div');
   el.className = 'msg msg-user';
   el.innerHTML = '<span class="msg-meta"><span class="msg-role">(一︿一+ )</span><span class="msg-time">' + msgTime() + '</span></span>';
-  var body = document.createElement('span');
-  body.className = 'msg-body';
-  body.textContent = text;
-  el.appendChild(body);
+  // Inline attached images above the text body, when present.
+  if (images && images.length) {
+    var gallery = document.createElement('span');
+    gallery.className = 'msg-images';
+    images.forEach(function(src) {
+      var im = document.createElement('img');
+      im.className = 'msg-image';
+      im.src = src;
+      im.alt = 'attached image';
+      gallery.appendChild(im);
+    });
+    el.appendChild(gallery);
+  }
+  if (text) {
+    var body = document.createElement('span');
+    body.className = 'msg-body';
+    body.textContent = text;
+    el.appendChild(body);
+  }
   msgs.appendChild(el);
   scrollBottom();
 }
@@ -513,11 +538,11 @@ window.__acpUpdate = function(update) {
       var toolName = toolNameMap[update.toolCallId] || update.title || update.toolCallId;
       // Fade thinking bar color based on tool category
       setThinkingColorForTool(toolName);
-      card.className = 'tool-card running show-label tc-' + toolGroup(toolName);
+      card.className = 'tool-indicator tool-indicator-running show-label tc-' + toolGroup(toolName);
       card.id = 'tool-' + update.toolCallId;
       var icon = toolIcon(toolName);
       var label = update.title || update.toolCallId;
-      card.innerHTML = '<span class="tool-card-icon">' + icon + '</span><span class="tool-card-label">' + label + '</span>';
+      card.innerHTML = '<span class="tool-indicator-icon">' + icon + '</span><span class="tool-indicator-label">' + label + '</span>';
       card.title = label;
       // Store input data for detail panel
       card._toolData = { name: label, input: update.input || null, output: null };
@@ -545,7 +570,7 @@ window.__acpUpdate = function(update) {
       toolCards[update.toolCallId] = card;
       currentToolRow.appendChild(card);
       toolTimers[update.toolCallId] = setTimeout(function() {
-        if (card.classList.contains('running')) card.classList.add('long-running');
+        if (card.classList.contains('tool-indicator-running')) card.classList.add('tool-indicator-long');
       }, getToolTimeout(update.title || update.toolCallId));
       scrollBottom();
       break;
@@ -572,11 +597,11 @@ window.__acpUpdate = function(update) {
         }
         tc = document.createElement('div');
         var toolNameU = toolNameMap[update.toolCallId] || update.title || update.toolCallId;
-        tc.className = 'tool-card running tc-' + toolGroup(toolNameU);
+        tc.className = 'tool-indicator tool-indicator-running tc-' + toolGroup(toolNameU);
         tc.id = 'tool-' + update.toolCallId;
         var iconU = toolIcon(toolNameU);
         var labelU = update.title || update.toolCallId;
-        tc.innerHTML = '<span class="tool-card-icon">' + iconU + '</span><span class="tool-card-label">' + labelU + '</span>';
+        tc.innerHTML = '<span class="tool-indicator-icon">' + iconU + '</span><span class="tool-indicator-label">' + labelU + '</span>';
         tc.title = labelU;
         tc._toolData = { name: labelU, input: null, output: null };
         tc.addEventListener('click', function() {
@@ -594,7 +619,7 @@ window.__acpUpdate = function(update) {
         var done = update.status === 'completed';
         var fail = update.status === 'failed';
         var grp = (tc.className.match(/tc-\w+/) || [''])[0];
-        tc.className = 'tool-card ' + (done ? 'completed' : fail ? 'failed' : 'running') + (tc.classList.contains('show-label') ? ' show-label' : '') + (grp ? ' ' + grp : '');
+        tc.className = 'tool-indicator ' + (done ? 'tool-indicator-completed' : fail ? 'tool-indicator-failed' : 'tool-indicator-running') + (tc.classList.contains('show-label') ? ' show-label' : '') + (grp ? ' ' + grp : '');
         // Store output
         if (update.output) tc._toolData.output = update.output;
         if (update.result) tc._toolData.output = update.result;
@@ -765,6 +790,12 @@ window.__acpTurnEnd = function(data) {
 window.__acpStateChange = function(data) {
   var prevState = state;
   state = data.state;
+  // Track the agent's advertised image capability so the attach affordance
+  // can be gated — never offer image attach to an agent that would reject it.
+  if (typeof data.imageCapable !== 'undefined') {
+    window._imageCapable = !!data.imageCapable;
+    app.classList.toggle('image-capable', window._imageCapable);
+  }
   statusEl.textContent = state;
   statusEl.className = 'ha-cluster-chip topbar-status ' + state;
   sendBtn.disabled = (state !== 'ready' && state !== 'prompting') || _loadingHistory;
@@ -957,10 +988,32 @@ window.__acpSessionLoaded = function(data) {
         if (m.role === 'user') {
           el.className = 'msg msg-user';
           el.innerHTML = '<span class="msg-meta"><span class="msg-role">(一︿一+ )</span>' + tSpan + '</span>';
-          var body = document.createElement('span');
-          body.className = 'msg-body';
-          body.textContent = m.text;
-          el.appendChild(body);
+          // Rebuilt images render inline; only reconstructions that failed
+          // (m.missingImages) fall back to the missing-media placeholder.
+          var hasReal = m.images && m.images.length;
+          if (hasReal || m.missingImages) {
+            var gallery = document.createElement('span');
+            gallery.className = 'msg-images';
+            if (hasReal) {
+              m.images.forEach(function(src) {
+                var im = document.createElement('img');
+                im.className = 'msg-image';
+                im.src = src;
+                im.alt = 'attached image';
+                gallery.appendChild(im);
+              });
+            }
+            for (var mi = 0; mi < (m.missingImages || 0); mi++) {
+              gallery.insertAdjacentHTML('beforeend', mediaMissingHTML());
+            }
+            el.appendChild(gallery);
+          }
+          if (m.text) {
+            var body = document.createElement('span');
+            body.className = 'msg-body';
+            body.textContent = m.text;
+            el.appendChild(body);
+          }
         } else if (m.role === 'skill') {
           // Render skill activation card + topbar badge
           var sCard = document.createElement('div');
@@ -990,9 +1043,9 @@ window.__acpSessionLoaded = function(data) {
             var tm = messages[idx];
             var card = document.createElement('div');
             var tName = tm.name || 'tool';
-            card.className = 'tool-card completed tc-' + toolGroup(tName);
+            card.className = 'tool-indicator tool-indicator-completed tc-' + toolGroup(tName);
             var tIcon = toolIcon(tName);
-            card.innerHTML = '<span class="tool-card-icon">' + tIcon + '</span><span class="tool-card-label">' + tName + '</span>';
+            card.innerHTML = '<span class="tool-indicator-icon">' + tIcon + '</span><span class="tool-indicator-label">' + tName + '</span>';
             card.title = tName;
             card.addEventListener('click', (function(c) {
               return function() { c.classList.toggle('show-label'); };

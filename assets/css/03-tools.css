@@ -1,4 +1,9 @@
-/* ===== Hyperagent: Tool Cards ===== */
+/* ===== Hyperagent: Tool Cards =====
+   The badge silhouette + running/completed/failed/long state machine now lives
+   in the shared .tool-indicator primitive (hyperkit/css/primitives.css). This
+   file supplies only the Hyperagent-specific layer: the tool-row container and
+   the per-MCP-group category color, injected via the primitive's
+   --indicator-color slot. */
 
 .tool-row {
   display: flex;
@@ -7,85 +12,19 @@
   align-self: flex-start;
   padding: var(--space-0-3) 0;
 }
-.tool-card {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0;
-  width: 1.4rem;
-  height: 1.4rem;
-  padding: 0;
-  cursor: pointer;
-  font-size: var(--fs-micro);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  animation: fadeSlideIn var(--motion-fast) var(--ease);
-  transition: opacity var(--motion-base) var(--ease), transform var(--motion-fast) var(--ease), width var(--motion-base) var(--ease), padding var(--motion-base) var(--ease);
-}
-.tool-card.show-label {
-  width: auto;
-  padding: var(--space-0-2) var(--space-0-4);
-}
-.tool-card:hover {
-  transform: translateY(-1px);
-  opacity: 0.85;
-}
-.tool-card-icon {
-  font-size: 0.6rem;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.tool-card-label {
-  white-space: nowrap;
-  max-width: 0;
-  overflow: hidden;
-  opacity: 0;
-  transition: max-width var(--motion-medium) var(--ease), opacity var(--motion-base) var(--ease);
-}
-.tool-card.show-label .tool-card-label {
-  max-width: 12rem;
-  opacity: 1;
-  margin-left: var(--space-1);
-}
 
-/* State badge colors — by MCP group */
-.tool-card.running.tc-core { background: var(--warm); color: var(--bg); }
-.tool-card.running.tc-web { background: var(--cool); color: var(--bg); }
-.tool-card.running.tc-aws { background: #ff9900; color: var(--bg); }
-.tool-card.running.tc-devops { background: #0078d4; color: var(--bg); }
-.tool-card.running.tc-hyper { background: var(--accent); color: var(--bg); }
-.tool-card.running.tc-knowledge { background: var(--comp); color: var(--bg); }
-.tool-card.completed {
-  opacity: 0.6;
-  animation: toolFlash var(--motion-slow) ease-out;
-}
-@keyframes toolFlash {
-  0% { opacity: 0; transform: scale(0.8); }
-  50% { opacity: 1; }
-  100% { opacity: 0.6; transform: scale(1); }
-}
-.tool-card.completed.tc-core { background: var(--warm); color: var(--bg); }
-.tool-card.completed.tc-web { background: var(--cool); color: var(--bg); }
-.tool-card.completed.tc-aws { background: #ff9900; color: var(--bg); }
-.tool-card.completed.tc-devops { background: #0078d4; color: var(--bg); }
-.tool-card.completed.tc-hyper { background: var(--accent); color: var(--bg); }
-.tool-card.completed.tc-knowledge { background: var(--comp); color: var(--bg); }
-.tool-card.failed {
-  background: var(--comp);
-  color: var(--bg);
-  opacity: 0.85;
-  animation: toolFailShake var(--motion-slow) ease-out;
-}
-@keyframes toolFailShake {
-  0% { transform: translateX(0); }
-  25% { transform: translateX(-2px); }
-  50% { transform: translateX(2px); }
-  75% { transform: translateX(-1px); }
-  100% { transform: translateX(0); }
-}
+/* Category color per MCP group — the only value this layer owns. The primitive
+   reads --indicator-color for every state (running fill, completed fade), so
+   one declaration per group covers all states and no state is left uncolored. */
+.tool-indicator.tc-core      { --indicator-color: var(--warm); }
+.tool-indicator.tc-web       { --indicator-color: var(--cool); }
+.tool-indicator.tc-aws       { --indicator-color: var(--tool-aws); }
+.tool-indicator.tc-devops    { --indicator-color: var(--tool-devops); }
+.tool-indicator.tc-hyper     { --indicator-color: var(--accent); }
+.tool-indicator.tc-knowledge { --indicator-color: var(--comp); }
+.tool-indicator.tc-subagent  { --indicator-color: var(--comp); }
+.tool-indicator.tc-tasks     { --indicator-color: var(--warm); }
+
 
 /* Inline error snippet shown below failed tool cards */
 .tool-error-inline {
@@ -106,10 +45,7 @@
   animation: fadeSlideIn var(--motion-fast) var(--ease);
 }
 
-/* Long-running warning — pulsing badge */
-.tool-card.long-running {
-  animation: pulse 1.5s ease-in-out infinite; /* off-scale: slow ambient pulse for running state */
-}
+/* Long-running warning — handled by the shared .tool-indicator-long primitive state. */
 
 /* ---- Tool detail panel (expandable) ---- */
 .tool-detail {
@@ -176,10 +112,8 @@
 .turn-end.turn-failed .retry-btn:hover { opacity: 0.8; }
 
 
-.tool-card.tc-subagent { border-color: var(--comp); }
-.tool-card.tc-subagent .tool-card-icon { color: var(--comp); }
-.tool-card.tc-tasks { border-color: var(--warm); }
-.tool-card.tc-tasks .tool-card-icon { color: var(--warm); }
+/* subagent/tasks now fill via --indicator-color like every other group
+   (see the category map above) — no border-only special case needed. */
 
 /* ---- Trace Card (semantic_search retrieval sources) ---- */
 .trace-card {

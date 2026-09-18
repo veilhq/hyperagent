@@ -175,6 +175,19 @@ function _withTabContext(tabId, fn) {
   sidebarTabList = document.getElementById('sidebar-tab-list');
   var addBtn = document.getElementById('sidebar-tab-add');
   if (addBtn) addBtn.addEventListener('click', createTab);
+  // Keyboard nav + roving tabindex + ARIA via the shared HvTabs primitive.
+  // The chat-session tab model stays here; HvTabs only routes arrow-key
+  // selection back into switchTab via the tab element's data-tab-id.
+  if (window.HvTabs && sidebarTabList) {
+    window.HvTabs.register({
+      tablist: sidebarTabList,
+      tabSelector: '.sidebar-tab-item',
+      onSelect: function (tabEl) {
+        var id = tabEl.getAttribute('data-tab-id');
+        if (id && id !== activeTabId) switchTab(id);
+      }
+    });
+  }
 })();
 
 // --- Completed executions badge ---
@@ -249,7 +262,7 @@ function _addTabToUI(tabId, title, sessionId) {
   tabEl.setAttribute('data-tab-id', tabId);
   tabEl.innerHTML = '<span class="sidebar-tab-dither"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>'
     + '<span class="sidebar-tab-item-title">' + _escTabHtml(title || 'New Chat') + '</span>'
-    + '<button class="sidebar-tab-item-close" title="Close tab">&times;</button>';
+    + '<button class="sidebar-tab-item-close" data-tooltip="Close tab" aria-label="Close tab">&times;</button>';
 
   tabEl.querySelector('.sidebar-tab-item-title').addEventListener('click', function() {
     switchTab(tabId);
@@ -775,7 +788,7 @@ function _registerInitialTab(tabId) {
   tabEl.setAttribute('data-tab-id', tabId);
   tabEl.innerHTML = '<span class="sidebar-tab-dither"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>'
     + '<span class="sidebar-tab-item-title">New Chat</span>'
-    + '<button class="sidebar-tab-item-close" title="Close tab">&times;</button>';
+    + '<button class="sidebar-tab-item-close" data-tooltip="Close tab" aria-label="Close tab">&times;</button>';
 
   tabEl.querySelector('.sidebar-tab-item-title').addEventListener('click', function() {
     switchTab(tabId);
@@ -820,7 +833,7 @@ function _ensureEditedMark(tabEl) {
   if (!titleEl || titleEl.querySelector('.sidebar-tab-edited-mark')) return;
   var mark = document.createElement('span');
   mark.className = 'sidebar-tab-edited-mark';
-  mark.setAttribute('title', 'title locked');
+  mark.setAttribute('data-tooltip', 'title locked');
   mark.setAttribute('aria-label', 'title locked');
   mark.textContent = '*';
   titleEl.appendChild(mark);

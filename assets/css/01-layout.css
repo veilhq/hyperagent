@@ -64,9 +64,9 @@
   background: var(--text-dim);
   border-color: var(--text-dim);
 }
-.topbar-status.ready     { background: var(--accent); border-color: var(--accent); }
-.topbar-status.prompting { background: var(--warm);   border-color: var(--warm); }
-.topbar-status.crashed   { background: var(--comp);   border-color: var(--comp); }
+.topbar-status.ready     { background: var(--success); border-color: var(--success); }
+.topbar-status.prompting { background: var(--warning);   border-color: var(--warning); }
+.topbar-status.crashed   { background: var(--error);   border-color: var(--error); }
 
 /* ---- session title — dim filled pill, truncates ---- */
 .status-title {
@@ -170,8 +170,8 @@
   background: var(--accent);
   transition: width var(--motion-slow) var(--ease), background var(--motion-slow) var(--ease);
 }
-.ctx-meter-fill.warn     { background: var(--warm); }
-.ctx-meter-fill.critical { background: var(--comp); }
+.ctx-meter-fill.warn     { background: var(--warning); }
+.ctx-meter-fill.critical { background: var(--error); }
 
 /* Error bar
    The bar is the first flow element in #app, so it shares the top band with

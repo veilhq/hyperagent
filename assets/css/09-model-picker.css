@@ -60,16 +60,14 @@
 
 /* ---- Dropdown panel — follows .menu-dropdown open/close via .open class ---- */
 .model-picker-dropdown {
+  /* Surface (bg/border/radius/z-index) comes from .floating-panel-raised.
+     Only positioning, width, and the max-height reveal are specific here. */
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
   width: 22rem;
   max-height: 0;
   overflow: hidden;
-  z-index: var(--z-dropdown);
-  background: var(--bg-card);
-  border: var(--border-hair) solid var(--border-strong);
-  border-radius: var(--radius);
   opacity: 0;
   transform: translateY(-4px);
   transition: max-height var(--motion-medium) var(--ease),

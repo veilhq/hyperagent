@@ -9,6 +9,7 @@ theme/palette, clipboard, and semantic search.
 import json
 import os
 import re
+import base64
 import shutil
 import subprocess
 import threading
@@ -31,6 +32,8 @@ from helpers import (
     _SKILL_MD_PATTERN,
     AUTH_NO,
     get_model_rates,
+    get_kiro_changelog,
+    get_kiro_version,
     read_kiro_default_model,
     write_kiro_default_model,
     build_palette_oklch,
@@ -38,6 +41,32 @@ from helpers import (
 )
 from palette import GRADIENT_MAPS  # noqa: E402 — shared preset data from hyperkit
 from acp_pool import ACPClientPool
+
+
+def _image_block_to_data_url(block):
+    """Reconstruct a stored image content block into a data URL for display.
+
+    kiro-cli persists prompt images in full, as a byte array:
+        {"kind": "image", "data": {"format": "png",
+         "source": {"kind": "bytes", "data": [137, 80, ...]}}}
+
+    Returns a "data:image/{format};base64,{...}" string, or None when the block
+    cannot be reconstructed (missing/empty bytes, unexpected source kind). A
+    None return signals the caller to fall back to a missing-media placeholder.
+    """
+    try:
+        data = block.get("data") or {}
+        fmt = data.get("format") or "png"
+        source = data.get("source") or {}
+        if source.get("kind") != "bytes":
+            return None
+        raw = source.get("data")
+        if not raw:
+            return None
+        b64 = base64.b64encode(bytes(raw)).decode("ascii")
+        return f"data:image/{fmt};base64,{b64}"
+    except (TypeError, ValueError):
+        return None
 
 
 class HyperagentAPI:
@@ -49,10 +78,15 @@ class HyperagentAPI:
         """Backward compat: return active client."""
         return self._pool.active_client
 
-    def send_prompt(self, text, tab_id=None):
+    def send_prompt(self, text, images=None, tab_id=None):
         client = self._pool.get_client(tab_id) if tab_id else self._pool.active_client
-        if client and text and text.strip():
-            threading.Thread(target=client.prompt, args=(text.strip(),), daemon=True).start()
+        text = (text or "").strip()
+        # Send when there is text or at least one image. An image-only prompt
+        # is valid — the ACP client builds an image-only content-block array.
+        if client and (text or images):
+            threading.Thread(
+                target=client.prompt, args=(text, images), daemon=True
+            ).start()
 
     def cancel(self, reason=None, tab_id=None):
         client = self._pool.get_client(tab_id) if tab_id else self._pool.active_client
@@ -473,6 +507,34 @@ class HyperagentAPI:
             "defaultModelId": read_kiro_default_model(),
         }
 
+    def get_changelog(self, version=None):
+        """Return parsed changelog for a kiro-cli version, or None.
+
+        If no version is passed, resolves the current CLI version so the badge
+        can request its own release notes. Opening the changelog counts as
+        seeing it, so the resolved version is recorded as acknowledged — this
+        clears the badge's "what's new" cue on the next ready transition.
+        """
+        if not version:
+            version = get_kiro_version()
+        if not version:
+            return None
+        self._mark_changelog_seen(version)
+        return get_kiro_changelog(version)
+
+    def _mark_changelog_seen(self, version):
+        """Persist the acknowledged changelog version to preferences."""
+        try:
+            prefs = {}
+            if PREFS_FILE.exists():
+                prefs = json.loads(PREFS_FILE.read_text(encoding="utf-8"))
+            if prefs.get("changelogSeenVersion") == version:
+                return
+            prefs["changelogSeenVersion"] = version
+            PREFS_FILE.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
+        except Exception as e:
+            logger.debug("_mark_changelog_seen failed: %s", e)
+
     def debug_log(self, message):
         """Route a JS-side trace into the hyperagent log."""
         try:
@@ -534,9 +596,10 @@ class HyperagentAPI:
                     detail += f" | resets {reset_str}"
                 if at_cap:
                     detail += " | at or over plan limit"
+                # kiro-cli's /usage now reports the true used value even when it
+                # exceeds the plan total, so the raw number carries the overage
+                # itself — no "+" marker needed to signal at-or-over-plan.
                 used_str = f"{used:.1f}" if used != int(used) else str(int(used))
-                if at_cap:
-                    used_str += "+"
                 total_str = str(int(total))
                 return {"ok": True, "used_pct": used_pct, "used": used_str, "total": total_str, "detail": detail, "at_cap": at_cap}
 
@@ -884,10 +947,33 @@ class HyperagentAPI:
                     ts_meta = entry.get("meta") or data.get("meta") or {}
                     ts = ts_meta.get("timestamp") if isinstance(ts_meta, dict) else None
                     if kind == "Prompt":
+                        # Text round-trips directly; image blocks are stored in
+                        # full (byte array) and are reconstructed to data URLs
+                        # for inline display. Only a block that cannot be rebuilt
+                        # becomes a missing-media placeholder.
+                        prompt_text = ""
+                        prompt_images = []
+                        missing_images = 0
                         for c in content:
-                            if c.get("kind") == "text" and c.get("data"):
-                                messages.append({"role": "user", "text": c["data"], "ts": ts})
-                                break
+                            ckind = c.get("kind")
+                            if ckind == "text" and c.get("data") and not prompt_text:
+                                prompt_text = c["data"]
+                            elif ckind == "image":
+                                url = _image_block_to_data_url(c)
+                                if url:
+                                    prompt_images.append(url)
+                                else:
+                                    missing_images += 1
+                            elif ckind and ckind != "text":
+                                # Non-text, non-image content we can't display.
+                                missing_images += 1
+                        if prompt_text or prompt_images or missing_images:
+                            msg = {"role": "user", "text": prompt_text, "ts": ts}
+                            if prompt_images:
+                                msg["images"] = prompt_images
+                            if missing_images:
+                                msg["missingImages"] = missing_images
+                            messages.append(msg)
                     elif kind == "AssistantMessage":
                         text_parts = []
                         tools = []

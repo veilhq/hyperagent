@@ -1,0 +1,153 @@
+/* =========================================================================
+   Changelog Dropdown — badge-anchored panel showing kiro-cli release notes.
+   Anchored to the #cli-version badge; mirrors the model-picker dropdown
+   structure and hyperkit token vocabulary — no raw values.
+   ========================================================================= */
+
+.cli-version-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ---- Trigger badge — keeps the quiet muted-outline chip look, adds
+   interactive affordance since it's now clickable. Base chip styling
+   (color/background/border) is inherited from .cli-version in 01-layout.css. */
+.cli-version {
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--ease),
+              border-color var(--motion-fast) var(--ease),
+              background var(--motion-fast) var(--ease);
+}
+.cli-version:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.cli-version.cli-version-open {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+/* ---- Unseen release notes cue — accent outline until acknowledged ---- */
+.cli-version.has-new {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.cli-version.has-new:hover {
+  background: var(--accent-glow);
+}
+
+/* ---- Dropdown panel — matches .model-picker-dropdown open/close behavior ---- */
+.cli-version-dropdown {
+  /* Surface (bg/border/radius/z-index) comes from .floating-panel-raised.
+     Only positioning, width, and the max-height reveal are specific here. */
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 26rem;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: max-height var(--motion-medium) var(--ease),
+              opacity var(--motion-base) var(--ease),
+              transform var(--motion-base) var(--ease);
+}
+.cli-version-dropdown.open {
+  max-height: 32rem;
+  overflow-y: auto;
+  opacity: 1;
+  transform: translateY(0);
+}
+.cli-version-dropdown::-webkit-scrollbar { width: 3px; }
+.cli-version-dropdown::-webkit-scrollbar-track { background: var(--bg-card); }
+.cli-version-dropdown::-webkit-scrollbar-thumb { background: var(--border-strong); }
+
+/* ---- Panel header — matches .model-picker-header ---- */
+.cli-version-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--border-hair) solid var(--border);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.cli-version-header-title { color: var(--text-dim); }
+.cli-version-header-meta {
+  font-size: var(--fs-micro);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Entry list container ---- */
+.cli-version-list {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-1) 0 var(--space-2);
+}
+
+/* ---- Category group headers — matches .model-picker-group-header ---- */
+.cli-version-group-header {
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  border-top: var(--border-hair) solid var(--border);
+}
+.cli-version-group-header:first-child { border-top: none; }
+/* Category accent cues — reuse semantic tokens already in the palette. */
+.cli-version-group-header[data-type="Added"]      { color: var(--accent); }
+.cli-version-group-header[data-type="Fixed"]       { color: var(--cool); }
+.cli-version-group-header[data-type="Security"]    { color: var(--comp); }
+.cli-version-group-header[data-type="Deprecated"]  { color: var(--warm); }
+
+/* ---- Individual change entries ---- */
+.cli-version-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--fs-label);
+  line-height: 1.5;
+}
+.cli-version-item-text {
+  color: var(--text-muted);
+  min-width: 0;
+  word-break: break-word;
+}
+
+/* ---- Engine tag chip (e.g. "V3") ---- */
+.cli-version-item-tag {
+  flex-shrink: 0;
+  display: inline-block;
+  padding: 0.1rem var(--chip-padding-x);
+  border: var(--border-hair) solid var(--border-strong);
+  border-radius: var(--radius);
+  font-size: var(--fs-micro);
+  font-weight: var(--chip-font-weight);
+  letter-spacing: var(--chip-letter-spacing);
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+/* ---- Empty / loading state ---- */
+.cli-version-empty {
+  padding: var(--space-3);
+  font-size: var(--fs-label);
+  color: var(--text-dim);
+  text-align: center;
+}
+
+/* ---- Reduced motion: handled by Hyperkit accessibility.css blanket ---- */

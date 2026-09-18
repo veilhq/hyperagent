@@ -24,8 +24,14 @@
 }
 .task-panel.visible {
   transform: translateX(0);
-  opacity: 1;
+  /* Idle: dimmed so it recedes and doesn't block content. */
+  opacity: 0.35;
   pointer-events: auto;
+}
+/* Focused (hover or keyboard focus within): come forward to full opacity. */
+.task-panel.visible:hover,
+.task-panel.visible:focus-within {
+  opacity: 1;
 }
 
 /* ---- Header — matches .panel-header pattern ---- */

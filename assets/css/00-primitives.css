@@ -5,17 +5,9 @@
    clipped-corner tab card. See hyperkit/css/primitives.css for the shared
    .nav-tab base (position, background, hover transition) that this extends. */
 
-/* ---- Tab card primitive — clipped corner card for open tabs -----------------
-   Distinguished from session cards by the top-right corner notch (clip-path)
-   and the dither grid. No border — the clip IS the shape language.
-*/
-.nav-tab {
-  --tab-notch: 8px;
-  clip-path: polygon(
-    0% 0%,
-    calc(100% - var(--tab-notch)) 0%,
-    100% var(--tab-notch),
-    100% 100%,
-    0% 100%
-  );
-}
+/* ---- Tab card primitive ----------------------------------------------------
+   The clipped-corner notch that was Hyperagent's local divergence is now the
+   shared ecosystem tab shape - see .nav-tab in hyperkit/css/primitives.css,
+   which provides the clip-path, surface, and active-glow. Nothing tab-shaped
+   is overridden here anymore; Hyperagent's session-tab layout specifics live
+   in 05-sidebar.css. */

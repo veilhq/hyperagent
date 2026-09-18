@@ -25,7 +25,7 @@ ROOT = Path(__file__).parent
 HYPERKIT_DIR = ROOT.parent / ".hyperkit"
 HYPERKIT_CSS_DIR = HYPERKIT_DIR / "css"
 HYPERKIT_JS_DIR = HYPERKIT_DIR / "js"
-HYPERKIT_JS_MODULES = ["utils.js", "noise-field.js", "greeting.js", "cursor-trail.js", "toast.js", "cursor-box.js"]
+HYPERKIT_JS_MODULES = ["utils.js", "noise-field.js", "greeting.js", "cursor-trail.js", "toast.js", "tooltip.js", "disclosure.js", "collapsible.js", "tabs.js", "cursor-box.js", "viz.js"]
 
 
 def concat_files(pattern):
@@ -45,6 +45,7 @@ def concat_hyperkit_css():
         "content.css",
         "cards.css",
         "features.css",
+        "viz.css",
         "accessibility.css",
     )
     for name in hyperkit_css_order:

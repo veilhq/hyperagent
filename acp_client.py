@@ -32,6 +32,7 @@ from helpers import (
     AUTH_OK,
     AUTH_NO,
     AUTH_UNKNOWN,
+    capture_changelog_cache,
     delete_session_files,
     get_kiro_version,
     get_model_rates,
@@ -65,6 +66,10 @@ class ACPClient:
         self._write_lock = threading.Lock()
         self._auto_recover_attempts = 0
         self._auto_recover_lock = threading.Lock()
+        # Whether the connected agent advertised image support in its
+        # initialize promptCapabilities. Gates the frontend attach affordance
+        # so image content blocks are never sent to an agent that rejects them.
+        self._image_capable = False
 
     def _tab_ctx(self):
         """Return '[tab=abcdef]' prefix for logs."""
@@ -269,6 +274,12 @@ class ACPClient:
                     )
                     # Invalidate cached version so the fresh binary version is fetched
                     invalidate_kiro_version_cache()
+                    # Capture the new binary's changelog into the persistent
+                    # archive. Runs off-thread so it never delays reconnect —
+                    # this is exactly when new changelog content is available.
+                    threading.Thread(
+                        target=self._capture_changelog_safe, daemon=True
+                    ).start()
                     self._push_js("__acpUpdating", {"phase": "reconnecting"})
                     try:
                         # Suppress the normal on_init ready transition — we need
@@ -307,6 +318,22 @@ class ACPClient:
             self._push_js("__acpUpdating", {"phase": "timeout"})
 
         threading.Thread(target=_poll_and_reconnect, daemon=True).start()
+
+    def _capture_changelog_safe(self):
+        """Capture the updated binary's changelog into the archive.
+
+        Wrapper around capture_changelog_cache that never raises into its
+        background thread — a changelog capture failure must not disrupt the
+        update-restart flow.
+        """
+        try:
+            added = capture_changelog_cache()
+            if added:
+                logger.info("%supdate-restart: archived %d new changelog version(s)",
+                            self._tab_ctx(), added)
+        except Exception as e:
+            logger.debug("%supdate-restart: changelog capture failed: %s",
+                         self._tab_ctx(), e)
 
     def _reload_session_after_update(self, session_id):
         """Reload a session on a fresh kiro-cli process after self-update.
@@ -429,6 +456,15 @@ class ACPClient:
     def _initialize(self):
         def on_init(result):
             logger.trace("%son_init: %s", self._tab_ctx(), str(result)[:100])
+            # Capture the agent's advertised image prompt capability. Shape:
+            # result.agentCapabilities.promptCapabilities.image (kiro-cli 2.22.0).
+            try:
+                if isinstance(result, dict):
+                    caps = (result.get("agentCapabilities") or {}).get("promptCapabilities") or {}
+                    self._image_capable = bool(caps.get("image"))
+                    logger.info("%son_init: image_capable=%s", self._tab_ctx(), self._image_capable)
+            except Exception as e:
+                logger.warning("%son_init: failed to read promptCapabilities: %s", self._tab_ctx(), e)
             if getattr(self, '_suppress_init_ready', False):
                 self._suppress_init_ready = False
                 logger.debug("%son_init: suppressed ready (session load pending)", self._tab_ctx())
@@ -490,11 +526,41 @@ class ACPClient:
             self._state = "ready"
         self._push_state()
 
-    def prompt(self, text):
+    @staticmethod
+    def _build_prompt_blocks(text, images):
+        """Build the ACP session/prompt content-block array.
+
+        A text block is included only when text is non-empty; one image block
+        is appended per attachment. Each image is {mimeType, data} where data
+        is raw base64 (no data-URI prefix). Per the ACP content spec, image
+        blocks require the agent's 'image' prompt capability.
+        """
+        blocks = []
+        if text:
+            blocks.append({"type": "text", "text": text})
+        for img in images or []:
+            data = img.get("data")
+            if not data:
+                continue
+            blocks.append({
+                "type": "image",
+                "mimeType": img.get("mimeType") or "image/png",
+                "data": data,
+            })
+        return blocks
+
+    def prompt(self, text, images=None):
         if self._state != "ready":
             return
+        # Nothing to send if there is neither text nor a usable image.
+        blocks = self._build_prompt_blocks(text, images)
+        if not blocks:
+            return
         self._cancelled.clear()
-        logger.info("%sprompt: chars=%d lazy=%s", self._tab_ctx(), len(text), not self._session_id)
+        logger.info(
+            "%sprompt: chars=%d images=%d lazy=%s",
+            self._tab_ctx(), len(text or ""), len(images or []), not self._session_id,
+        )
         if not self._session_id:
             self._state = "prompting"
             self._prompt_start = time.time()
@@ -516,7 +582,7 @@ class ACPClient:
                 if self._session_id:
                     rid = self._request("session/prompt", {
                         "sessionId": self._session_id,
-                        "prompt": [{"type": "text", "text": text}]
+                        "prompt": blocks
                     }, self._on_prompt_done)
                     self._active_prompt_id = rid
             cwd = str(PORTAL_ROOT).replace("\\", "/")
@@ -527,7 +593,7 @@ class ACPClient:
         self._push_state()
         rid = self._request("session/prompt", {
             "sessionId": self._session_id,
-            "prompt": [{"type": "text", "text": text}]
+            "prompt": blocks
         }, self._on_prompt_done)
         self._active_prompt_id = rid
 
@@ -981,11 +1047,16 @@ class ACPClient:
                         logger.info("%sauto-recover: reached ready, resetting budget", self._tab_ctx())
                         self._auto_recover_attempts = 0
                         self._push_js("__acpRecovery", {"phase": "recovered"})
-                # Push CLI version to frontend badge
+                # Push CLI version to frontend badge. Flag whether this version's
+                # release notes are still unseen so the badge can cue "what's new".
                 version = get_kiro_version()
                 if version:
-                    self._push_js("__acpCliVersion", {"version": version})
-        self._push_js("__acpStateChange", {"state": self._state})
+                    seen = self._load_prefs().get("changelogSeenVersion")
+                    self._push_js("__acpCliVersion", {
+                        "version": version,
+                        "isNew": version != seen,
+                    })
+        self._push_js("__acpStateChange", {"state": self._state, "imageCapable": self._image_capable})
 
     # --- Session persistence ---
 

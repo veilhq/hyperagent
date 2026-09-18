@@ -221,6 +221,217 @@ def invalidate_kiro_version_cache():
     _KIRO_VERSION_CACHE = None
 
 
+# Header line: "Version 2.21.1 (2026-09-03)"
+_CHANGELOG_HEADER_RE = re.compile(r"^Version\s+(\S+)\s+\((\d{4}-\d{2}-\d{2})\)\s*$")
+# Entry line: "  - Fixed: [V3] some text" — type is one of the known categories,
+# an optional "[V3]" (or similar) engine tag may lead the text.
+_CHANGELOG_ENTRY_RE = re.compile(
+    r"^\s*-\s*(Added|Changed|Fixed|Security|Deprecated):\s*(.*)$"
+)
+_CHANGELOG_TAG_RE = re.compile(r"^\[([^\]]+)\]\s*(.*)$")
+
+_CHANGELOG_CACHE = {}  # version -> parsed dict
+
+
+def get_kiro_changelog(version):
+    """Return parsed changelog for a specific kiro-cli version, or None on failure.
+
+    Shells out to `kiro-cli version --changelog=<version>` and parses the plain
+    text output into a structured dict:
+
+        {
+            "version": "2.21.1",
+            "date": "2026-09-03",
+            "entries": [{"type": "Added", "tag": None, "text": "..."},
+                        {"type": "Changed", "tag": "V3", "text": "..."}],
+        }
+
+    Results are cached per version — changelog content is immutable for a
+    released version, so a fetch only ever needs to run once per version.
+    """
+    if not version:
+        return None
+    if version in _CHANGELOG_CACHE:
+        return _CHANGELOG_CACHE[version]
+    kiro = _find_kiro()
+    if not kiro:
+        return None
+    flags = 0x08000000 if os.name == "nt" else 0
+    try:
+        r = subprocess.run(
+            [kiro, "version", "--changelog=%s" % version],
+            capture_output=True, text=True, timeout=5,
+            creationflags=flags,
+        )
+        if r.returncode != 0 or not r.stdout.strip():
+            logger.debug("get_kiro_changelog: no output for %s (rc=%s)", version, r.returncode)
+            return None
+    except Exception as e:
+        logger.debug("get_kiro_changelog failed: %s", e)
+        return None
+
+    parsed = _parse_changelog(r.stdout, version)
+    if parsed:
+        _CHANGELOG_CACHE[version] = parsed
+    return parsed
+
+
+def _parse_changelog(text, requested_version):
+    """Parse the first version block from changelog stdout into a dict.
+
+    Reads the first version block encountered. The date comes from the
+    "Version X (YYYY-MM-DD)" header; entries are the dash-prefixed category
+    lines that follow it.
+    """
+    blocks = _parse_changelog_blocks(text)
+    if not blocks:
+        return None
+    first = blocks[0]
+    if not first.get("version"):
+        first["version"] = requested_version
+    return first
+
+
+def _parse_changelog_blocks(text):
+    """Parse every version block from changelog stdout into a list of dicts.
+
+    Handles both single-version output (`--changelog=<v>`) and the full
+    archive (`--changelog=all`). Each block:
+
+        {"version": "2.21.1", "date": "2026-09-03",
+         "entries": [{"type": "Added", "tag": None, "text": "..."}, ...]}
+
+    Blocks are returned in source order (kiro-cli emits newest-first).
+    """
+    blocks = []
+    current = None
+    for line in text.splitlines():
+        header = _CHANGELOG_HEADER_RE.match(line)
+        if header:
+            if current and current["entries"]:
+                blocks.append(current)
+            current = {
+                "version": header.group(1),
+                "date": header.group(2),
+                "entries": [],
+            }
+            continue
+        entry = _CHANGELOG_ENTRY_RE.match(line)
+        if entry and current is not None:
+            body = entry.group(2).strip()
+            tag = None
+            tag_match = _CHANGELOG_TAG_RE.match(body)
+            if tag_match:
+                tag = tag_match.group(1)
+                body = tag_match.group(2).strip()
+            current["entries"].append({
+                "type": entry.group(1),
+                "tag": tag,
+                "text": body,
+            })
+    if current and current["entries"]:
+        blocks.append(current)
+    return blocks
+
+
+def get_kiro_all_changelogs():
+    """Return every changelog block the current kiro-cli binary knows.
+
+    Shells out to `kiro-cli version --changelog=all` and parses all version
+    blocks. Returns a list of dicts (newest-first), or [] on failure. Not
+    cached — this is the capture source, meant to run on update events.
+    """
+    kiro = _find_kiro()
+    if not kiro:
+        return []
+    flags = 0x08000000 if os.name == "nt" else 0
+    try:
+        r = subprocess.run(
+            [kiro, "version", "--changelog=all"],
+            capture_output=True, text=True, timeout=10,
+            creationflags=flags,
+        )
+        if r.returncode != 0 or not r.stdout.strip():
+            logger.debug("get_kiro_all_changelogs: no output (rc=%s)", r.returncode)
+            return []
+    except Exception as e:
+        logger.debug("get_kiro_all_changelogs failed: %s", e)
+        return []
+    return _parse_changelog_blocks(r.stdout)
+
+
+# Persistent changelog archive — lives in the hypervisor data dir so the
+# hypervisor viewer utility can read it. Hyperagent owns the write side (it
+# detects updates and talks to the CLI); hypervisor only reads.
+CHANGELOG_CACHE_DIR = HYPERVISOR_DIR / "data"
+CHANGELOG_CACHE_FILE = CHANGELOG_CACHE_DIR / "changelog.json"
+
+
+def capture_changelog_cache():
+    """Merge the current binary's changelog into the persistent archive.
+
+    Append-only: versions already in the archive are never dropped, so history
+    accumulates even as old versions age out of newer kiro-cli binaries. New
+    versions are added; existing ones are refreshed in place (content for a
+    released version is stable, but a re-parse costs nothing).
+
+    Returns the number of versions newly added, or 0 on failure / no change.
+    """
+    blocks = get_kiro_all_changelogs()
+    if not blocks:
+        return 0
+
+    existing = load_changelog_cache()
+    by_version = {b["version"]: b for b in existing if b.get("version")}
+    added = 0
+    for block in blocks:
+        v = block.get("version")
+        if not v:
+            continue
+        if v not in by_version:
+            added += 1
+        by_version[v] = block
+
+    # Sort newest-first by version tuple, falling back to string compare.
+    def _vkey(item):
+        v = item[0]
+        try:
+            return tuple(int(p) for p in v.split("."))
+        except (ValueError, AttributeError):
+            return (v,)
+
+    merged = [b for _, b in sorted(by_version.items(), key=_vkey, reverse=True)]
+
+    try:
+        CHANGELOG_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "captured": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "versions": merged,
+        }
+        CHANGELOG_CACHE_FILE.write_text(
+            json.dumps(payload, indent=2), encoding="utf-8"
+        )
+        logger.info("changelog cache updated: %d version(s) total, %d new",
+                    len(merged), added)
+    except Exception as e:
+        logger.warning("capture_changelog_cache write failed: %s", e)
+        return 0
+    return added
+
+
+def load_changelog_cache():
+    """Read the persistent changelog archive. Returns a list of version blocks
+    (newest-first), or [] if the cache does not exist or is unreadable."""
+    if not CHANGELOG_CACHE_FILE.exists():
+        return []
+    try:
+        data = json.loads(CHANGELOG_CACHE_FILE.read_text(encoding="utf-8"))
+        return data.get("versions", []) if isinstance(data, dict) else []
+    except Exception as e:
+        logger.debug("load_changelog_cache failed: %s", e)
+        return []
+
+
 # ---------------------------------------------------------------------------
 # Title-subprocess crash correlation registry
 # ---------------------------------------------------------------------------

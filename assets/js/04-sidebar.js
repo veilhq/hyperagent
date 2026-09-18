@@ -136,7 +136,7 @@ function refreshSessions() {
           chipHtml + lockHtml +
           '<span class="session-item-age">' + HvUtils.escapeHtml(s.age) + '</span>' +
         '</div>' +
-        '<button class="session-delete-btn" title="Delete">&times;</button>';
+        '<button class="session-delete-btn" data-tooltip="Delete" aria-label="Delete">&times;</button>';
 
       // Single click on title: open in a new tab
       el.querySelector('.session-item-title').onclick = function() {

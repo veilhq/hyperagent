@@ -25,27 +25,36 @@
       <span class="ha-cluster-chip status-center-item" id="status-credits"></span>
       <span class="ha-cluster-chip status-center-item" id="status-tokens"></span>
     </div>
-    <div class="ctx-meter" id="ctx-meter" title="Context window usage">
+    <div class="ctx-meter" id="ctx-meter" data-tooltip="Context window usage">
       <span class="ctx-meter-label" id="ctx-label"></span>
       <div class="ctx-meter-bar"><div class="ctx-meter-fill" id="ctx-fill"></div></div>
     </div>
-    <div class="plan-credits" id="plan-credits" title="Plan credits used this period">
+    <div class="plan-credits" id="plan-credits" data-tooltip="Plan credits used this period">
       <span class="ha-cluster-chip plan-credits-label" id="plan-credits-label"></span>
-      <button class="plan-credits-refresh" id="plan-credits-refresh" onclick="refreshPlanCredits()" title="Refresh usage">&#x21bb;</button>
+      <button class="plan-credits-refresh" id="plan-credits-refresh" onclick="refreshPlanCredits()" data-tooltip="Refresh usage" aria-label="Refresh usage">&#x21bb;</button>
     </div>
     <div class="model-picker" id="model-picker">
-      <button class="ha-cluster-chip model-picker-btn" id="model-picker-btn" onclick="toggleModelPicker(event)" title="Model">
+      <button class="ha-cluster-chip model-picker-btn" id="model-picker-btn" onclick="toggleModelPicker(event)" data-tooltip="Model">
         <span class="model-picker-label" id="model-picker-label">model</span>
         <svg class="model-picker-caret" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
       </button>
-      <div class="model-picker-dropdown" id="model-picker-dropdown">
+      <div class="floating-panel floating-panel-raised model-picker-dropdown" id="model-picker-dropdown">
         <div class="panel-header model-picker-header">
           <span class="model-picker-default-label">default: <span id="model-picker-default">—</span></span>
         </div>
         <div class="model-picker-list" id="model-picker-list"></div>
       </div>
     </div>
-    <span class="ha-cluster-chip cli-version" id="cli-version" title="Kiro CLI version"></span>
+    <div class="cli-version-picker" id="cli-version-picker">
+      <button class="ha-cluster-chip cli-version" id="cli-version" data-tooltip="Kiro CLI version - click for release notes" aria-label="Kiro CLI version - click for release notes" onclick="toggleChangelog(event)"></button>
+      <div class="floating-panel floating-panel-raised cli-version-dropdown" id="cli-version-dropdown">
+        <div class="panel-header cli-version-header">
+          <span class="cli-version-header-title">What's new</span>
+          <span class="cli-version-header-meta" id="cli-version-header-meta"></span>
+        </div>
+        <div class="cli-version-list" id="cli-version-list"></div>
+      </div>
+    </div>
   </div>
   <div class="error-bar"><span class="error-bar-msg"></span><span class="error-bar-actions"></span></div>
   <div class="main-layout">
@@ -59,7 +68,7 @@
       <div class="sidebar-section sidebar-sessions-section">
         <div class="sidebar-section-header">
           <span class="sidebar-section-label">Sessions</span>
-          <button class="session-refresh-btn" id="session-refresh-btn" onclick="refreshSessions()" title="Refresh sessions">
+          <button class="session-refresh-btn" id="session-refresh-btn" onclick="refreshSessions()" data-tooltip="Refresh sessions" aria-label="Refresh sessions">
             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M8 16H3v5"/></svg>
           </button>
         </div>
@@ -69,20 +78,26 @@
     <div id="messages"></div>
   </div>
   <canvas id="thinking-bar" class="thinking-bar"></canvas>
+  <div id="attach-strip" class="attach-strip" aria-label="Pending image attachments"></div>
   <div class="input-area">
-    <button class="input-icon-btn" id="sidebar-toggle-btn" onclick="toggleSidebar()" title="Sessions (Ctrl+B)">
+    <button class="input-icon-btn" id="sidebar-toggle-btn" onclick="toggleSidebar()" data-tooltip="Sessions (Ctrl+B)" aria-label="Sessions (Ctrl+B)">
       <!-- Lucide panel-left silhouette (brutalist: no border-radius, stroke 1.5, round caps per WI-113 Phase 7) -->
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18"/><path d="M9 3v18"/></svg>
       <span class="sidebar-toggle-badge" id="sidebar-toggle-badge"></span>
     </button>
-    <button class="input-icon-btn" onclick="createTab()" title="New tab (Ctrl+T)">
+    <button class="input-icon-btn" onclick="createTab()" data-tooltip="New tab (Ctrl+T)" aria-label="New tab (Ctrl+T)">
       <!-- Lucide plus (stroke 1.5, round caps) -->
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
     </button>
-    <button class="input-icon-btn" id="hypereye-btn" onclick="launchHypereye()" title="Launch Hypereye">
+    <button class="input-icon-btn" id="hypereye-btn" onclick="launchHypereye()" data-tooltip="Launch Hypereye" aria-label="Launch Hypereye">
       <!-- Lucide eye (stroke 1.5, round caps) -->
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
     </button>
+    <button class="input-icon-btn attach-btn" id="attach-btn" onclick="document.getElementById('attach-file-input').click()" data-tooltip="Attach image" aria-label="Attach image">
+      <!-- Lucide image (stroke 1.5, round caps) -->
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+    </button>
+    <input type="file" id="attach-file-input" class="attach-file-input" accept="image/*" multiple aria-hidden="true" tabindex="-1">
     <div class="input-wrap">
       <textarea id="input" class="form-input" rows="1" placeholder="Message Hyperagent..."></textarea>
     </div>
