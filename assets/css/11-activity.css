@@ -16,6 +16,10 @@
   gap: var(--space-0-3);
 }
 
+/* Collapse when idle, same reason as .skill-strip:empty — an always-flex
+   empty strip consumes a parent `gap` slot and unbalances the cluster. */
+.activity-strip:empty { display: none; }
+
 .activity-strip:not(:empty) {
   padding-right: var(--space-0-3);
   border-right: var(--border-hair) solid var(--border);
@@ -28,7 +32,7 @@
   gap: var(--space-1);
   padding: 0.12rem var(--space-0-4);
   font-size: 0.5rem;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -126,7 +130,7 @@
 .sidebar-tab-edited-mark {
   margin-left: var(--space-0-2);
   color: var(--comp);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
 }
 
 /* ---- Reduced motion ----

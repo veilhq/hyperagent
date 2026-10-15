@@ -7,6 +7,11 @@
   gap: var(--space-0-3);
 }
 
+/* Collapse when idle: an always-flex empty strip still consumes a parent
+   `gap` slot, pushing the first visible chip right and unbalancing the
+   cluster's left edge against its right. Hidden until a badge lands. */
+.skill-strip:empty { display: none; }
+
 .skill-strip:not(:empty) {
   padding-right: var(--space-0-3);
   border-right: var(--border-hair) solid var(--border);
@@ -19,7 +24,7 @@
   gap: var(--space-1);
   padding: 0.12rem var(--space-0-4);
   font-size: 0.5rem;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -67,7 +72,7 @@
 }
 .skill-card-name {
   font-size: 0.6rem;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--cool);

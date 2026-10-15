@@ -32,8 +32,8 @@
 }
 
 .ha-splash-icon {
-  width: 24px;
-  height: 24px;
+  width: var(--icon-3xl);
+  height: var(--icon-3xl);
   color: var(--bg);
 }
 
@@ -44,7 +44,7 @@
 
 .ha-splash-loading {
   font-size: 0.6rem;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--text-dim);
@@ -52,7 +52,7 @@
 
 .ha-splash-pct {
   font-size: 0.75rem;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   color: var(--accent);
   letter-spacing: 0.05em;
 }

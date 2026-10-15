@@ -52,7 +52,7 @@
 
 .sidebar-section-label {
   font-size: var(--fs-caption);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--text-dim);
@@ -207,7 +207,7 @@
 
 .sidebar-tab-item-title {
   font-size: var(--fs-label);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -238,7 +238,7 @@
 .sidebar-tab-rename-input {
   font-family: var(--font);
   font-size: var(--fs-label);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   color: var(--text-bright);
   background: var(--bg);
   border: var(--border-hair) solid var(--accent);
@@ -258,7 +258,7 @@
   height: 12px;
   padding: 0 3px;
   font-size: 8px;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   line-height: 12px;
   text-align: center;
   color: var(--bg);
@@ -319,7 +319,7 @@
 /* Top row: title (full-width, defining element) */
 .session-item-title {
   font-size: var(--fs-label);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -442,7 +442,7 @@
 .session-rename-input {
   font-family: var(--font);
   font-size: var(--fs-label);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   color: var(--text-bright);
   background: var(--bg);
   border: var(--border-hair) solid var(--accent);

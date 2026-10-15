@@ -6,8 +6,6 @@ message dispatch, state machine transitions, and push-to-frontend events.
 """
 
 import json
-import os
-import shutil
 import socket
 import subprocess
 import sys
@@ -21,6 +19,8 @@ from helpers import (
     PORTAL_ROOT,
     PREFS_FILE,
     logger,
+    read_prefs,
+    update_prefs,
     _check_auth,
     _do_login_visible,
     _find_kiro,
@@ -239,7 +239,7 @@ class ACPClient:
             while polls < self._UPDATE_POLL_MAX:
                 time.sleep(self._UPDATE_POLL_INTERVAL)
                 polls += 1
-                kiro_path = self._find_kiro()
+                kiro_path = _find_kiro()
                 if not kiro_path:
                     logger.debug("%supdate-restart: poll %d/%d — binary not found",
                                  self._tab_ctx(), polls, self._UPDATE_POLL_MAX)
@@ -372,7 +372,11 @@ class ACPClient:
             self._reap_scratch_session(scratch[0])
             scratch[0] = None
             self._state = "ready"
+            # The normal on_init ready transition that owns the version badge was
+            # suppressed for the reload, so push the badge explicitly here — this
+            # is the self-update path, exactly when the "what's new" cue matters.
             self._push_state()
+            self._push_cli_version_badge()
 
         def on_scratch_session(result):
             scratch_id = result.get("sessionId") if isinstance(result, dict) else None
@@ -407,14 +411,6 @@ class ACPClient:
         self._socket = None
         self._sockfile = None
 
-    def _find_kiro(self):
-        found = shutil.which("kiro-cli")
-        if found:
-            return found
-        fallback = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "bin" / "kiro-cli.exe"
-        if fallback.exists():
-            return str(fallback)
-        return None
 
 
     # --- JSON-RPC send/receive ---
@@ -1049,35 +1045,43 @@ class ACPClient:
                         self._push_js("__acpRecovery", {"phase": "recovered"})
                 # Push CLI version to frontend badge. Flag whether this version's
                 # release notes are still unseen so the badge can cue "what's new".
-                version = get_kiro_version()
-                if version:
-                    seen = self._load_prefs().get("changelogSeenVersion")
-                    self._push_js("__acpCliVersion", {
-                        "version": version,
-                        "isNew": version != seen,
-                    })
+                self._push_cli_version_badge()
         self._push_js("__acpStateChange", {"state": self._state, "imageCapable": self._image_capable})
+
+    def _push_cli_version_badge(self):
+        """Push the kiro-cli version to the frontend badge, flagging unseen notes.
+
+        Resolves the binary version and pushes `__acpCliVersion` with an `isNew`
+        flag (true when the running version differs from the acknowledged
+        changelog version). The version is re-read once if the first read comes
+        back empty: right after an in-place self-update swap the binary can be
+        momentarily unreadable, and a silently dropped push leaves the "what's
+        new" cue un-fired on the exact update that produced the new notes.
+        """
+        version = get_kiro_version()
+        if not version:
+            # Transient miss right after a binary swap — invalidate and retry once.
+            invalidate_kiro_version_cache()
+            version = get_kiro_version()
+        if not version:
+            logger.debug("%scli-version badge: version unresolved, skipping push", self._tab_ctx())
+            return
+        seen = self._load_prefs().get("changelogSeenVersion")
+        self._push_js("__acpCliVersion", {
+            "version": version,
+            "isNew": version != seen,
+        })
 
     # --- Session persistence ---
 
     def _load_prefs(self):
-        if PREFS_FILE.exists():
-            try:
-                return json.loads(PREFS_FILE.read_text(encoding="utf-8"))
-            except Exception:
-                pass
-        return {}
-
-    def _save_prefs(self, prefs):
-        PREFS_FILE.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
+        return read_prefs()
 
     def _load_session_id(self):
         return self._load_prefs().get("sessionId")
 
     def _save_session_id(self, sid):
-        prefs = self._load_prefs()
-        prefs["sessionId"] = sid
-        self._save_prefs(prefs)
+        update_prefs(lambda prefs: prefs.__setitem__("sessionId", sid))
 
     def _register_owned_session(self, sid):
         """Add a session to the ownedSessions set in preferences.
@@ -1085,24 +1089,22 @@ class ACPClient:
         Only user-created sessions are registered. Ephemeral (automation)
         sessions are excluded so they never appear in the sidebar.
         """
-        prefs = self._load_prefs()
-        owned = set(prefs.get("ownedSessions", []))
-        owned.add(sid)
-        prefs["ownedSessions"] = sorted(owned)
-        self._save_prefs(prefs)
+        def mutate(prefs):
+            owned = set(prefs.get("ownedSessions", []))
+            owned.add(sid)
+            prefs["ownedSessions"] = sorted(owned)
+        update_prefs(mutate)
 
     def _unregister_owned_session(self, sid):
         """Remove a session from the ownedSessions set in preferences."""
-        prefs = self._load_prefs()
-        owned = set(prefs.get("ownedSessions", []))
-        owned.discard(sid)
-        prefs["ownedSessions"] = sorted(owned)
-        self._save_prefs(prefs)
+        def mutate(prefs):
+            owned = set(prefs.get("ownedSessions", []))
+            owned.discard(sid)
+            prefs["ownedSessions"] = sorted(owned)
+        update_prefs(mutate)
 
     def _clear_session_id(self):
-        prefs = self._load_prefs()
-        prefs.pop("sessionId", None)
-        self._save_prefs(prefs)
+        update_prefs(lambda prefs: prefs.pop("sessionId", None))
 
     # --- Model switching ---
 
@@ -1166,9 +1168,7 @@ class ACPClient:
             logger.info("%smodel switched: %s", self._tab_ctx(), model_id)
             self._current_model_id = model_id
             if remember:
-                prefs = self._load_prefs()
-                prefs["lastModelId"] = model_id
-                self._save_prefs(prefs)
+                update_prefs(lambda prefs: prefs.__setitem__("lastModelId", model_id))
             self._push_models_event()
 
         self._request("session/set_model", {

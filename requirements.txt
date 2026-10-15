@@ -1,0 +1,4 @@
+# Hyperagent dependencies
+# Install with: pip install -r requirements.txt
+
+pywebview>=5.0

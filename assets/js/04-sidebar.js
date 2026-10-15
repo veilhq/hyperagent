@@ -227,6 +227,23 @@ function deleteSession(id, el) {
 
 // Keyboard shortcuts
 document.addEventListener('keydown', function(e) {
+  // Ctrl+Shift+B: debug — cycle the error bar through its states then hide.
+  // Checked before the plain Ctrl+B toggle below; with Shift held e.key is 'B'.
+  if (e.ctrlKey && e.shiftKey && (e.key === 'B' || e.key === 'b')) {
+    e.preventDefault();
+    if (!window.HaErrorBar) return;
+    var steps = [
+      function () { HaErrorBar.setMessage('Connection lost.', 'error'); HaErrorBar.setAction('Reconnect', function () { HaErrorBar.hide(); }); },
+      function () { HaErrorBar.clearAction(); HaErrorBar.setMessage('Watcher reconnecting...', 'warning'); },
+      function () { HaErrorBar.setMessage('Rebuilding...', 'info'); },
+      function () { HaErrorBar.setMessage('Reconnected automatically', 'success'); },
+      function () { HaErrorBar.hide(); }
+    ];
+    window.__errorBarDebugStep = (window.__errorBarDebugStep || 0) % steps.length;
+    steps[window.__errorBarDebugStep]();
+    window.__errorBarDebugStep++;
+    return;
+  }
   // Ctrl+B: toggle sidebar
   if (e.ctrlKey && e.key === 'b') { e.preventDefault(); toggleSidebar(); }
   // Ctrl+N: new tab (was in-place newSession; tabs are the primary UX now)

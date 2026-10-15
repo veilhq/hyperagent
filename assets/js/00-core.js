@@ -121,8 +121,15 @@ window.HaErrorBar = {
   var cluster = $('.status-cluster');
   if (!cluster) return;
   function sync() {
+    var r = cluster.getBoundingClientRect();
     document.documentElement.style.setProperty(
-      '--ha-cluster-w', Math.ceil(cluster.getBoundingClientRect().width) + 'px'
+      '--ha-cluster-w', Math.ceil(r.width) + 'px'
+    );
+    // Publish height too so the error/info bar's band always clears the
+    // cluster vertically — the cluster's height moves with its padding, so a
+    // measured value keeps the bar correct without a hardcoded max-height.
+    document.documentElement.style.setProperty(
+      '--ha-cluster-h', Math.ceil(r.height) + 'px'
     );
   }
   sync();

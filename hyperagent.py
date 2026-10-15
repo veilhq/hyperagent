@@ -23,6 +23,7 @@ from helpers import (
     ICON_FILE,
     PREFS_FILE,
     PORTAL_ROOT,
+    SESSIONS_DIR,
     logger,
 )
 from acp_pool import ACPClientPool
@@ -337,7 +338,7 @@ def main():
     # explicit ownedSessions set and every session that carries a title — a
     # titled session was created and prompted by the user, so it is protected
     # even if it never made it into ownedSessions (registration drift).
-    sessions_dir = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "sessions" / "cli"
+    sessions_dir = SESSIONS_DIR
     if sessions_dir.exists():
         owned = set()
         if PREFS_FILE.exists():

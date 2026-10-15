@@ -53,7 +53,7 @@
 }
 .msg-role {
   font-size: var(--fs-micro);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-dim);
@@ -203,7 +203,7 @@
   top: 0;
   right: 0;
   font-size: var(--fs-micro);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: var(--space-0-2) var(--space-2);
@@ -254,7 +254,7 @@
   padding: 0.35rem var(--space-0-6);
   border-bottom: var(--border-hair) solid var(--accent-border);
   color: var(--warm);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   text-transform: uppercase;
   font-size: 0.6rem;
   letter-spacing: 0.05em;
@@ -350,7 +350,7 @@
 .noise-field > canvas.fade-out,
 .welcome-canvas.fade-out { opacity: 0; }
 #messages, .tab-messages { position: relative; }
-.welcome-icon { width: 32px; height: 32px; color: var(--text-dim); opacity: 0; animation: fadeSlideIn var(--motion-slow) var(--ease) 0.1s forwards; } /* 0.1s delay: stagger after canvas init */
+.welcome-icon { width: var(--icon-4xl); height: var(--icon-4xl); color: var(--text-dim); opacity: 0; animation: fadeSlideIn var(--motion-slow) var(--ease) 0.1s forwards; } /* 0.1s delay: stagger after canvas init */
 .welcome-text { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0; animation: fadeSlideIn var(--motion-slow) var(--ease) 0.2s forwards; } /* 0.2s delay: stagger after icon */
 /* Kaomoji greeting variant — compound selector beats plain .emote in
    specificity so the combined fadeSlideIn + emote-glow animation isn't
@@ -409,7 +409,7 @@
 .log-panel-header {
   padding: var(--space-0-3) var(--space-0-6);
   font-size: var(--fs-micro);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--accent-dim);
@@ -440,7 +440,7 @@
   animation: fadeSlideIn var(--motion-slow) var(--ease);
 }
 .steering-label {
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-dim);
@@ -553,7 +553,7 @@
 
 /* Marker label — reads "thought" in the chip type register */
 .msg-thought-marker {
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   letter-spacing: 0.1em;
 }
 .msg-thought-marker::before {

@@ -72,7 +72,7 @@
   padding: var(--space-2) var(--space-3);
   border-bottom: var(--border-hair) solid var(--border);
   font-size: var(--fs-caption);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-dim);
@@ -80,7 +80,7 @@
 .cli-version-header-title { color: var(--text-dim); }
 .cli-version-header-meta {
   font-size: var(--fs-micro);
-  font-weight: 400;
+  font-weight: var(--fw-normal);
   letter-spacing: 0.02em;
   text-transform: none;
   color: var(--text-muted);
@@ -98,7 +98,7 @@
 .cli-version-group-header {
   padding: var(--space-2) var(--space-3) var(--space-1);
   font-size: var(--fs-micro);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.1em;

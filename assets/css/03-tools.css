@@ -63,7 +63,7 @@
 }
 .tool-detail.visible { display: block; }
 .tool-detail-header {
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -82,7 +82,7 @@
 .turn-end {
   align-self: flex-start;
   font-size: var(--fs-micro);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--text-dim);
@@ -99,7 +99,7 @@
 .turn-end.turn-failed .retry-btn {
   font-family: var(--font);
   font-size: var(--fs-micro);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--bg);
@@ -130,7 +130,7 @@
   padding: var(--space-1) var(--space-2);
   cursor: pointer;
   color: var(--text-muted);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   font-size: var(--fs-micro);
@@ -176,7 +176,7 @@
 .trace-score {
   color: var(--text-dim);
   font-size: var(--fs-micro);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   flex-shrink: 0;
 }
 
@@ -193,7 +193,7 @@
   padding: var(--space-1) var(--space-2);
   color: var(--text-dim);
   font-size: var(--fs-micro);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   border-bottom: var(--border-hair) solid var(--border);
@@ -225,7 +225,7 @@
   margin-left: auto;
   color: var(--text-dim);
   font-size: var(--fs-micro);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
 }
 .hs-snippet {
   color: var(--text-muted);

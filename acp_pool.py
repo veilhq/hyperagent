@@ -9,7 +9,7 @@ import json
 import threading
 import uuid
 
-from helpers import PREFS_FILE, logger
+from helpers import logger, read_prefs, update_prefs
 from acp_client import ACPClient
 
 
@@ -124,28 +124,25 @@ class ACPClientPool:
     # --- Tab persistence ---
 
     def _load_prefs(self):
-        if PREFS_FILE.exists():
-            try:
-                return json.loads(PREFS_FILE.read_text(encoding="utf-8"))
-            except Exception:
-                pass
-        return {}
-
-    def _save_prefs(self, prefs):
-        PREFS_FILE.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
+        return read_prefs()
 
     def save_tab_state(self):
-        """Persist session titles for sidebar display."""
-        prefs = self._load_prefs()
-        titles = prefs.get("sessionTitles", {})
-        owned = set(prefs.get("ownedSessions", []))
-        for client in self._clients.values():
-            if client._session_id and hasattr(client, '_tab_title'):
-                titles[client._session_id] = client._tab_title
-                # Titled == user-created; keep ownership in lockstep with titles.
-                owned.add(client._session_id)
-        prefs["sessionTitles"] = titles
-        prefs["ownedSessions"] = sorted(owned)
-        prefs.pop("tabs", None)
-        prefs.pop("active_tab", None)
-        self._save_prefs(prefs)
+        """Persist session titles for sidebar display.
+
+        Runs as one atomic read-modify-write so a concurrent tab thread editing
+        prefs cannot clobber the titles/ownership written here.
+        """
+        def mutate(prefs):
+            titles = prefs.get("sessionTitles", {})
+            owned = set(prefs.get("ownedSessions", []))
+            for client in self._clients.values():
+                if client._session_id and hasattr(client, '_tab_title'):
+                    titles[client._session_id] = client._tab_title
+                    # Titled == user-created; keep ownership in lockstep with titles.
+                    owned.add(client._session_id)
+            prefs["sessionTitles"] = titles
+            prefs["ownedSessions"] = sorted(owned)
+            prefs.pop("tabs", None)
+            prefs.pop("active_tab", None)
+
+        update_prefs(mutate)

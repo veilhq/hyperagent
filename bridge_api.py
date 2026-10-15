@@ -22,6 +22,7 @@ from helpers import (
     HYPERVISOR_DIR,
     PORTAL_ROOT,
     PREFS_FILE,
+    SESSIONS_DIR,
     SKILLS_DIR,
     logger,
     _check_auth,
@@ -36,10 +37,10 @@ from helpers import (
     get_kiro_version,
     read_kiro_default_model,
     write_kiro_default_model,
-    build_palette_oklch,
-    build_palette_hsl,
+    update_prefs,
+    read_prefs,
 )
-from palette import GRADIENT_MAPS  # noqa: E402 — shared preset data from hyperkit
+from palette import build_palette_oklch, GRADIENT_MAPS  # noqa: E402 — shared palette math + preset data from hyperkit
 from acp_pool import ACPClientPool
 
 
@@ -398,17 +399,17 @@ class HyperagentAPI:
                 })
                 client._tab_title = title
                 if client._session_id:
-                    prefs = client._load_prefs()
-                    titles = prefs.get("sessionTitles", {})
-                    titles[client._session_id] = title
-                    prefs["sessionTitles"] = titles
-                    # A titled session is a real user session — register ownership
-                    # here so the sidebar filter and startup reaper never lose it,
-                    # regardless of how the session became active.
-                    owned = set(prefs.get("ownedSessions", []))
-                    owned.add(client._session_id)
-                    prefs["ownedSessions"] = sorted(owned)
-                    client._save_prefs(prefs)
+                    def mutate(prefs, sid=client._session_id, title=title):
+                        titles = prefs.get("sessionTitles", {})
+                        titles[sid] = title
+                        prefs["sessionTitles"] = titles
+                        # A titled session is a real user session — register ownership
+                        # here so the sidebar filter and startup reaper never lose it,
+                        # regardless of how the session became active.
+                        owned = set(prefs.get("ownedSessions", []))
+                        owned.add(sid)
+                        prefs["ownedSessions"] = sorted(owned)
+                    update_prefs(mutate)
                 self._pool.save_tab_state()
             except Exception as e:
                 logger.error("generate_title error: %s", e)
@@ -525,13 +526,13 @@ class HyperagentAPI:
     def _mark_changelog_seen(self, version):
         """Persist the acknowledged changelog version to preferences."""
         try:
-            prefs = {}
-            if PREFS_FILE.exists():
-                prefs = json.loads(PREFS_FILE.read_text(encoding="utf-8"))
-            if prefs.get("changelogSeenVersion") == version:
+            # Skip the write entirely if already current (avoids lock contention).
+            if read_prefs().get("changelogSeenVersion") == version:
                 return
-            prefs["changelogSeenVersion"] = version
-            PREFS_FILE.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
+
+            def mutate(prefs, version=version):
+                prefs["changelogSeenVersion"] = version
+            update_prefs(mutate)
         except Exception as e:
             logger.debug("_mark_changelog_seen failed: %s", e)
 
@@ -709,7 +710,7 @@ class HyperagentAPI:
     def _is_session_locked(self, session_id):
         """Check if a session lock file is held by a running process (Windows)."""
         try:
-            lock_file = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "sessions" / "cli" / f"{session_id}.lock"
+            lock_file = SESSIONS_DIR / f"{session_id}.lock"
             if not lock_file.exists():
                 return False
             data = json.loads(lock_file.read_text(encoding="utf-8"))
@@ -733,7 +734,7 @@ class HyperagentAPI:
         """Get PIDs of all kiro-cli processes owned by any tab in our pool."""
         pids = set()
         try:
-            sessions_dir = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "sessions" / "cli"
+            sessions_dir = SESSIONS_DIR
             sessions_to_check = set()
             for client in self._pool._clients.values():
                 sessions_to_check.update(client._owned_sessions)
@@ -762,7 +763,7 @@ class HyperagentAPI:
         if _check_auth() is AUTH_NO:
             return {"sessions": [], "active": None, "auth_required": True}
         try:
-            sessions_dir = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "sessions" / "cli"
+            sessions_dir = SESSIONS_DIR
             if not sessions_dir.exists():
                 return {"sessions": [], "active": self._acp._session_id}
             project_cwd = self._norm_cwd(PORTAL_ROOT)
@@ -878,11 +879,11 @@ class HyperagentAPI:
                 session_id = client._session_id if client else None
             if not session_id:
                 return False
-            prefs = self._pool._load_prefs()
-            titles = prefs.get("sessionTitles", {})
-            titles[session_id] = new_title
-            prefs["sessionTitles"] = titles
-            self._pool._save_prefs(prefs)
+            def mutate(prefs, sid=session_id, new_title=new_title):
+                titles = prefs.get("sessionTitles", {})
+                titles[sid] = new_title
+                prefs["sessionTitles"] = titles
+            update_prefs(mutate)
             for tab_id, client in self._pool._clients.items():
                 if client._session_id == session_id:
                     client._tab_title = new_title
@@ -913,7 +914,7 @@ class HyperagentAPI:
         if session_id == self._acp._session_id:
             return False
         try:
-            sessions_dir = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "sessions" / "cli"
+            sessions_dir = SESSIONS_DIR
             for f in sessions_dir.glob(f"{session_id}*"):
                 if f.is_dir():
                     shutil.rmtree(f, ignore_errors=True)
@@ -926,7 +927,7 @@ class HyperagentAPI:
 
     def get_session_history(self, session_id):
         """Read messages from a session's JSONL file."""
-        sessions_dir = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "sessions" / "cli"
+        sessions_dir = SESSIONS_DIR
         jsonl_file = sessions_dir / f"{session_id}.jsonl"
         if not jsonl_file.exists():
             return []

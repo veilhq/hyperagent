@@ -895,9 +895,9 @@ window.__acpAuthRequired = function(data) {
   var url = data && data.url;
   errorBar.classList.add('visible');
   if (url) {
-    errorBar.innerHTML = 'Login required — complete authentication at: <a href="' + url + '" target="_blank" style="color:var(--accent)">' + url + '</a>';
+    errorBar.innerHTML = 'ACP auth required — complete authentication at: <a href="' + url + '" target="_blank" style="color:var(--accent)">' + url + '</a>';
   } else {
-    errorBar.innerHTML = 'Login required — waiting for device flow...';
+    errorBar.innerHTML = 'ACP auth required — waiting for device flow...';
   }
 };
 

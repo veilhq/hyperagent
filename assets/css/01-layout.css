@@ -1,6 +1,6 @@
 /* ===== Hyperagent: Layout (app shell) ===== */
 
-#app { display: flex; flex-direction: column; height: 100%; opacity: 0; animation: fadeSlideIn var(--motion-slow) ease 0.3s forwards; } /* 0.3s delay: waits for splash fade-out */
+#app { display: flex; flex-direction: column; height: 100%; position: relative; z-index: 1; opacity: 0; animation: fadeSlideIn var(--motion-slow) ease 0.3s forwards; } /* 0.3s delay: waits for splash fade-out. position+z-index: ride above the shared atmosphere layer (globals.css body::before/after at z-0) */
 
 /* ============================================================================
    Floating status cluster (top-right)  — WI-113 rebuild
@@ -22,6 +22,15 @@
   display: flex;
   align-items: center;
   gap: var(--space-1);
+  /* Opaque surface so messages scrolling up behind the fixed cluster don't
+     bleed through the gaps between chips and the transparent outlined ones.
+     Uniform frame inset on all four sides. The empty skill/activity strips
+     collapse (display:none) so the first visible chip sits at the true left
+     edge, making the left/right container padding symmetric. */
+  padding: var(--space-2);
+  background: var(--bg-elevated);
+  border: var(--border-hair) solid var(--border);
+  border-radius: var(--radius);
 }
 /* Normalize all chip heights inside the cluster */
 .status-cluster .status-chip {
@@ -49,7 +58,7 @@
   border: var(--border-hair) solid transparent;
   font-family: var(--font);
   font-size: var(--fs-micro);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   line-height: 20px;
@@ -94,7 +103,7 @@
   background: transparent;
   border-color: var(--border);
   text-transform: none;
-  font-weight: 400;
+  font-weight: var(--fw-normal);
   letter-spacing: 0.02em;
 }
 .cli-version:empty { display: none; }
@@ -147,7 +156,7 @@
 .ctx-meter-label {
   font-family: var(--font);
   font-size: var(--fs-micro);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   letter-spacing: 0.05em;
   line-height: 1;
   color: var(--text-dim);
@@ -192,19 +201,49 @@
   overflow: hidden;
   padding-left: var(--space-1-25);
   padding-right: calc(var(--ha-cluster-w, 0px) + var(--space-1-25));
-  background: color-mix(in srgb, var(--_bar-color) 12%, var(--bg));
-  color: var(--_bar-color);
-  border-bottom: var(--border-hair) solid color-mix(in srgb, var(--_bar-color) 40%, transparent);
+  /* Drawer pulled down from the top edge. Copies the dir-surface drawer style
+     (NOT the shared tokens — self-contained so it can diverge) and flips it
+     vertically: the dir-surface is an open-BOTTOM drawer bleeding off the
+     bottom; this is an open-TOP drawer bleeding off the top of the window.
+       - open top edge (no top border), framed on sides + bottom
+       - bottom corners rounded with the drawer's larger radius (5x base)
+       - raised-panel fill (--bg-raised), same as the dir-surface
+     No shadow: the drawer SHAPE carries the physical read; a drop shadow
+     simulated depth that fought the ecosystem's flat aesthetic. */
+  background: var(--bg-raised);
+  color: var(--text-bright);
+  border: var(--border-hair) solid var(--border-strong);
+  border-top: none;
+  border-radius: 0 0 calc(var(--radius) * 5) calc(var(--radius) * 5);
+  box-shadow: none;
   font-size: 0.68rem;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   opacity: 0;
   transition: max-height var(--motion-medium) var(--ease), opacity var(--motion-medium) var(--ease), padding var(--motion-medium) var(--ease), background var(--motion-medium) var(--ease), color var(--motion-medium) var(--ease), border-color var(--motion-medium) var(--ease);
 }
 .error-bar.visible {
-  max-height: 3rem;
+  /* Band must clear the fixed cluster. The cluster sits at top:var(--space-2)
+     and is --ha-cluster-h tall (measured in 00-core.js). The bottom buffer
+     matches the space-2 top offset so the cluster has equal room above and
+     below it; the inner space-1 vertical padding keeps the band tighter than
+     the original symmetric space-2/space-2 padding. */
+  max-height: 8rem;
+  min-height: calc(var(--space-2) + var(--ha-cluster-h, 2.5rem) + var(--space-2));
   opacity: 1;
-  padding-top: var(--space-2);
-  padding-bottom: var(--space-2);
+  padding-top: var(--space-1);
+  padding-bottom: var(--space-1);
+  /* Entrance matches the dir-surface slide, mirrored. The dir-surface rises up
+     into place (dirSurfaceIn: translateY 120->72->0 on a decelerate curve);
+     this is the vertical mirror — the drawer drops DOWN from above and eases to
+     a stop. Self-contained keyframe (copies the motion, doesn't reuse it). The
+     transform is owned by the keyframe; opacity + max-height stay on the
+     transition above so the layout-clearing reveal is unaffected. */
+  animation: errorBarDrawerIn var(--motion-slow) cubic-bezier(0.16, 0.84, 0.28, 1) both;
+}
+@keyframes errorBarDrawerIn {
+  from { transform: translateY(-120px); }
+  25%  { transform: translateY(-72px); }
+  to   { transform: translateY(0); }
 }
 .error-bar a { color: var(--_bar-color); text-decoration: underline; }
 
@@ -229,6 +268,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* State color on the message carries severity now that the surface is
+     neutral — the band's one chromatic signal beside the leading stripe. */
+  color: var(--_bar-color);
 }
 .error-bar-actions {
   flex: 0 0 auto;
@@ -239,19 +281,22 @@
 .error-bar-action {
   font-family: inherit;
   font-size: inherit;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  /* Ghost button on the neutral surface: state-colored text + border, hover
+     fills with the state color. Mirrors the ecosystem ghost-button idiom. */
   color: var(--_bar-color);
   background: none;
-  border: var(--border-hair) solid color-mix(in srgb, var(--_bar-color) 50%, transparent);
+  border: var(--border-hair) solid color-mix(in srgb, var(--_bar-color) 45%, transparent);
   padding: 0.1rem var(--space-2);
   cursor: pointer;
-  transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+  transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease);
 }
 .error-bar-action:hover {
   background: var(--_bar-color);
   color: var(--bg);
+  border-color: var(--_bar-color);
 }
 
 /* ---- Legacy alias: .is-updating maps to info variant ---- */
