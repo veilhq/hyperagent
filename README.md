@@ -121,7 +121,8 @@ No runtime file serving — the entire UI is a single inline HTML string passed 
 ├── hyperagent.py          ← Main app: ACPClient, HyperagentAPI, PyWebView setup
 ├── acp_client.py          ← ACPClient class: JSON-RPC state machine over TCP
 ├── acp_pool.py            ← ACP connection pool management
-├── acp_bridge.py          ← TCP ↔ stdio relay subprocess
+├── acp_bridge.py          ← TCP ↔ stdio relay subprocess; spawns the argv the active backend resolves
+├── backends.py            ← Agent backends: per-agent launch command, auth, self-update, model/version metadata
 ├── bridge_api.py          ← Bridge API: theme, palette, accent sync, gradient maps
 ├── helpers.py             ← Shared utilities: OKLCh palette generation, color math
 ├── build.py               ← Concatenates CSS/JS into generated_html.py (prepends Hyperkit — see below)

@@ -1,11 +1,14 @@
 """
-ACPClient — manages the kiro-cli subprocess and JSON-RPC protocol.
+ACPClient - manages the ACP agent subprocess and JSON-RPC protocol.
 
 One instance per tab. Handles subprocess lifecycle, socket communication,
 message dispatch, state machine transitions, and push-to-frontend events.
+Agent-specific behavior (launch command, auth, self-update, model metadata)
+comes from the active Backend in backends.py.
 """
 
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -13,6 +16,7 @@ import threading
 import time
 from pathlib import Path
 
+from backends import get_backend
 from helpers import (
     HYPERAGENT_DIR,
     HYPERSPACE_ROOT,
@@ -21,9 +25,6 @@ from helpers import (
     logger,
     read_prefs,
     update_prefs,
-    _check_auth,
-    _do_login_visible,
-    _find_kiro,
     _kill_inflight_title_subprocesses,
     _title_inflight_snapshot,
     _TITLE_SPAWN_SEQ,
@@ -32,17 +33,13 @@ from helpers import (
     AUTH_OK,
     AUTH_NO,
     AUTH_UNKNOWN,
-    capture_changelog_cache,
     delete_session_files,
-    get_kiro_version,
-    get_model_rates,
-    invalidate_kiro_version_cache,
-    read_kiro_default_model,
 )
 
 
 class ACPClient:
     def __init__(self):
+        self._backend = get_backend()
         self._process = None
         self._socket = None
         self._sockfile = None
@@ -88,8 +85,8 @@ class ACPClient:
     # --- Subprocess lifecycle ---
 
     def start_process(self):
-        """Spawn bridge + kiro-cli. Call BEFORE webview.start()."""
-        auth = _check_auth()
+        """Spawn bridge + agent. Call BEFORE webview.start()."""
+        auth = self._backend.check_auth()
         if auth is AUTH_UNKNOWN:
             logger.warning(
                 "%sstart_process: auth state unknown (exe locked) — spawning anyway, "
@@ -99,8 +96,8 @@ class ACPClient:
             logger.warning("%sstart_process: not authenticated, triggering visible login", self._tab_ctx())
             if self._window:
                 self._push_js("__acpAuthRequired", {"url": None})
-            success = _do_login_visible()
-            if not success or _check_auth() is not AUTH_OK:
+            success = self._backend.login_visible()
+            if not success or self._backend.check_auth() is not AUTH_OK:
                 logger.error("%sstart_process: login failed", self._tab_ctx())
                 self._state = "crashed"
                 if self._window:
@@ -110,19 +107,32 @@ class ACPClient:
             if self._window:
                 self._push_js("__acpAuthComplete", {})
 
+        spawn = self._backend.spawn_command()
+        if not spawn:
+            # connect() sees no socket and reports the missing agent to the UI.
+            logger.error("%sstart_process: %s not found", self._tab_ctx(), self._backend.display_name)
+            self._state = "crashed"
+            return
+
         # Create TCP server to accept bridge connection
         self._server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_sock.bind(("127.0.0.1", 0))
         self._server_sock.listen(1)
         port = self._server_sock.getsockname()[1]
-        logger.info("%sstart_process: bridge listening on port %d", self._tab_ctx(), port)
+        logger.info("%sstart_process: bridge listening on port %d (backend=%s)",
+                    self._tab_ctx(), port, self._backend.name)
 
         bridge = str(HYPERAGENT_DIR / "acp_bridge.py")
+        # The bridge inherits env overrides through its own environment so
+        # credentials never appear on a command line.
+        bridge_env = os.environ.copy()
+        bridge_env.update(spawn.get("env") or {})
         si = subprocess.STARTUPINFO()
         si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         si.wShowWindow = subprocess.SW_HIDE
         self._process = subprocess.Popen(
-            [sys.executable, bridge, str(port)],
+            [sys.executable, bridge, str(port), json.dumps(spawn["argv"])],
+            env=bridge_env,
             startupinfo=si,
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
         )
@@ -167,11 +177,15 @@ class ACPClient:
     _UPDATE_POLL_INTERVAL = 5       # seconds between binary existence checks
     _UPDATE_POLL_MAX = 24           # max polls (~2 minutes total)
 
+    def _is_self_update_exit(self, exit_code):
+        """True when the agent exited because it is replacing its own binary."""
+        return self._backend.handles_self_update and exit_code == self._UPDATE_EXIT_CODE
+
     def _auto_recover(self, exit_code):
         """Attempt a bounded automatic restart after an unexpected child exit."""
         # Detect self-update: route to a dedicated handler that polls for the
         # binary instead of consuming the normal recovery budget.
-        if exit_code == self._UPDATE_EXIT_CODE:
+        if self._is_self_update_exit(exit_code):
             self._handle_update_restart()
             return
 
@@ -239,7 +253,7 @@ class ACPClient:
             while polls < self._UPDATE_POLL_MAX:
                 time.sleep(self._UPDATE_POLL_INTERVAL)
                 polls += 1
-                kiro_path = _find_kiro()
+                kiro_path = self._backend.find_binary()
                 if not kiro_path:
                     logger.debug("%supdate-restart: poll %d/%d — binary not found",
                                  self._tab_ctx(), polls, self._UPDATE_POLL_MAX)
@@ -273,7 +287,7 @@ class ACPClient:
                         self._tab_ctx(), polls,
                     )
                     # Invalidate cached version so the fresh binary version is fetched
-                    invalidate_kiro_version_cache()
+                    self._backend.invalidate_version_cache()
                     # Capture the new binary's changelog into the persistent
                     # archive. Runs off-thread so it never delays reconnect —
                     # this is exactly when new changelog content is available.
@@ -322,12 +336,12 @@ class ACPClient:
     def _capture_changelog_safe(self):
         """Capture the updated binary's changelog into the archive.
 
-        Wrapper around capture_changelog_cache that never raises into its
+        Wrapper around the backend's capture_changelog that never raises into its
         background thread — a changelog capture failure must not disrupt the
         update-restart flow.
         """
         try:
-            added = capture_changelog_cache()
+            added = self._backend.capture_changelog()
             if added:
                 logger.info("%supdate-restart: archived %d new changelog version(s)",
                             self._tab_ctx(), added)
@@ -468,9 +482,12 @@ class ACPClient:
             self._state = "ready"
             self._push_state()
 
+        # Advertise only what _handle_server_request actually implements. An
+        # agent told fs/terminal are available will route file reads and shell
+        # commands to this client instead of doing them itself.
         self._request("initialize", {
             "protocolVersion": 1,
-            "clientCapabilities": {"fs": {"readTextFile": True, "writeTextFile": True}, "terminal": True},
+            "clientCapabilities": {"fs": {"readTextFile": False, "writeTextFile": False}, "terminal": False},
             "clientInfo": {"name": "hyperagent", "version": "1.0.0"}
         }, on_init)
 
@@ -783,7 +800,7 @@ class ACPClient:
             threading.Thread(target=cb, args=(result,), daemon=True).start()
             return
 
-        # Server-initiated request (permission prompts)
+        # Server-initiated request (permission prompts; everything else is rejected)
         if "id" in msg and "method" in msg:
             self._handle_server_request(msg)
             return
@@ -820,7 +837,7 @@ class ACPClient:
                 self._push_state()
                 # Suppress the raw error push for self-update exits — the
                 # update handler pushes a calm "updating" message instead.
-                if exit_code != self._UPDATE_EXIT_CODE:
+                if not self._is_self_update_exit(exit_code):
                     self._push_js("__acpError", {
                         "error": f"kiro-cli exited (code={exit_code})",
                         "source": "child_exited",
@@ -903,23 +920,35 @@ class ACPClient:
         method = msg.get("method", "")
         if "permission" in method or "confirm" in method:
             rid = msg["id"]
+            # ACP: a request answered while its prompt turn is cancelled MUST get
+            # the "cancelled" outcome, not a selected reject option.
             if self._cancelled.is_set():
-                options = msg.get("params", {}).get("options", [])
-                deny = next((o for o in options if "deny" in o.get("kind", "") or "reject" in o.get("kind", "")), None)
-                if deny:
-                    self._send({"jsonrpc": "2.0", "id": rid,
-                        "result": {"outcome": {"outcome": "selected", "optionId": deny["optionId"]}}})
-                else:
-                    self._send({"jsonrpc": "2.0", "id": rid,
-                        "result": {"outcome": {"outcome": "dismissed"}}})
+                self._send({"jsonrpc": "2.0", "id": rid,
+                    "result": {"outcome": {"outcome": "cancelled"}}})
                 return
+            # Auto-allow mirrors the agent's trust-all-tools mode. "selected"
+            # must carry an optionId, so a request with no options is answered
+            # as cancelled rather than with an empty selection.
             options = msg.get("params", {}).get("options", [])
             allow = next((o for o in options if "allow" in o.get("kind", "")), options[0] if options else None)
-            if allow:
+            if allow and allow.get("optionId"):
                 self._send({"jsonrpc": "2.0", "id": rid,
                     "result": {"outcome": {"outcome": "selected", "optionId": allow["optionId"]}}})
             else:
-                self._send({"jsonrpc": "2.0", "id": rid, "result": {"outcome": {"outcome": "selected"}}})
+                logger.warning("%spermission request id=%s has no selectable option, replying cancelled",
+                               self._tab_ctx(), rid)
+                self._send({"jsonrpc": "2.0", "id": rid,
+                    "result": {"outcome": {"outcome": "cancelled"}}})
+            return
+
+        # Every agent-to-client request must get a response: the agent blocks on
+        # it, so a dropped request hangs the turn with no error. Anything this
+        # client does not implement (fs/*, terminal/*, extensions) gets JSON-RPC
+        # "method not found" so the agent can fall back or fail visibly.
+        logger.warning("%sunsupported agent request %s (id=%s), replying -32601",
+                       self._tab_ctx(), method, msg.get("id"))
+        self._send({"jsonrpc": "2.0", "id": msg["id"],
+            "error": {"code": -32601, "message": "Method not found: %s" % method}})
 
     def _detect_skill_activation(self, update):
         """Check if a tool_call is reading a SKILL.md file. Returns skill name or None."""
@@ -1058,11 +1087,11 @@ class ACPClient:
         momentarily unreadable, and a silently dropped push leaves the "what's
         new" cue un-fired on the exact update that produced the new notes.
         """
-        version = get_kiro_version()
+        version = self._backend.version()
         if not version:
             # Transient miss right after a binary swap — invalidate and retry once.
-            invalidate_kiro_version_cache()
-            version = get_kiro_version()
+            self._backend.invalidate_version_cache()
+            version = self._backend.version()
         if not version:
             logger.debug("%scli-version badge: version unresolved, skipping push", self._tab_ctx())
             return
@@ -1123,7 +1152,7 @@ class ACPClient:
 
     def _push_models_event(self):
         """Push the current model state to the frontend."""
-        rates = get_model_rates()
+        rates = self._backend.model_rates()
         enriched = []
         for m in (self._available_models or []):
             mid = m.get("modelId") if isinstance(m, dict) else None
@@ -1136,7 +1165,7 @@ class ACPClient:
         self._push_js("__acpModels", {
             "currentModelId": self._current_model_id,
             "availableModels": enriched,
-            "defaultModelId": read_kiro_default_model(),
+            "defaultModelId": self._backend.read_default_model(),
         })
 
     def _apply_preferred_model(self):

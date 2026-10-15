@@ -1,9 +1,15 @@
-"""ACP Bridge — relays between a TCP socket and kiro-cli's stdio.
+"""ACP Bridge - relays between a TCP socket and an ACP agent's stdio.
 
-Launched as a subprocess by hyperagent.py. Communicates with the parent
-over a local TCP connection so PyWebView can't interfere with pipes.
+Launched as a subprocess by ACPClient. Communicates with the parent over a
+local TCP connection so PyWebView can't interfere with pipes.
 
-Usage: python acp_bridge.py <port>
+Usage: python acp_bridge.py <port> [<argv-json>]
+
+<argv-json> is a JSON array with the agent command line, resolved by the
+parent's active backend. Environment overrides (e.g. credentials) arrive via
+this process's own environment, never on the command line. Without
+<argv-json> the bridge launches kiro-cli directly, so it still runs
+standalone for manual debugging.
 """
 import json
 import os
@@ -18,13 +24,9 @@ from pathlib import Path
 PORTAL_ROOT = Path(__file__).parent.parent.parent.resolve()
 HYPERSPACE_ROOT = Path(__file__).parent.parent.resolve()
 
-# Workspace agent to run the ACP session under. Selected because the built-in
-# default agent cannot carry hooks — hooks are only definable in an agent config
-# file — and this workspace relies on a preToolUse hook to validate document
-# writes. Resolved by kiro-cli from `.kiro/agents/<name>.json` relative to the
-# spawn cwd (PORTAL_ROOT below). If the config is absent, kiro-cli logs a warning
-# and falls back to its default agent, so a missing file degrades rather than
-# breaking startup.
+# Standalone fallback only: the parent normally passes the full agent argv.
+# Mirrors KiroBackend.ACP_AGENT in backends.py, which documents why the
+# workspace agent (with its document-write hook) is required.
 ACP_AGENT = "hyperspace"
 
 # ---------------------------------------------------------------------------
@@ -57,20 +59,37 @@ def find_kiro():
     return str(fallback) if fallback.exists() else None
 
 
-def main():
-    port = int(sys.argv[1])
+def resolve_argv():
+    """Agent argv from the parent, or the kiro-cli default when run standalone."""
+    if len(sys.argv) > 2:
+        try:
+            argv = json.loads(sys.argv[2])
+        except ValueError as e:
+            logger.error("invalid argv-json: %s", e)
+            return None
+        if isinstance(argv, list) and argv and all(isinstance(a, str) for a in argv):
+            return argv
+        logger.error("argv-json must be a non-empty list of strings")
+        return None
     kiro = find_kiro()
     if not kiro:
         logger.error("kiro-cli not found")
+        return None
+    return [kiro, "acp", "--trust-all-tools", "--agent", ACP_AGENT]
+
+
+def main():
+    port = int(sys.argv[1])
+    argv = resolve_argv()
+    if not argv:
         sys.exit(1)
 
-    logger.info("starting: port=%d kiro=%s", port, kiro)
+    logger.info("starting: port=%d agent=%s", port, argv[0])
 
-    # Spawn kiro-cli. RUST_BACKTRACE=1 asks the Rust runtime to emit a panic
-    # backtrace on stderr when a panic reaches process exit. Cost is zero when
-    # no panic occurs; when one does, the backtrace lands in bridge.log via the
-    # existing stderr relay and gives us a real diagnostic instead of just an
-    # opaque STATUS_CONTROL_C_EXIT (0xC000013A) code.
+    # RUST_BACKTRACE=1 asks a Rust agent (kiro-cli) for a panic backtrace on
+    # stderr, which lands in bridge.log via the stderr relay instead of an
+    # opaque STATUS_CONTROL_C_EXIT (0xC000013A). Zero cost when nothing panics
+    # and ignored by non-Rust agents.
     child_env = os.environ.copy()
     child_env.setdefault("RUST_BACKTRACE", "1")
 
@@ -78,7 +97,7 @@ def main():
     si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     si.wShowWindow = subprocess.SW_HIDE
     proc = subprocess.Popen(
-        [kiro, "acp", "--trust-all-tools", "--agent", ACP_AGENT],
+        argv,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -88,7 +107,7 @@ def main():
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
     )
 
-    logger.info("kiro-cli spawned: pid=%d", proc.pid)
+    logger.info("agent spawned: pid=%d", proc.pid)
 
     # Connect to parent
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

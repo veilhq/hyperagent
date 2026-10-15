@@ -658,6 +658,12 @@ window.__acpUpdate = function(update) {
       }
       break;
 
+    case 'plan':
+      // ACP agent plan (e.g. Claude Code's todo list). Each update carries the
+      // complete entry list; the task panel replaces its contents with it.
+      if (window.__acpPlanUpdate) window.__acpPlanUpdate(update.entries);
+      break;
+
     default:
       // Unknown / unhandled ACP sessionUpdate. Debug-log so future protocol
       // additions become visible immediately rather than silently dropped.

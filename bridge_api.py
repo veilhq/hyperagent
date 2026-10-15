@@ -25,21 +25,15 @@ from helpers import (
     SESSIONS_DIR,
     SKILLS_DIR,
     logger,
-    _check_auth,
-    _find_kiro,
     _title_inflight_register,
     _title_inflight_release,
     _SKILL_CACHE,
     _SKILL_MD_PATTERN,
     AUTH_NO,
-    get_model_rates,
-    get_kiro_changelog,
-    get_kiro_version,
-    read_kiro_default_model,
-    write_kiro_default_model,
     update_prefs,
     read_prefs,
 )
+from backends import get_backend
 from palette import build_palette_oklch, GRADIENT_MAPS  # noqa: E402 — shared palette math + preset data from hyperkit
 from acp_pool import ACPClientPool
 
@@ -73,6 +67,7 @@ def _image_block_to_data_url(block):
 class HyperagentAPI:
     def __init__(self, pool):
         self._pool = pool
+        self._backend = get_backend()
 
     @property
     def _acp(self):
@@ -235,12 +230,7 @@ class HyperagentAPI:
             return {}
 
     def _ai_title(self, user_message, session_id=None):
-        """Ask kiro-cli for a descriptive 2-5 word title. Returns None on failure."""
-        kiro = _find_kiro()
-        if not kiro:
-            logger.warning("_ai_title: kiro-cli not found, using heuristic (session=%s)", session_id)
-            return None
-
+        """Ask the agent CLI for a descriptive 2-word title. Returns None on failure."""
         snippet = user_message.strip()
         if len(snippet) > 500:
             snippet = snippet[:500] + '...'
@@ -256,6 +246,12 @@ class HyperagentAPI:
             "Request: " + snippet
         )
 
+        argv = self._backend.title_command(prompt)
+        if not argv:
+            logger.warning("_ai_title: no title command for backend %s, using heuristic (session=%s)",
+                           self._backend.name, session_id)
+            return None
+
         try:
             si = subprocess.STARTUPINFO()
             si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
@@ -264,7 +260,7 @@ class HyperagentAPI:
             tab_states = self._tab_state_snapshot()
 
             proc = subprocess.Popen(
-                [kiro, "chat", "--no-interactive", prompt],
+                argv,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                 encoding="utf-8", errors="replace",
                 startupinfo=si,
@@ -478,8 +474,8 @@ class HyperagentAPI:
         return client.set_model(model_id)
 
     def set_default_model(self, model_id):
-        """Write model_id to kiro-cli's chat.defaultModel setting (global)."""
-        if not write_kiro_default_model(model_id):
+        """Write model_id as the agent's global default model."""
+        if not self._backend.write_default_model(model_id):
             return False
         for tab_id, client in list(self._pool._clients.items()):
             try:
@@ -493,7 +489,7 @@ class HyperagentAPI:
         client = self._pool.get_client(tab_id) if tab_id else self._pool.active_client
         if not client:
             return None
-        rates = get_model_rates()
+        rates = self._backend.model_rates()
         enriched = []
         for m in (client._available_models or []):
             mid = m.get("modelId") if isinstance(m, dict) else None
@@ -505,11 +501,11 @@ class HyperagentAPI:
         return {
             "currentModelId": client._current_model_id,
             "availableModels": enriched,
-            "defaultModelId": read_kiro_default_model(),
+            "defaultModelId": self._backend.read_default_model(),
         }
 
     def get_changelog(self, version=None):
-        """Return parsed changelog for a kiro-cli version, or None.
+        """Return parsed changelog for an agent version, or None.
 
         If no version is passed, resolves the current CLI version so the badge
         can request its own release notes. Opening the changelog counts as
@@ -517,11 +513,11 @@ class HyperagentAPI:
         clears the badge's "what's new" cue on the next ready transition.
         """
         if not version:
-            version = get_kiro_version()
+            version = self._backend.version()
         if not version:
             return None
         self._mark_changelog_seen(version)
-        return get_kiro_changelog(version)
+        return self._backend.changelog(version)
 
     def _mark_changelog_seen(self, version):
         """Persist the acknowledged changelog version to preferences."""
@@ -563,17 +559,20 @@ class HyperagentAPI:
             return False
 
     def get_plan_usage(self):
-        """Run kiro-cli /usage command and parse plan credits percentage."""
-        kiro = _find_kiro()
-        if not kiro:
-            return {"ok": False, "error": "kiro-cli not found"}
+        """Run the agent's usage command and parse plan credits percentage.
+
+        The parser below reads kiro-cli's /usage output format.
+        """
+        argv = self._backend.usage_command()
+        if not argv:
+            return {"ok": False, "error": "Usage not available for %s" % self._backend.display_name}
 
         try:
             si = subprocess.STARTUPINFO()
             si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             si.wShowWindow = subprocess.SW_HIDE
             result = subprocess.run(
-                [kiro, "chat", "--no-interactive", "/usage"],
+                argv,
                 capture_output=True, text=True, timeout=20,
                 startupinfo=si,
                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
@@ -760,7 +759,7 @@ class HyperagentAPI:
         Subagent children and empty scratch sessions are excluded; the active
         session and explicitly-owned sessions always show.
         """
-        if _check_auth() is AUTH_NO:
+        if self._backend.check_auth() is AUTH_NO:
             return {"sessions": [], "active": None, "auth_required": True}
         try:
             sessions_dir = SESSIONS_DIR

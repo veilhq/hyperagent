@@ -1,5 +1,6 @@
 /* ===== Hyperagent: Task Sidebar ===== */
-// Intercepts todo_list tool calls and displays a running task list in a side panel.
+// Displays a running task list in a side panel, fed by kiro todo_list tool
+// calls (__acpTaskUpdate) or ACP plan updates (__acpPlanUpdate).
 
 var taskPanel = null;
 var taskList = [];
@@ -86,6 +87,43 @@ window.__acpTaskUpdate = function(data) {
     var removeIds = data.remove_task_ids || [];
     taskList = taskList.filter(function(t) { return removeIds.indexOf(t.id) < 0; });
     renderTasks();
+  }
+};
+
+// ACP agent plans (session/update "plan"). Every update carries the complete
+// entry list and the client must replace its plan with it, so the panel is
+// rebuilt from the entries rather than patched. Entries have no ids; their
+// text is used to spot which ones just completed so the highlight and the
+// all-done dismissal behave like the todo_list path. in_progress renders as
+// not done, matching the panel's two states.
+window.__acpPlanUpdate = function(entries) {
+  if (!Array.isArray(entries)) return;
+  var wasDone = {};
+  for (var i = 0; i < taskList.length; i++) {
+    if (taskList[i].completed) wasDone[taskList[i].task_description] = true;
+  }
+  taskDescription = '';
+  taskList = entries.map(function(entry, idx) {
+    return {
+      task_description: (entry && entry.content) || '',
+      completed: !!entry && entry.status === 'completed',
+      id: String(idx + 1)
+    };
+  });
+  if (!taskList.length) {
+    hideTaskPanel();
+    return;
+  }
+  renderTasks();
+  var justDone = taskList
+    .filter(function(t) { return t.completed && !wasDone[t.task_description]; })
+    .map(function(t) { return t.id; });
+  if (justDone.length) {
+    if (taskPanel && taskPanel.classList.contains('collapsed')) {
+      taskPanel.classList.remove('collapsed');
+    }
+    highlightItems(justDone);
+    checkAllDone();
   }
 };
 
