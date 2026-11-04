@@ -1,0 +1,106 @@
+/* ---- Workflow launch approval - composes with .modal-overlay .modal-panel ----
+   Flat sections divided by hairlines; the warning stripe is the only color. */
+.workflow-plan-panel {
+  max-width: 640px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.workflow-plan-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: var(--border-hair) solid var(--border);
+}
+.workflow-plan-kicker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-mono);
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+  color: var(--text-muted);
+}
+.workflow-plan-kicker-tab { margin-left: auto; color: var(--text-dim); }
+.workflow-plan-title {
+  font-family: var(--font-body);
+  font-size: var(--fs-prose-body);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-ui);
+  color: var(--text-bright);
+}
+.workflow-plan-desc {
+  font-family: var(--font-body);
+  font-size: var(--fs-prose-ui);
+  line-height: var(--lh-prose);
+  color: var(--text-muted);
+}
+.workflow-plan-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  overflow-y: auto;
+}
+.workflow-plan-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-2);
+}
+.workflow-plan-fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-hair) solid var(--border);
+  border-radius: var(--radius);
+}
+.workflow-plan-fact-label {
+  font-size: var(--fs-mono);
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+  color: var(--text-dim);
+}
+.workflow-plan-fact-value { font-size: var(--fs-mono); color: var(--text-bright); }
+.workflow-plan-fact[data-over="true"] { border-color: var(--warning); }
+.workflow-plan-fact[data-over="true"] .workflow-plan-fact-value { color: var(--warning); }
+.workflow-plan-warns { display: flex; flex-direction: column; gap: var(--space-2); }
+.workflow-plan-warn {
+  padding: var(--space-2) var(--space-3);
+  border-left: calc(var(--border-hair) * 2) solid var(--warning);
+  font-family: var(--font-body);
+  font-size: var(--fs-prose-ui);
+  line-height: var(--lh-ui);
+  color: var(--text);
+}
+.workflow-plan-section { display: flex; flex-direction: column; gap: var(--space-2); }
+.workflow-plan-section-label {
+  font-size: var(--fs-mono);
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+  color: var(--text-muted);
+}
+.workflow-plan-script {
+  margin: 0;
+  padding: var(--space-3);
+  max-height: 240px;
+  overflow: auto;
+  background: var(--bg);
+  border: var(--border-hair) solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font-code);
+  font-size: var(--fs-mono);
+  line-height: var(--lh-body);
+  color: var(--text);
+  white-space: pre;
+}
+.workflow-plan-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border-top: var(--border-hair) solid var(--border);
+  background: var(--bg-surface);
+}

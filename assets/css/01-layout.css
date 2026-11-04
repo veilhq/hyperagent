@@ -1,14 +1,14 @@
 /* ===== Hyperagent: Layout (app shell) ===== */
 
-#app { display: flex; flex-direction: column; height: 100%; position: relative; z-index: 1; opacity: 0; animation: fadeSlideIn var(--motion-slow) ease 0.3s forwards; } /* 0.3s delay: waits for splash fade-out. position+z-index: ride above the shared atmosphere layer (globals.css body::before/after at z-0) */
+#app { display: flex; flex-direction: column; height: 100%; position: relative; z-index: 1; opacity: 0; animation: fadeSlideIn var(--motion-slow) ease calc(var(--motion-stagger) * 6) forwards; } /* 0.3s delay: waits for splash fade-out. position+z-index: ride above the shared atmosphere layer (globals.css body::before/after at z-0) */
 
 /* ============================================================================
-   Floating status cluster (top-right)  — WI-113 rebuild
+   Floating status cluster (top-right) - WI-113 rebuild
    ============================================================================
    Hyperagent-specific chrome group. Each item is uniformly 20px tall for a
    consistent visual row. Uses a dedicated `.ha-cluster-chip` base class
    (deliberately NOT `.status-chip`) because the cluster's uniform-height
-   requirement conflicts with the primitive's content-sized model — the
+   requirement conflicts with the primitive's content-sized model - the
    cluster has no Hypervisor equivalent, so this local silhouette is fine.
    Sizing pattern: fixed height + matching line-height for pixel-perfect
    vertical glyph centering that survives Departure Mono's ascender metrics.
@@ -28,7 +28,7 @@
      collapse (display:none) so the first visible chip sits at the true left
      edge, making the left/right container padding symmetric. */
   padding: var(--space-2);
-  background: var(--bg-elevated);
+  background: var(--bg-raised);
   border: var(--border-hair) solid var(--border);
   border-radius: var(--radius);
 }
@@ -42,13 +42,19 @@
   align-items: center;
   gap: var(--space-1);
 }
+.status-sep {
+  align-self: stretch;
+  width: var(--border-hair);
+  margin: 0 var(--space-1);
+  background: var(--border);
+}
 .plan-credits {
   display: flex;
   align-items: center;
   gap: var(--space-1);
 }
 
-/* Uniform chip silhouette for cluster items. Height + line-height match →
+/* Uniform chip silhouette for cluster items. Height + line-height match ->
    text is baseline-centered inside a 20px pill with no ascender clipping. */
 .ha-cluster-chip {
   display: inline-flex;
@@ -57,9 +63,8 @@
   padding: 0 var(--space-2);
   border: var(--border-hair) solid transparent;
   font-family: var(--font);
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.06em;
+  font-size: var(--fs-mono);
+  letter-spacing: var(--track-label);
   text-transform: uppercase;
   line-height: 20px;
   white-space: nowrap;
@@ -67,7 +72,7 @@
   transition: background var(--motion-medium) var(--ease), border-color var(--motion-medium) var(--ease);
 }
 
-/* ---- topbar-status — filled pill, state-colored ---- */
+/* ---- topbar-status - filled pill, state-colored ---- */
 .topbar-status {
   color: var(--bg);
   background: var(--text-dim);
@@ -77,7 +82,7 @@
 .topbar-status.prompting { background: var(--warning);   border-color: var(--warning); }
 .topbar-status.crashed   { background: var(--error);   border-color: var(--error); }
 
-/* ---- session title — dim filled pill, truncates ---- */
+/* ---- session title - dim filled pill, truncates ---- */
 .status-title {
   color: var(--bg);
   background: var(--text-dim);
@@ -89,7 +94,15 @@
 }
 .status-title.has-title { display: inline-flex; }
 
-/* ---- session metric counters (turns/credits/tokens) — outlined muted ---- */
+/* ---- session permission mode - outlined muted, hidden until populated ---- */
+.status-mode {
+  color: var(--text-muted);
+  background: transparent;
+  border-color: var(--border);
+}
+.status-mode:empty { display: none; }
+
+/* ---- session metric counters (turns/credits/tokens) - outlined muted ---- */
 .status-center-item {
   color: var(--text-muted);
   background: transparent;
@@ -97,28 +110,28 @@
 }
 .status-center-item:empty { display: none; }
 
-/* ---- CLI version badge — quiet muted outline, hidden until populated ---- */
+/* ---- CLI version badge - quiet muted outline, hidden until populated ---- */
 .cli-version {
   color: var(--text-dim);
   background: transparent;
   border-color: var(--border);
   text-transform: none;
   font-weight: var(--fw-normal);
-  letter-spacing: 0.02em;
+  letter-spacing: var(--track-tight);
 }
 .cli-version:empty { display: none; }
 
-/* ---- plan credits label — filled, state color reflects usage ---- */
+/* ---- plan credits label - filled, state color reflects usage ---- */
 .plan-credits-label {
   color: var(--bg);
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--success);
+  border-color: var(--success);
 }
 .plan-credits-label:empty                { display: none; }
 .plan-credits-label.warn                 { background: var(--warning); border-color: var(--warning); }
 .plan-credits-label.critical             { background: var(--error);   border-color: var(--error); }
 
-/* ---- refresh button — 20px square, matches cluster row ---- */
+/* ---- refresh button - 20px square, matches cluster row ---- */
 .plan-credits-refresh {
   display: inline-flex;
   align-items: center;
@@ -128,20 +141,20 @@
   background: transparent;
   border: var(--border-hair) solid var(--border);
   color: var(--text-dim);
-  font-size: var(--fs-caption);
-  line-height: 1;
+  font-size: var(--fs-mono);
+  line-height: var(--lh-tight);
   cursor: var(--cursor-pointer);
   transition: color var(--motion-fast), border-color var(--motion-fast);
 }
 .plan-credits-refresh:hover {
-  color: var(--accent);
-  border-color: var(--accent);
+  color: var(--interactive);
+  border-color: var(--interactive);
 }
 .plan-credits-refresh.spinning svg {
-  animation: spin 0.6s linear infinite; /* off-scale: spinner cadence */
+  animation: spin var(--period-spin) linear infinite; /* off-scale: spinner cadence */
 }
 
-/* ---- context usage meter — 20px pill with label + tiny progress bar ---- */
+/* ---- context usage meter - 20px pill with label + tiny progress bar ---- */
 .ctx-meter {
   display: inline-flex;
   align-items: center;
@@ -153,13 +166,13 @@
   border: var(--border-hair) solid var(--border);
   box-sizing: border-box;
 }
+.ctx-meter:has(.ctx-meter-label:empty) { display: none; }
 .ctx-meter-label {
   font-family: var(--font);
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.05em;
-  line-height: 1;
-  color: var(--text-dim);
+  font-size: var(--fs-mono);
+  letter-spacing: var(--track-body);
+  line-height: var(--lh-tight);
+  color: var(--text-muted);
   white-space: nowrap;
 }
 .ctx-meter-bar {
@@ -176,7 +189,7 @@
   left: 0;
   height: 100%;
   width: 0%;
-  background: var(--accent);
+  background: var(--magnitude);
   transition: width var(--motion-slow) var(--ease), background var(--motion-slow) var(--ease);
 }
 .ctx-meter-fill.warn     { background: var(--warning); }
@@ -186,7 +199,7 @@
    The bar is the first flow element in #app, so it shares the top band with
    the position:fixed .status-cluster. Without a reservation the bar's
    right-aligned actions (e.g. RECONNECT on a crash) render underneath the
-   cluster's chips — the model picker in particular — making them unclickable.
+   cluster's chips - the model picker in particular - making them unclickable.
    --ha-cluster-w is measured from the live cluster in 00-core.js (it changes
    width with the model name, skill strip, and credits chip) and reserved here
    as padding so both the message and the actions stay clear of it.
@@ -199,10 +212,10 @@
   --_bar-color: var(--error);
   max-height: 0;
   overflow: hidden;
-  padding-left: var(--space-1-25);
-  padding-right: calc(var(--ha-cluster-w, 0px) + var(--space-1-25));
+  padding-left: var(--space-5);
+  padding-right: calc(var(--ha-cluster-w, 0px) + var(--space-5));
   /* Drawer pulled down from the top edge. Copies the dir-surface drawer style
-     (NOT the shared tokens — self-contained so it can diverge) and flips it
+     (NOT the shared tokens - self-contained so it can diverge) and flips it
      vertically: the dir-surface is an open-BOTTOM drawer bleeding off the
      bottom; this is an open-TOP drawer bleeding off the top of the window.
        - open top edge (no top border), framed on sides + bottom
@@ -216,8 +229,7 @@
   border-top: none;
   border-radius: 0 0 calc(var(--radius) * 5) calc(var(--radius) * 5);
   box-shadow: none;
-  font-size: 0.68rem;
-  font-weight: var(--fw-bold);
+  font-size: var(--fs-mono);
   opacity: 0;
   transition: max-height var(--motion-medium) var(--ease), opacity var(--motion-medium) var(--ease), padding var(--motion-medium) var(--ease), background var(--motion-medium) var(--ease), color var(--motion-medium) var(--ease), border-color var(--motion-medium) var(--ease);
 }
@@ -234,7 +246,7 @@
   padding-bottom: var(--space-1);
   /* Entrance matches the dir-surface slide, mirrored. The dir-surface rises up
      into place (dirSurfaceIn: translateY 120->72->0 on a decelerate curve);
-     this is the vertical mirror — the drawer drops DOWN from above and eases to
+     this is the vertical mirror - the drawer drops DOWN from above and eases to
      a stop. Self-contained keyframe (copies the motion, doesn't reuse it). The
      transform is owned by the keyframe; opacity + max-height stay on the
      transition above so the layout-clearing reveal is unaffected. */
@@ -254,7 +266,7 @@
 
 /* ---- Error bar slots ----
    Two independent regions: message (flexible, truncates) and actions (fixed).
-   Separation is deliberate — the crash path writes the message and the action
+   Separation is deliberate - the crash path writes the message and the action
    from two different events, and a single node let the later write destroy the
    earlier one. See window.HaErrorBar in 00-core.js. */
 .error-bar {
@@ -269,7 +281,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   /* State color on the message carries severity now that the surface is
-     neutral — the band's one chromatic signal beside the leading stripe. */
+     neutral - the band's one chromatic signal beside the leading stripe. */
   color: var(--_bar-color);
 }
 .error-bar-actions {
@@ -281,15 +293,14 @@
 .error-bar-action {
   font-family: inherit;
   font-size: inherit;
-  font-weight: var(--fw-bold);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--track-body);
   /* Ghost button on the neutral surface: state-colored text + border, hover
      fills with the state color. Mirrors the ecosystem ghost-button idiom. */
   color: var(--_bar-color);
   background: none;
   border: var(--border-hair) solid color-mix(in srgb, var(--_bar-color) 45%, transparent);
-  padding: 0.1rem var(--space-2);
+  padding: var(--border-rail) var(--space-2);
   cursor: pointer;
   transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease);
 }

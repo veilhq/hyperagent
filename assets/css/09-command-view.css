@@ -1,0 +1,100 @@
+/* ---- Command view - reuses the workflow detail panel geometry; only the report body and state colors live here ---- */
+.command-view-panel[data-state="running"] .workflow-detail-state { color: var(--live); }
+.command-view-panel[data-state="done"] .workflow-detail-state { color: var(--success); }
+.command-view-panel[data-state="failed"] .workflow-detail-state { color: var(--warning); }
+.command-view-meters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-3);
+}
+.command-view-meters .workflow-detail-meter { min-width: 0; background: var(--bg-raised); }
+.command-view-markdown {
+  font-family: var(--font-body);
+  font-size: var(--fs-prose-ui);
+  line-height: var(--lh-prose);
+  color: var(--text);
+}
+.command-view-markdown h1,
+.command-view-markdown h2,
+.command-view-markdown h3 {
+  margin: var(--space-4) 0 var(--space-1);
+  font-family: var(--font);
+  font-size: var(--fs-mono);
+  font-weight: var(--fw-normal);
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+  color: var(--text-bright);
+}
+.command-view-markdown p { margin: 0 0 var(--space-2); }
+.command-view-markdown table { border-collapse: collapse; font-family: var(--font); font-size: var(--fs-mono); }
+.command-view-markdown th,
+.command-view-markdown td {
+  padding: var(--space-1) var(--space-3);
+  border-bottom: var(--border-hair) solid var(--border);
+  text-align: left;
+}
+.command-view-markdown th {
+  border-bottom-color: var(--border-strong);
+  font-weight: var(--fw-normal);
+  text-transform: uppercase;
+  color: var(--text-bright);
+}
+.command-view-markdown td { color: var(--text); }
+.command-view-markdown code {
+  padding: var(--space-1);
+  background: var(--bg-raised);
+  border: var(--border-hair) solid var(--border);
+  font-family: var(--font-code);
+  font-size: var(--fs-mono);
+  color: var(--text-bright);
+}
+.command-view-input { font-size: var(--fs-mono); line-height: var(--lh-body); color: var(--text-muted); }
+.command-view-note {
+  font-family: var(--font-body);
+  font-size: var(--fs-prose-ui);
+  line-height: var(--lh-prose);
+  color: var(--text-muted);
+}
+.command-view-cellbar { display: block; width: calc(var(--space-6) * 5); }
+.command-view-bar-cell { display: flex; align-items: center; gap: var(--space-3); }
+.command-view-markdown blockquote { margin: 0; color: var(--text-muted); }
+.command-view-markdown > :last-child { margin-bottom: 0; }
+.command-view-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--space-3);
+  align-items: start;
+}
+.command-view-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-raised);
+  border: var(--border-hair) solid var(--border);
+  border-radius: var(--radius);
+}
+.command-view-card .command-view-card { background: var(--bg-raised-2); }
+.command-view-card-wide { grid-column: 1 / -1; }
+.command-view-card table { width: 100%; }
+.command-view-card[data-tone="success"] > .workflow-detail-meter-label { color: var(--success); }
+.command-view-card[data-tone="warning"] > .workflow-detail-meter-label { color: var(--warning); }
+.command-view-card[data-tone="live"] > .workflow-detail-meter-label { color: var(--live); }
+.command-view-markdown ul,
+.command-view-markdown ol { margin: 0; padding-left: var(--space-4); }
+.command-view-markdown li { margin: 0 0 var(--space-1); }
+.command-view-kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+}
+.command-view-kv dt {
+  font-size: var(--fs-mono);
+  line-height: var(--lh-body);
+  color: var(--text-muted);
+}
+.command-view-kv dd { margin: 0; min-width: 0; }
+.command-view-kv .command-view-markdown p { margin: 0; }
+.command-view-card .command-view-markdown + .command-view-markdown { margin-top: var(--space-2); }

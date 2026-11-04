@@ -6,51 +6,44 @@
    Generic by design: any background process can push a badge here via
    window.HaActivity.start(key, label) / .done(key) / .fail(key).
 
-   Visual vocabulary follows .skill-strip / .skill-badge (07-skills.css) so the
-   two strips read as siblings — same size, spacing, and separator treatment.
-   Distinguished by color: skills use --cool, activity uses --warm. */
+   Badges use the label-badge silhouette with a --warm tone. */
 
 .activity-strip {
   display: flex;
   align-items: center;
-  gap: var(--space-0-3);
+  gap: var(--space-1);
 }
 
-/* Collapse when idle, same reason as .skill-strip:empty — an always-flex
-   empty strip consumes a parent `gap` slot and unbalances the cluster. */
+/* Collapse when idle - an always-flex empty strip consumes a parent `gap`
+   slot and unbalances the cluster. */
 .activity-strip:empty { display: none; }
 
 .activity-strip:not(:empty) {
-  padding-right: var(--space-0-3);
+  padding-right: var(--space-1);
   border-right: var(--border-hair) solid var(--border);
-  margin-right: var(--space-0-1);
+  margin-right: var(--space-1);
 }
 
 .activity-badge {
+  --badge-tone: var(--warm);
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  padding: 0.12rem var(--space-0-4);
-  font-size: 0.5rem;
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  color: var(--warm);
-  border: var(--border-hair) solid var(--warm);
+  color: var(--badge-tone);
+  border-color: var(--badge-tone);
   animation: activityBadgeIn var(--motion-medium) var(--ease);
 }
 
 /* Terminal state: badge lingers briefly so a fast process is still perceivable,
    then fades. JS removes the node after the fade completes. */
 .activity-badge.is-done {
-  color: var(--accent);
-  border-color: var(--accent-border);
+  color: var(--success);
+  border-color: var(--success-border);
   animation: activityBadgeOut var(--motion-slow) var(--ease) forwards;
 }
 .activity-badge.is-failed {
-  color: var(--comp);
-  border-color: var(--comp);
+  color: var(--error);
+  border-color: var(--error);
   animation: activityBadgeOut var(--motion-slow) var(--ease) forwards;
 }
 
@@ -59,18 +52,18 @@
    that fits inline in a topbar badge. */
 .activity-dither {
   display: inline-flex;
-  gap: 1px;
+  gap: var(--border-hair);
 }
 .activity-dither > span {
   width: 2px;
   height: 2px;
   background: currentColor;
   opacity: 0.2;
-  animation: activityDither 1.05s linear infinite; /* off-scale: dither chase cycle, delays are 1/3 divisions */
+  animation: activityDither var(--period-blink) linear infinite; /* off-scale: dither chase cycle, delays are 1/3 divisions */
 }
 .activity-dither > span:nth-child(1) { animation-delay: 0s; }
-.activity-dither > span:nth-child(2) { animation-delay: 0.35s; }
-.activity-dither > span:nth-child(3) { animation-delay: 0.7s; }
+.activity-dither > span:nth-child(2) { animation-delay: calc(var(--period-blink) * 1 / 3); }
+.activity-dither > span:nth-child(3) { animation-delay: calc(var(--period-blink) * 2 / 3); }
 
 /* Terminal states hold a solid indicator rather than marching. */
 .activity-badge.is-done .activity-dither > span,
@@ -98,7 +91,7 @@
 
 /* ---- Tab title generating state ----
    The tab whose title is being generated dims its placeholder title, so the
-   pending rename is visible at its destination — not only in the topbar.
+   pending rename is visible at its destination - not only in the topbar.
 
    Deliberately text-only: `.sidebar-tab-item` is a 2-column grid (dither,
    title) with the close button absolutely positioned, so adding a third
@@ -111,7 +104,7 @@
 /* Title landing: brief highlight so the rename is perceivable rather than a
    silent text swap. */
 @keyframes titleSettle {
-  0%   { color: var(--warm); }
+  0%   { color: var(--live); }
   100% { color: var(--text); }
 }
 .sidebar-tab-item.title-settled .sidebar-tab-item-title {
@@ -124,13 +117,12 @@
 }
 
 /* A manually renamed tab is locked against AI overwrite. Marked with a
-   trailing comp-colored asterisk on the title so the edit is discoverable
+   trailing warning-colored asterisk on the title so the edit is discoverable
    rather than hidden state. Lives inline with the title text, clear of the
-   close button's top-right corner — no fade/toggle ambiguity. */
+   close button's top-right corner - no fade/toggle ambiguity. */
 .sidebar-tab-edited-mark {
-  margin-left: var(--space-0-2);
-  color: var(--comp);
-  font-weight: var(--fw-bold);
+  margin-left: var(--space-1);
+  color: var(--warning);
 }
 
 /* ---- Reduced motion ----

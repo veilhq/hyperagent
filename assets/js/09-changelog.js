@@ -18,7 +18,7 @@
   var cache = {};
   var lastRenderedVersion = null;
 
-  // Category display order — mirrors kiro-cli's own changelog grouping.
+  // Category display order - mirrors kiro-cli's own changelog grouping.
   var TYPE_ORDER = ["Added", "Changed", "Fixed", "Security", "Deprecated"];
 
   // --- Rendering ---
@@ -68,7 +68,7 @@
 
     if (entry.tag) {
       var tag = document.createElement("span");
-      tag.className = "cli-version-item-tag";
+      tag.className = "label-badge cli-version-item-tag";
       tag.textContent = entry.tag;
       row.appendChild(tag);
     }

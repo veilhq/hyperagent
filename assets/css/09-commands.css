@@ -1,0 +1,26 @@
+/* ---- Slash command menu - a .floating-panel of .menu-item rows docked above the input.
+   Only the docking and the row's name/hint/description layout live here. ---- */
+.command-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: var(--space-1);
+  margin-bottom: var(--space-1);
+}
+.command-item { margin: 0; }
+.command-name { flex-shrink: 0; }
+.command-hint { flex-shrink: 0; color: var(--text-dim); }
+.command-desc {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-body);
+  font-size: var(--fs-prose-sm);
+  color: var(--text-muted);
+}
+.command-view-tag { flex-shrink: 0; }

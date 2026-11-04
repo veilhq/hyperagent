@@ -1,5 +1,5 @@
 """
-HyperagentAPI — PyWebView JS bridge.
+HyperagentAPI - PyWebView JS bridge.
 
 Exposes all methods callable from the frontend via `window.pywebview.api.*`.
 Handles tab management, session CRUD, model switching, title generation,
@@ -30,12 +30,20 @@ from helpers import (
     _SKILL_CACHE,
     _SKILL_MD_PATTERN,
     AUTH_NO,
+    parent_tool_use_id,
+    skill_info,
+    skill_name_of,
+    tool_input_of,
+    tool_name_of,
+    prompt_key,
     update_prefs,
     read_prefs,
 )
 from backends import get_backend
-from palette import build_palette_oklch, GRADIENT_MAPS  # noqa: E402 — shared palette math + preset data from hyperkit
+from palette import build_palette_oklch, GRADIENT_MAPS  # noqa: E402 - shared palette math + preset data from hyperkit
 from acp_pool import ACPClientPool
+from compaction_watch import compact_summary_heads, read_earlier_history, transcript_path
+import plan_usage
 
 
 def _image_block_to_data_url(block):
@@ -78,7 +86,7 @@ class HyperagentAPI:
         client = self._pool.get_client(tab_id) if tab_id else self._pool.active_client
         text = (text or "").strip()
         # Send when there is text or at least one image. An image-only prompt
-        # is valid — the ACP client builds an image-only content-block array.
+        # is valid - the ACP client builds an image-only content-block array.
         if client and (text or images):
             threading.Thread(
                 target=client.prompt, args=(text, images), daemon=True
@@ -149,21 +157,33 @@ class HyperagentAPI:
             if client:
                 client._state = "starting"
                 client._push_state()
-                history = self.get_session_history(session_id)
-                client._push_js("__acpSessionLoaded", {"sessionId": session_id, "messages": history})
 
                 def on_load_result(result):
-                    if isinstance(result, dict) and "error" in result:
-                        err = result["error"]
-                        err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
-                        logger.error("%sopen_session_in_tab load failed: %s", client._tab_ctx(), result)
-                        client._push_js("__acpError", {"error": f"Failed to load session: {err_msg}"})
-                    else:
-                        client._set_session_id(session_id)
-                        client._capture_and_push_models(result)
-                        client._apply_preferred_model()
-                    client._state = "ready"
-                    client._push_state()
+                    try:
+                        if isinstance(result, dict) and "error" in result:
+                            err = result["error"]
+                            err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+                            logger.error("%sopen_session_in_tab load failed: %s", client._tab_ctx(), result)
+                            if self._backend.lists_sessions_over_acp:
+                                # No history was shown, so the tab itself reports the failure and offers Retry.
+                                client._push_js("__acpSessionLoadFailed", {"sessionId": session_id, "error": err_msg})
+                            else:
+                                client._push_js("__acpError", {"error": f"Failed to load session: {err_msg}"})
+                        else:
+                            client._set_session_id(session_id)
+                            client._capture_and_push_models(result)
+                            client._apply_preferred_model()
+                    finally:
+                        client._state = "ready"
+                        client._push_state()
+
+                if self._backend.lists_sessions_over_acp:
+                    self._load_with_replay(client, session_id, on_load_result)
+                    self._pool.save_tab_state()
+                    return
+
+                history = self.get_session_history(session_id)
+                client._push_js("__acpSessionLoaded", {"sessionId": session_id, "messages": history})
 
                 def on_new_done(result):
                     throwaway_id = result.get("sessionId") if isinstance(result, dict) else None
@@ -242,7 +262,7 @@ class HyperagentAPI:
             "'Debug Deploy', 'Add Endpoint'. "
             "Rules: exactly 2 words, title case, no punctuation, no quotes, "
             "no trailing period, no articles (a/an/the). "
-            "Reply with ONLY the title text — no preamble, no explanation.\n\n"
+            "Reply with ONLY the title text - no preamble, no explanation.\n\n"
             "Request: " + snippet
         )
 
@@ -275,7 +295,7 @@ class HyperagentAPI:
             try:
                 stdout, stderr = proc.communicate(timeout=60)
             except subprocess.TimeoutExpired:
-                logger.warning("_ai_title TIMEOUT seq=%d pid=%d — killing", seq, proc.pid)
+                logger.warning("_ai_title TIMEOUT seq=%d pid=%d - killing", seq, proc.pid)
                 try:
                     proc.kill()
                     proc.communicate(timeout=5)
@@ -297,7 +317,7 @@ class HyperagentAPI:
                 'credits:', 'tokens:', 'time:', 'cost:', 'usage:', 'plan:',
                 'thinking', 'trust-all-tools', 'session id', 'model:',
             )
-            _PREFIX_REJECT = ('▸', '›', '[', '#', '$', '•', '·', '|')
+            _PREFIX_REJECT = ('▸', '›', '[', '#', '$', '*', '·', '|')
 
             def _strip_response_marker(line):
                 s = line.lstrip()
@@ -399,7 +419,7 @@ class HyperagentAPI:
                         titles = prefs.get("sessionTitles", {})
                         titles[sid] = title
                         prefs["sessionTitles"] = titles
-                        # A titled session is a real user session — register ownership
+                        # A titled session is a real user session - register ownership
                         # here so the sidebar filter and startup reaper never lose it,
                         # regardless of how the session became active.
                         owned = set(prefs.get("ownedSessions", []))
@@ -473,10 +493,67 @@ class HyperagentAPI:
             return False
         return client.set_model(model_id)
 
-    def set_default_model(self, model_id):
-        """Write model_id as the agent's global default model."""
-        if not self._backend.write_default_model(model_id):
+    def set_effort(self, value, tab_id=None):
+        """Set the effort level for a tab's session."""
+        client = self._pool.get_client(tab_id) if tab_id else self._pool.active_client
+        if not client:
             return False
+        logger.info("set_effort: %s (tab=%s)", value, str(tab_id or self._pool._active_tab)[:6])
+        return client.set_effort(value)
+
+    def get_effort(self, tab_id=None):
+        """Return {current, options, ultracode} for a tab; empty options when the agent has no effort setting."""
+        client = self._pool.get_client(tab_id) if tab_id else self._pool.active_client
+        effort = (client._effort if client else None) or {"current": None, "options": []}
+        supported = bool(client and client._backend.ultracode_keyword)
+        limits = client._ultracode_limits() if client else {}
+        return dict(effort, ultracode=dict(limits, supported=supported, on=bool(client and client._ultracode)))
+
+    def set_ultracode_limits(self, mode=None, budget=None, agent_cap=None, threshold=None, tab_id=None):
+        """Set a tab's ultracode mode ("once"/"stay"), token budget, agent cap, or plan-usage guard percent and save them as defaults; False when unsupported."""
+        client = self._pool.get_client(tab_id) if tab_id else self._pool.active_client
+        if not client:
+            return False
+        logger.info("set_ultracode_limits: mode=%s budget=%s agent_cap=%s threshold=%s (tab=%s)",
+                    mode, budget, agent_cap, threshold, str(tab_id or self._pool._active_tab)[:6])
+        return client.set_ultracode_limits(mode, budget, agent_cap, threshold)
+
+    def answer_workflow_plan(self, tool_call_id, allow, tab_id=None):
+        """Allow or reject a held Workflow launch; False when no such request is waiting."""
+        client = self._pool.get_client(tab_id) if tab_id else self._pool.active_client
+        if not client:
+            return False
+        logger.info("answer_workflow_plan: call=%s allow=%s (tab=%s)", str(tool_call_id)[:12], bool(allow),
+                    str(tab_id or self._pool._active_tab)[:6])
+        return client.answer_workflow_plan(tool_call_id, bool(allow))
+
+    def stop_workflow(self, task_id, tab_id=None):
+        """Stop a running background workflow through the adapter; False when it is unknown or already stopping."""
+        client = self._pool.get_client(tab_id) if tab_id else self._pool.active_client
+        if not client:
+            return False
+        logger.info("stop_workflow: task=%s (tab=%s)", str(task_id)[:8], str(tab_id or self._pool._active_tab)[:6])
+        return client.stop_async_task(task_id)
+
+    def set_ultracode(self, on, tab_id=None):
+        """Turn ultracode on or off for a tab; False when the backend has no such mode."""
+        client = self._pool.get_client(tab_id) if tab_id else self._pool.active_client
+        if not client:
+            return False
+        logger.info("set_ultracode: %s (tab=%s)", on, str(tab_id or self._pool._active_tab)[:6])
+        return client.set_ultracode(on)
+
+    def set_default_model(self, model_id):
+        """Write model_id as the agent's global default model.
+
+        Also makes it the remembered model, so new sessions open on it instead
+        of on whichever model was last picked in a tab.
+        """
+        if not self._backend.write_default_model(model_id):
+            logger.warning("set_default_model: %s rejected %s", self._backend.name, model_id)
+            return False
+        update_prefs(lambda prefs: prefs.__setitem__(self._backend.model_pref_key, model_id))
+        logger.info("set_default_model: %s (%s)", model_id, self._backend.name)
         for tab_id, client in list(self._pool._clients.items()):
             try:
                 client._push_models_event()
@@ -504,12 +581,59 @@ class HyperagentAPI:
             "defaultModelId": self._backend.read_default_model(),
         }
 
+    def get_commands(self, tab_id=None):
+        """Slash commands the agent advertised for a tab: [{name, description, hint}]."""
+        client = self._pool.get_client(tab_id) if tab_id else self._pool.active_client
+        return list(client._commands) if client else []
+
+    # --- Agent backend selection ---
+
+    _BACKEND_DESCRIPTIONS = {
+        "kiro": "kiro-cli ACP agent (hyperspace agent config)",
+        "claude-code": "Claude Code via the claude-agent-acp adapter",
+    }
+
+    def get_backend_info(self):
+        """Active backend, the saved preference, and the selectable options."""
+        from backends import DEFAULT_BACKEND, REGISTRY
+        selected = read_prefs().get("backend") or DEFAULT_BACKEND
+        return {
+            "active": self._backend.name,
+            "activeName": self._backend.display_name,
+            "selected": selected if selected in REGISTRY else DEFAULT_BACKEND,
+            "options": [
+                {"id": name, "name": cls.display_name,
+                 "description": self._BACKEND_DESCRIPTIONS.get(name, "")}
+                for name, cls in REGISTRY.items()
+            ],
+        }
+
+    def set_backend(self, backend_id):
+        """Persist the backend preference; it applies on the next app start."""
+        from backends import REGISTRY
+        if backend_id not in REGISTRY:
+            logger.warning("set_backend: unknown backend %r", backend_id)
+            return {"ok": False, "error": "Unknown backend: %s" % backend_id}
+        update_prefs(lambda prefs: prefs.__setitem__("backend", backend_id))
+        logger.info("set_backend: preference saved: %s (active: %s)", backend_id, self._backend.name)
+        return {"ok": True, "restartRequired": backend_id != self._backend.name}
+
+    def restart_app(self):
+        """Close the window; main() relaunches Hyperagent after cleanup."""
+        logger.info("restart_app: restart requested (backend switch)")
+        self.restart_requested = True
+        window = self._pool._window
+        if window is None:
+            return False
+        threading.Thread(target=window.destroy, daemon=True).start()
+        return True
+
     def get_changelog(self, version=None):
         """Return parsed changelog for an agent version, or None.
 
         If no version is passed, resolves the current CLI version so the badge
         can request its own release notes. Opening the changelog counts as
-        seeing it, so the resolved version is recorded as acknowledged — this
+        seeing it, so the resolved version is recorded as acknowledged - this
         clears the badge's "what's new" cue on the next ready transition.
         """
         if not version:
@@ -558,14 +682,28 @@ class HyperagentAPI:
             logger.warning("clipboard write failed: %s", e)
             return False
 
-    def get_plan_usage(self):
-        """Run the agent's usage command and parse plan credits percentage.
+    def get_plan_usage(self, auto=False):
+        """Return plan usage for the plan chip.
 
-        The parser below reads kiro-cli's /usage output format.
+        Backends with usage_via_session pull it by running /usage on a hidden
+        session (plan_usage.py). Otherwise the agent's usage command runs and
+        the parser below reads kiro-cli's /usage output format; that shell-out
+        only runs on a manual refresh, so `auto` (the app-start pull) skips it.
+        Agents with neither return the newest plan-usage report any tab has
+        received (`rateLimit`), or ok=False when none has arrived yet.
         """
+        if self._backend.usage_via_session:
+            logger.info("get_plan_usage: pulling via /usage (auto=%s)", bool(auto))
+            return plan_usage.get_plan_usage(self._backend)
+        if auto:
+            return {"ok": False, "skipped": True}
         argv = self._backend.usage_command()
         if not argv:
-            return {"ok": False, "error": "Usage not available for %s" % self._backend.display_name}
+            reports = [c._rate_limit for c in self._pool._clients.values()
+                       if getattr(c, "_rate_limit", None)]
+            if reports:
+                return {"ok": True, "rateLimit": max(reports, key=lambda r: r.get("receivedAt") or 0)}
+            return {"ok": False, "error": "No usage report from %s yet" % self._backend.display_name}
 
         try:
             si = subprocess.STARTUPINFO()
@@ -598,7 +736,7 @@ class HyperagentAPI:
                     detail += " | at or over plan limit"
                 # kiro-cli's /usage now reports the true used value even when it
                 # exceeds the plan total, so the raw number carries the overage
-                # itself — no "+" marker needed to signal at-or-over-plan.
+                # itself - no "+" marker needed to signal at-or-over-plan.
                 used_str = f"{used:.1f}" if used != int(used) else str(int(used))
                 total_str = str(int(total))
                 return {"ok": True, "used_pct": used_pct, "used": used_str, "total": total_str, "detail": detail, "at_cap": at_cap}
@@ -637,7 +775,7 @@ class HyperagentAPI:
         return results
 
     def semantic_search(self, query, top_k=5):
-        """Search hyperspace by meaning — direct call to the RAG engine."""
+        """Search hyperspace by meaning - direct call to the RAG engine."""
         try:
             import sys
             hypervisor_dir = str(HYPERSPACE_ROOT / ".hypervisor")
@@ -754,13 +892,16 @@ class HyperagentAPI:
         """List sessions by reading metadata directly from the filesystem.
 
         Visibility is derived from kiro-cli's own session metadata (parent link
-        + transcript content), not from preferences.json ownership — the prefs
+        + transcript content), not from preferences.json ownership - the prefs
         mirror is subject to cross-process write races that drop real sessions.
         Subagent children and empty scratch sessions are excluded; the active
         session and explicitly-owned sessions always show.
         """
         if self._backend.check_auth() is AUTH_NO:
-            return {"sessions": [], "active": None, "auth_required": True}
+            return {"sessions": [], "active": None, "auth_required": True,
+                    "auth_hint": self._backend.auth_error_hint}
+        if self._backend.lists_sessions_over_acp:
+            return self._list_sessions_acp()
         try:
             sessions_dir = SESSIONS_DIR
             if not sessions_dir.exists():
@@ -833,13 +974,205 @@ class HyperagentAPI:
             logger.error(f"list_sessions error: {e}")
             return {"sessions": [], "active": None}
 
+    def _rpc_client(self):
+        """A connected ACP client for session-management requests, preferring
+        the active tab."""
+        clients = [self._pool.active_client] + list(self._pool._clients.values())
+        for client in clients:
+            if client is not None and client._sockfile and client._state in ("ready", "prompting"):
+                return client
+        return None
+
+    def _list_sessions_acp(self):
+        """Sidebar list from the agent's ACP session/list, scoped to this workspace."""
+        client = self._rpc_client()
+        if client is None:
+            return {"sessions": [], "active": self._acp._session_id}
+        project_cwd = self._norm_cwd(PORTAL_ROOT)
+        prefs = self._acp._load_prefs()
+        saved_titles = prefs.get("sessionTitles", {})
+        open_ids = {c._session_id for c in self._pool._clients.values() if c._session_id}
+        now = datetime.now(timezone.utc)
+        sessions, cursor = [], None
+        # Bounded paging: the sidebar only needs recent history.
+        for _ in range(4):
+            params = {"cwd": str(PORTAL_ROOT).replace("\\", "/")}
+            if cursor:
+                params["cursor"] = cursor
+            result = client.request_sync("session/list", params, timeout=15)
+            if not isinstance(result, dict) or "error" in result:
+                logger.warning("list_sessions(acp): session/list failed: %s", result)
+                break
+            for entry in result.get("sessions") or []:
+                sid = entry.get("sessionId")
+                if not sid or self._norm_cwd(entry.get("cwd", "")) != project_cwd:
+                    continue
+                title = saved_titles.get(sid) or entry.get("title") or "(no title)"
+                if len(title) > 40:
+                    title = title[:40].rstrip() + "..."
+                updated = entry.get("updatedAt") or ""
+                sessions.append({
+                    "id": sid, "age": self._relative_age(updated, now),
+                    "title": title, "msgs": "",
+                    # A session open in another tab cannot be loaded twice.
+                    "locked": sid in open_ids and sid != self._acp._session_id,
+                    "_updated": updated,
+                })
+            cursor = result.get("nextCursor")
+            if not cursor:
+                break
+        sessions.sort(key=lambda s: s.get("_updated", ""), reverse=True)
+        for s in sessions:
+            del s["_updated"]
+        return {"sessions": sessions, "active": self._acp._session_id}
+
+    @staticmethod
+    def _merge_turn_ends(messages, session_id):
+        """Insert saved turn-end records after the turn whose user prompt they match."""
+        records = list((read_prefs().get("turnEnds") or {}).get(session_id) or [])
+        if not records:
+            return messages
+        out, pending = [], None
+
+        def flush():
+            nonlocal pending
+            if pending is not None:
+                out.append({"role": "turnend", "data": pending["data"]})
+                pending = None
+
+        for m in messages:
+            if m.get("role") == "user":
+                flush()
+                key = prompt_key(m.get("text"))
+                for i, r in enumerate(records):
+                    if r.get("key") == key:
+                        pending = records.pop(i)
+                        break
+            out.append(m)
+        flush()
+        return out
+
+    @staticmethod
+    def _replay_to_messages(updates):
+        """Convert session/load replay notifications into history messages."""
+        messages = []
+        tools = {}  # toolCallId -> its tool message, so later updates can refine it
+        for update in updates or []:
+            kind = update.get("sessionUpdate")
+            content = update.get("content") if isinstance(update.get("content"), dict) else {}
+            if kind in ("user_message_chunk", "agent_message_chunk", "agent_thought_chunk"):
+                role = {"user_message_chunk": "user", "agent_message_chunk": "agent"}.get(kind, "thought")
+                # Subagent output is shown in the thought element, not the main transcript.
+                if role == "agent" and parent_tool_use_id(update):
+                    role = "thought"
+                text = content.get("text", "") if content.get("type", "text") == "text" else ""
+                if not text:
+                    continue
+                if messages and messages[-1].get("role") == role and "text" in messages[-1]:
+                    messages[-1]["text"] += text
+                else:
+                    messages.append({"role": role, "text": text, "ts": None})
+            elif kind == "tool_call":
+                tool_id = update.get("toolCallId", "")
+                if tool_name_of(update) == "Skill" or skill_name_of(update):
+                    info = skill_info(skill_name_of(update) or "skill")
+                    msg = {"role": "skill", "name": info.get("name", "skill"),
+                           "description": info.get("description", "")}
+                    tools[tool_id] = msg
+                    messages.append(msg)
+                    continue
+                msg = {"role": "tool", "name": update.get("title") or tool_name_of(update) or "tool",
+                       "tool": tool_name_of(update),
+                       "toolUseId": tool_id, "status": update.get("status") or "completed",
+                       "input": tool_input_of(update) or None, "output": None}
+                tools[tool_id] = msg
+                messages.append(msg)
+            elif kind == "tool_call_update" and update.get("toolCallId", "") in tools:
+                msg = tools[update["toolCallId"]]
+                if msg["role"] == "skill":
+                    if skill_name_of(update):
+                        info = skill_info(skill_name_of(update))
+                        msg.update(name=info.get("name"), description=info.get("description", ""))
+                    continue
+                if update.get("title"):
+                    msg["name"] = update["title"]
+                if update.get("status"):
+                    msg["status"] = update["status"]
+                if tool_input_of(update):
+                    msg["input"] = tool_input_of(update)
+                output = HyperagentAPI._tool_output_text(update)
+                if output:
+                    msg["output"] = output
+        for msg in messages:
+            if "text" in msg:
+                msg["text"] = msg["text"].strip()
+        return [m for m in messages if m.get("role") not in ("user", "agent") or m.get("text")]
+
+    @staticmethod
+    def _tool_output_text(update):
+        """Readable output of a tool_call_update: rawOutput, else its text content blocks."""
+        raw = update.get("rawOutput")
+        if isinstance(raw, str):
+            return raw
+        if isinstance(raw, list):
+            texts = [part.get("text", "") for part in raw if isinstance(part, dict) and part.get("type") == "text"]
+            if any(texts):
+                return "\n".join(texts)
+        texts = []
+        for item in update.get("content") or []:
+            inner = item.get("content") if isinstance(item, dict) else None
+            if isinstance(inner, dict) and inner.get("type") == "text" and inner.get("text"):
+                texts.append(inner["text"])
+        return "\n".join(texts) or None
+
+    @staticmethod
+    def _replay_plan(updates):
+        """Entries of the last plan in a replay, or None."""
+        plans = [u.get("entries") for u in updates or [] if u.get("sessionUpdate") == "plan"]
+        return plans[-1] if plans else None
+
+    def _load_with_replay(self, client, session_id, on_result):
+        """session/load on an ACP-listed backend: collect the replayed history,
+        push it to the tab, then hand the load result to `on_result`."""
+        client._replay_capture = []
+
+        def on_loaded(result):
+            updates, client._replay_capture = client._replay_capture or [], None
+            try:
+                replayed = self._replay_to_messages(updates)
+                if self._backend.display_name.startswith("Claude"):
+                    # The replay starts at the newest compaction; the transcript still holds the rest.
+                    path = transcript_path(session_id, PORTAL_ROOT)
+                    heads = tuple(compact_summary_heads(path))
+                    # The generated summary replays as a user message; it is not the user's.
+                    replayed = [m for m in replayed
+                                if not (m.get("role") == "user" and heads and m.get("text", "").startswith(heads))]
+                    replayed = read_earlier_history(path) + replayed
+                client._push_js("__acpSessionLoaded", {
+                    "sessionId": session_id,
+                    "messages": self._merge_turn_ends(replayed, session_id),
+                    "plan": self._replay_plan(updates),
+                })
+            finally:
+                on_result(result)
+
+        def on_timeout():
+            client._replay_capture = None
+            on_result({"error": {"message": "no response after %ds" % client.LOAD_TIMEOUT}})
+
+        client._request("session/load", {
+            "sessionId": session_id,
+            "cwd": str(PORTAL_ROOT).replace("\\", "/"),
+            "mcpServers": [],
+        }, on_loaded, timeout=client.LOAD_TIMEOUT, on_timeout=on_timeout)
+
     @staticmethod
     def _norm_cwd(value):
         """Canonicalize a session cwd so comparisons ignore separator style.
 
         Sessions are created over ACP with a forward-slash cwd, but kiro-cli
         rewrites the path to the platform's native separators before persisting
-        it to session metadata — so it reads back with backslashes on Windows.
+        it to session metadata - so it reads back with backslashes on Windows.
         Comparing the raw strings therefore matches nothing. Fold to forward
         slashes, drop any trailing separator, and lowercase (Windows paths are
         case-insensitive, and drive-letter casing varies by caller).
@@ -882,6 +1215,10 @@ class HyperagentAPI:
                 titles = prefs.get("sessionTitles", {})
                 titles[sid] = new_title
                 prefs["sessionTitles"] = titles
+                # A user rename outranks any title the agent assigns later.
+                renamed = set(prefs.get("renamedSessions", []))
+                renamed.add(sid)
+                prefs["renamedSessions"] = sorted(renamed)
             update_prefs(mutate)
             for tab_id, client in self._pool._clients.items():
                 if client._session_id == session_id:
@@ -900,18 +1237,40 @@ class HyperagentAPI:
         for tab_id, client in self._pool._clients.items():
             if tab_id != self._pool._active_tab and client._session_id == session_id:
                 logger.warning("load_session: session %s already in tab=%s", session_id[:8], tab_id[:6])
-                self._acp._push_js("__acpError", {
-                    "error": "Session already open in another tab"
+                # The tab already shows its loading block; settle it.
+                self._acp._push_js("__acpSessionLoadFailed", {
+                    "sessionId": session_id,
+                    "error": "Session already open in another tab",
                 })
                 return
         threading.Thread(
-            target=self._load_session_async, args=(session_id,), daemon=True
+            target=self._load_session_guarded, args=(session_id,), daemon=True
         ).start()
+
+    def _load_session_guarded(self, session_id):
+        """Run a sidebar load; an exception still settles the tab's loading block."""
+        try:
+            self._load_session_async(session_id)
+        except Exception as e:
+            logger.exception("load_session: %s failed", session_id[:8])
+            self._acp._push_js("__acpSessionLoadFailed", {"sessionId": session_id, "error": str(e)})
+            self._acp._state = "ready"
+            self._acp._push_state()
 
     def delete_session(self, session_id):
         """Delete a session by removing its files directly."""
         if session_id == self._acp._session_id:
             return False
+        if self._backend.lists_sessions_over_acp:
+            client = self._rpc_client()
+            result = client.request_sync("session/delete", {"sessionId": session_id}) if client else None
+            if not isinstance(result, dict) or "error" in result:
+                logger.warning("delete_session(acp) %s failed: %s", session_id[:8], result)
+                return False
+            self._acp._unregister_owned_session(session_id)
+            update_prefs(lambda p: (p.get("turnEnds") or {}).pop(session_id, None))
+            logger.info("delete_session(acp): %s", session_id[:8])
+            return True
         try:
             sessions_dir = SESSIONS_DIR
             for f in sessions_dir.glob(f"{session_id}*"):
@@ -926,6 +1285,9 @@ class HyperagentAPI:
 
     def get_session_history(self, session_id):
         """Read messages from a session's JSONL file."""
+        if self._backend.lists_sessions_over_acp:
+            # History arrives as a session/load replay; see _load_with_replay.
+            return []
         sessions_dir = SESSIONS_DIR
         jsonl_file = sessions_dir / f"{session_id}.jsonl"
         if not jsonl_file.exists():
@@ -1027,26 +1389,49 @@ class HyperagentAPI:
         self._acp._state = "starting"
         self._acp._push_state()
 
+        if self._backend.lists_sessions_over_acp:
+            client = self._acp
+
+            def on_acp_load(result):
+                try:
+                    if isinstance(result, dict) and "error" in result:
+                        err = result["error"]
+                        err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+                        logger.error("sidebar load failed: %s", result)
+                        client._push_js("__acpSessionLoadFailed", {"sessionId": session_id, "error": err_msg})
+                    else:
+                        client._set_session_id(session_id)
+                        client._capture_and_push_models(result)
+                        client._apply_preferred_model()
+                finally:
+                    client._state = "ready"
+                    client._push_state()
+
+            self._load_with_replay(client, session_id, on_acp_load)
+            return
+
         history = self.get_session_history(session_id)
         self._acp._push_js("__acpSessionLoaded", {"sessionId": session_id, "messages": history})
 
         throwaway_to_clean = [None]
 
         def on_load_result(result):
-            if isinstance(result, dict) and "error" in result:
-                err = result["error"]
-                err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
-                logger.error(f"sidebar load failed: {result}")
-                self._acp._push_js("__acpError", {"error": f"Failed to load session: {err_msg}", "source": "jsonrpc"})
-            else:
-                self._acp._session_id = session_id
-                self._acp._save_session_id(session_id)
-            # Reap on both outcomes — a failed load leaves the scratch session
-            # on disk just the same, where it surfaces as an empty list entry.
-            self._acp._reap_scratch_session(throwaway_to_clean[0])
-            throwaway_to_clean[0] = None
-            self._acp._state = "ready"
-            self._acp._push_state()
+            try:
+                if isinstance(result, dict) and "error" in result:
+                    err = result["error"]
+                    err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+                    logger.error(f"sidebar load failed: {result}")
+                    self._acp._push_js("__acpError", {"error": f"Failed to load session: {err_msg}", "source": "jsonrpc"})
+                else:
+                    self._acp._session_id = session_id
+                    self._acp._save_session_id(session_id)
+                # Reap on both outcomes - a failed load leaves the scratch session
+                # on disk just the same, where it surfaces as an empty list entry.
+                self._acp._reap_scratch_session(throwaway_to_clean[0])
+                throwaway_to_clean[0] = None
+            finally:
+                self._acp._state = "ready"
+                self._acp._push_state()
 
         def on_new_done(result):
             throwaway_id = result.get("sessionId") if isinstance(result, dict) else None

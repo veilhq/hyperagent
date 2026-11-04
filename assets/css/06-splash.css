@@ -1,6 +1,7 @@
 /* ===== Hyperagent: Splash Screen ===== */
 
 .ha-splash {
+  --splash-tone: var(--comp);
   position: fixed;
   inset: 0;
   z-index: var(--z-splash);
@@ -26,14 +27,14 @@
   justify-content: center;
   width: 48px;
   height: 48px;
-  background: var(--comp);
+  background: var(--splash-tone);
   opacity: 0;
   animation: ha-splash-in var(--motion-slow) ease var(--motion-tick) forwards;
 }
 
 .ha-splash-icon {
-  width: var(--icon-3xl);
-  height: var(--icon-3xl);
+  width: var(--icon-xl);
+  height: var(--icon-xl);
   color: var(--bg);
 }
 
@@ -43,28 +44,56 @@
 }
 
 .ha-splash-loading {
-  font-size: 0.6rem;
-  font-weight: var(--fw-bold);
+  font-size: var(--fs-mono);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-dim);
-}
-
-.ha-splash-pct {
-  font-size: 0.75rem;
-  font-weight: var(--fw-bold);
-  color: var(--accent);
-  letter-spacing: 0.05em;
+  letter-spacing: var(--track-caps);
+  color: var(--text-muted);
 }
 
 .ha-splash-blink {
   width: 6px;
   height: 6px;
-  background: var(--comp);
-  animation: splashBlink 1s step-end infinite; /* off-scale: blink rhythm */
+  background: var(--splash-tone);
+  animation: splashBlink var(--period-blink) step-end infinite; /* off-scale: blink rhythm */
 }
 
 @keyframes splashBlink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
 }
+
+/* ---- per-tab loading / load-failed block ----
+   The tab's own content while it starts or loads a session, built from the
+   splash's flag, legend, and blink so it reads as the same object. */
+.tab-loading,
+.tab-load-failed {
+  --splash-tone: var(--comp);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+}
+
+/* Fades out when the tab is ready, matching the boot splash's exit. */
+.tab-loading {
+  opacity: 1;
+  transition: opacity var(--motion-medium) var(--ease);
+}
+.tab-loading.tab-loading-exit {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tab-load-error {
+  font-size: var(--fs-mono);
+  color: var(--text-muted);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.tab-load-error:empty { display: none; }
+
+/* History rendered while the agent still connects stays hidden behind the
+   loading block until the tab is ready. */
+.tab-connecting > :not(.tab-loading) { display: none; }

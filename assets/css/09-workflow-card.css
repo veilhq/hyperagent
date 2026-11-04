@@ -1,0 +1,86 @@
+/* ===== Workflow card (anchored at the bottom of the sidebar) =====
+   Hairline frame, flat; the state word carries the only color. */
+
+.sidebar-workflows {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 60%;
+  overflow-y: auto;
+  padding: 0 var(--space-2) var(--space-2);
+}
+.sidebar-workflows:empty { display: none; }
+.workflow-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  border: var(--border-hair) solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.workflow-card[hidden] { display: none; }
+.workflow-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--fs-mono);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+  cursor: pointer;
+  user-select: none;
+  border-bottom: var(--border-hair) solid var(--border);
+}
+.workflow-card-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-bright); }
+.workflow-card-state { color: var(--text-muted); }
+.workflow-card[data-state="running"] .workflow-card-state,
+.workflow-card[data-state="stopping"] .workflow-card-state { color: var(--live); }
+.workflow-card[data-state="completed"] .workflow-card-state { color: var(--success); }
+.workflow-card[data-state="stopped"] .workflow-card-state,
+.workflow-card[data-state="failed"] .workflow-card-state { color: var(--warning); }
+.workflow-card-close {
+  background: none;
+  border: 0;
+  padding: 0 var(--space-1);
+  font-size: var(--fs-mono);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.workflow-card-close:hover { color: var(--interactive); }
+.workflow-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  overflow-y: auto;
+}
+.workflow-card.collapsed .workflow-card-body { display: none; }
+.workflow-card-desc { font-size: var(--fs-mono); color: var(--text-muted); line-height: var(--lh-ui); }
+.workflow-card-facts { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.workflow-card-agents { display: flex; flex-direction: column; gap: var(--space-1); }
+.workflow-card-phase {
+  font-size: var(--fs-mono);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+}
+.workflow-card-agent { display: flex; align-items: center; gap: var(--space-2); font-size: var(--fs-mono); color: var(--text); }
+.workflow-card-agent[data-state="done"] { color: var(--text-muted); }
+.workflow-card-agent-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workflow-card-agent-tokens { color: var(--text-dim); }
+.workflow-card-actions { display: flex; justify-content: flex-end; }
+.workflow-card-result {
+  margin: 0;
+  padding: var(--space-2);
+  max-height: 160px;
+  overflow: auto;
+  background: var(--bg);
+  border: var(--border-hair) solid var(--border);
+  border-radius: var(--radius);
+  font-size: var(--fs-mono);
+  color: var(--text);
+  white-space: pre-wrap;
+}

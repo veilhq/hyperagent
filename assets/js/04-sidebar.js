@@ -75,7 +75,7 @@ function startRename(sessionId, el) {
       var p = pywebview.api.rename_session(sessionId, newTitle);
       if (p && typeof p.catch === 'function') {
         p.catch(function () {
-          if (window.HvToast) window.HvToast.show({ variant: 'error', message: 'rename failed — session unchanged' });
+          if (window.HvToast) window.HvToast.show({ variant: 'error', message: 'rename failed - session unchanged' });
         });
       }
     }
@@ -109,14 +109,18 @@ function refreshSessions() {
   pywebview.api.list_sessions().then(function(data) {
     sessionList.innerHTML = '';
     if (data && data.auth_required) {
-      sessionList.innerHTML = '<div style="padding:0.8rem 1rem;color:var(--comp);font-size:0.65rem;">Not logged in — run kiro-cli login</div>';
+      sessionList.innerHTML = '';
+      var authMsg = document.createElement('div');
+      authMsg.style.cssText = 'padding:0.8rem 1rem;color:var(--comp);font-size: var(--fs-mono);';
+      authMsg.textContent = data.auth_hint || 'Not logged in - run kiro-cli login';
+      sessionList.appendChild(authMsg);
       return;
     }
     if (!data || !data.sessions.length) {
-      sessionList.innerHTML = '<div style="padding:0.8rem 1rem;color:var(--text-dim);font-size:0.65rem;">No sessions</div>';
+      sessionList.innerHTML = '<div style="padding:0.8rem 1rem;color:var(--text-dim);font-size: var(--fs-mono);">No sessions</div>';
       return;
     }
-    // Get session IDs already open in tabs — skip those from the history list
+    // Get session IDs already open in tabs - skip those from the history list
     var openIds = window._getOpenSessionIds ? window._getOpenSessionIds() : {};
     var rendered = 0;
     data.sessions.forEach(function(s, i) {
@@ -155,7 +159,7 @@ function refreshSessions() {
       rendered++;
     });
     if (rendered === 0) {
-      sessionList.innerHTML = '<div style="padding:0.8rem 1rem;color:var(--text-dim);font-size:0.65rem;">All sessions open as tabs</div>';
+      sessionList.innerHTML = '<div style="padding:0.8rem 1rem;color:var(--text-dim);font-size: var(--fs-mono);">All sessions open as tabs</div>';
     }
   });
 }
@@ -169,17 +173,12 @@ window.__acpSessionsChanged = function(data) {
 };
 
 function loadSession(id) {
-  // Block updates until history render completes
+  // Hold back stream updates and sends until the load settles. The loading
+  // block is the tab's content until the history push replaces it or a load
+  // failure replaces it with Retry; the backend sends one or the other for
+  // every load, and both clear the hold.
   _loadingHistory = true;
-  // Capture the tab that initiated the load so the timeout resets the right state
-  var loadTabId = activeTabId;
-  _loadingHistoryTimeout = setTimeout(function() {
-    if (activeTabId === loadTabId) {
-      _loadingHistory = false;
-    } else if (loadTabId && tabs[loadTabId] && tabs[loadTabId].renderState) {
-      tabs[loadTabId].renderState._loadingHistory = false;
-    }
-  }, 10000);
+  showTabLoading(msgs, 'Loading session');
   pywebview.api.load_session(id);
 }
 
@@ -189,22 +188,12 @@ function openInNewTab(sessionId, title) {
     if (!tabId) return; // error pushed from backend
     _addTabToUI(tabId, title || 'New Chat', sessionId);
     switchTab(tabId);
-    // Show loading splash immediately (don't wait for backend state push)
-    _showLoadingSplash();
+    // Unless history already arrived, the new tab shows its loading block.
+    var box = tabs[tabId] && tabs[tabId].msgsEl;
+    if (box && tabHasNoContent(box)) showTabLoading(box, 'Loading session');
     // Refresh session list to remove the now-open session
     refreshSessions();
   });
-}
-
-function _showLoadingSplash() {
-  if (document.getElementById('ha-splash')) return;
-  var splash = document.createElement('div');
-  splash.id = 'ha-splash';
-  splash.className = 'ha-splash';
-  splash.innerHTML = '<div class="ha-splash-flag"><svg class="ha-splash-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35.02 35.02" fill="currentColor"><path d="M13.58,20.85c.19,0,.28-.23.15-.36,0,0-5.08-5.08-6.1-6.11-.11-.11-.27-.14-.42-.09L.34,17.01c-.45.18-.45.82,0,1l7.05,2.79c.11.04.22.06.33.06.98,0,5.85,0,5.85,0Z"/><path d="M20.85,27.42v-6.3c0-.12-.1-.21-.21-.21h-6.26c-.12,0-.21.1-.21.21v6.3s0,.03-.01.05l2.85,7.21c.18.45.82.45,1,0l2.85-7.21s-.01-.03-.01-.05Z"/><path d="M34.68,17.01l-7.87-3.11c-2.6-1.03-4.66-3.08-5.68-5.68L18.01.34c-.18-.45-.82-.45-1,0l-2.85,7.21s.01.03.01.05v6.3c0,.12.1.21.21.21h6.09c.27,0,.52.11.71.3,1.14,1.14,5.26,5.26,6.2,6.2.12.12.29.15.44.09l6.85-2.71c.45-.18.45-.82,0-1Z"/></svg></div>'
-    + '<div class="ha-splash-loading">Loading session history</div>'
-    + '<div class="ha-splash-pct" id="ha-splash-pct">0%</div>';
-  document.body.appendChild(splash);
 }
 
 function deleteSession(id, el) {
@@ -227,7 +216,7 @@ function deleteSession(id, el) {
 
 // Keyboard shortcuts
 document.addEventListener('keydown', function(e) {
-  // Ctrl+Shift+B: debug — cycle the error bar through its states then hide.
+  // Ctrl+Shift+B: debug - cycle the error bar through its states then hide.
   // Checked before the plain Ctrl+B toggle below; with Shift held e.key is 'B'.
   if (e.ctrlKey && e.shiftKey && (e.key === 'B' || e.key === 'b')) {
     e.preventDefault();
@@ -248,8 +237,14 @@ document.addEventListener('keydown', function(e) {
   if (e.ctrlKey && e.key === 'b') { e.preventDefault(); toggleSidebar(); }
   // Ctrl+N: new tab (was in-place newSession; tabs are the primary UX now)
   if (e.ctrlKey && e.key === 'n') { e.preventDefault(); if (typeof createTab === 'function') createTab(); else newSession(); }
-  // f: toggle fullscreen (when not in input, and no modifier — avoid clashing with Ctrl+F search)
-  if (e.key === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey && document.activeElement && document.activeElement.tagName !== 'TEXTAREA') { e.preventDefault(); pywebview.api.toggle_fullscreen(); }
+  // f: toggle fullscreen (when not typing, and no modifier - avoid clashing with Ctrl+F search).
+  // Suppress whenever focus is in any text-entry context (prompt textarea, tab-rename input,
+  // or any contenteditable) so a literal lowercase 'f' can be typed into titles and fields.
+  if (e.key === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    var ae = document.activeElement;
+    var typing = ae && (ae.tagName === 'TEXTAREA' || ae.tagName === 'INPUT' || ae.isContentEditable);
+    if (!typing) { e.preventDefault(); pywebview.api.toggle_fullscreen(); }
+  }
 });
 
 // Expose for inline onclick in shell.html

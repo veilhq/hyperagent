@@ -7,7 +7,8 @@
    - Python pushes __acpModels({currentModelId, availableModels, defaultModelId})
      after session/new, session/load, session/set_model.
    - availableModels[i] = {modelId, name, description}
-   - defaultModelId = value of kiro-cli's chat.defaultModel setting (global).
+   - defaultModelId = the agent's global default model (kiro-cli's
+     chat.defaultModel; `model` in Claude Code's user settings).
 */
 (function () {
   "use strict";
@@ -22,10 +23,12 @@
   // "Other" until we add an explicit rule.
   function groupFor(id) {
     if (!id) return "Other";
-    if (id === "auto") return "Auto";
+    if (id === "auto" || id === "default") return "Auto";
+    if (id === "opus" || id === "sonnet" || id === "haiku" || id === "fable") return "Latest";
     if (id.indexOf("claude-opus") === 0) return "Claude Opus";
     if (id.indexOf("claude-sonnet") === 0) return "Claude Sonnet";
     if (id.indexOf("claude-haiku") === 0) return "Claude Haiku";
+    if (id.indexOf("claude-fable") === 0) return "Claude Fable";
     if (id.indexOf("gpt-") === 0) return "GPT";
     if (id.indexOf("deepseek") === 0) return "DeepSeek";
     if (id.indexOf("minimax") === 0) return "MiniMax";
@@ -35,7 +38,7 @@
   }
 
   var GROUP_ORDER = [
-    "Auto", "Claude Opus", "Claude Sonnet", "Claude Haiku",
+    "Auto", "Latest", "Claude Opus", "Claude Sonnet", "Claude Haiku", "Claude Fable",
     "GPT", "DeepSeek", "MiniMax", "GLM", "Qwen", "Other",
   ];
 
@@ -51,7 +54,7 @@
     var btn = document.getElementById("model-picker-label");
     if (btn) btn.textContent = latest.currentModelId ? shortName(latest.currentModelId) : "model";
     var defEl = document.getElementById("model-picker-default");
-    if (defEl) defEl.textContent = latest.defaultModelId || "—";
+    if (defEl) defEl.textContent = latest.defaultModelId || "\u2014";
   }
 
   function renderDropdown() {
@@ -118,10 +121,10 @@
       rate.className = "model-picker-item-rate";
       var rm = model.rateMultiplier;
       // Tier the rate visually so expensive models stand out:
-      //   <0.5   cheap    (accent — green by default)
+      //   <0.5   cheap    (accent - green by default)
       //   0.5-1.5 normal   (muted)
       //   1.5-2.0 warm     (amber)
-      //   >=2.0  premium  (comp — red by default)
+      //   >=2.0  premium  (comp - red by default)
       var tier = "normal";
       if (rm < 0.5) tier = "cheap";
       else if (rm >= 2.0) tier = "premium";
@@ -136,7 +139,7 @@
 
     if (model.modelId === latest.defaultModelId) {
       var badge = document.createElement("span");
-      badge.className = "model-picker-item-default-badge";
+      badge.className = "label-badge model-picker-item-default-badge";
       badge.textContent = "default";
       meta.appendChild(badge);
     } else {
@@ -144,7 +147,7 @@
       setDefault.className = "model-picker-set-default";
       setDefault.type = "button";
       setDefault.textContent = "set default";
-      setDefault.setAttribute("data-tooltip", "Make this the kiro-cli global default (chat.defaultModel)");
+      setDefault.setAttribute("data-tooltip", "Make this the default model for new sessions (global agent setting)");
       setDefault.addEventListener("click", function (e) {
         e.stopPropagation();
         onSetDefault(model.modelId, setDefault);
@@ -186,13 +189,13 @@
     window.pywebview.api.set_default_model(modelId).then(function (ok) {
       if (ok) {
         if (window.HvToast) window.HvToast.success("Default model set to " + shortName(modelId));
-        // Backend broadcasts __acpModels with updated defaultModelId — no manual refresh needed.
+        // Backend broadcasts __acpModels with updated defaultModelId - no manual refresh needed.
       } else {
-        if (window.HvToast) window.HvToast.error("Failed to update kiro-cli default");
+        if (window.HvToast) window.HvToast.error("Failed to set the default model");
         if (btnEl) { btnEl.disabled = false; btnEl.textContent = "set default"; }
       }
     }).catch(function (err) {
-      if (window.HvToast) window.HvToast.error("Failed to update kiro-cli default: " + err);
+      if (window.HvToast) window.HvToast.error("Failed to set the default model: " + err);
       if (btnEl) { btnEl.disabled = false; btnEl.textContent = "set default"; }
     });
   }
@@ -222,7 +225,7 @@
     if (Array.isArray(data.availableModels) && data.availableModels.length) {
       latest.availableModels = data.availableModels;
     }
-    // defaultModelId may be null if kiro-cli settings read failed — preserve prior value in that case.
+    // defaultModelId may be null if kiro-cli settings read failed - preserve prior value in that case.
     if (data.defaultModelId != null) latest.defaultModelId = data.defaultModelId;
     updateButtonLabel();
     if (isOpen()) renderDropdown();
@@ -240,7 +243,7 @@
   }
 
   // Wait for both DOM and pywebview bridge before seeding. The bridge attaches
-  // asynchronously — the shared 00-core.js pattern is to poll for pywebview.api.
+  // asynchronously - the shared 00-core.js pattern is to poll for pywebview.api.
   function whenReady(fn) {
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", fn);

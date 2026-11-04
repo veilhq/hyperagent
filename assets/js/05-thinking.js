@@ -38,7 +38,7 @@ function setThinkingColorForTool(name) {
       n.indexOf('web_search') > -1 || n.indexOf('knowledge') > -1 || n.indexOf('get_') > -1 ||
       n.indexOf('list_') > -1 || n.indexOf('introspect') > -1) {
     setThinkingTargetColor(root.getPropertyValue('--cool').trim() || '#00cccc');
-  } else if (n.indexOf('write') > -1 || n.indexOf('shell') > -1 || n.indexOf('aws') > -1 ||
+  } else if (n.indexOf('write') > -1 || n.indexOf('edit') > -1 || n.indexOf('shell') > -1 || n.indexOf('aws') > -1 ||
            n.indexOf('create') > -1 || n.indexOf('update') > -1 || n.indexOf('move_') > -1 ||
            n.indexOf('delete') > -1 || n.indexOf('add_tag') > -1 || n.indexOf('migrate') > -1) {
     setThinkingTargetColor(root.getPropertyValue('--warm').trim() || '#ffb000');

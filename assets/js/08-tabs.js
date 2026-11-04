@@ -28,8 +28,7 @@ function _newRenderState() {
     taskPanelCollapsed: false,
     // History loading state (per-tab)
     _loadingHistory: false,
-    _loadingHistoryTimeout: null,
-    // Thought stream state (per-tab) — reasoning-model agent_thought_chunk
+    // Thought stream state (per-tab) - reasoning-model agent_thought_chunk
     // stream. Kept per-tab so concurrent sessions don't share the same
     // <pre> element or char count.
     currentThoughtEl: null,
@@ -37,7 +36,7 @@ function _newRenderState() {
     currentThoughtCountEl: null,
     thoughtCharCount: 0,
     thoughtIdleTimer: null,
-    // Status-bar metrics (per-tab) — session credits/tokens/turns and the
+    // Status-bar metrics (per-tab) - session credits/tokens/turns and the
     // context-usage percentage. These were plain globals in 00-core.js
     // shared across every tab; isolating them here (plus the resync in
     // switchTab()) stops one tab's turn from updating the badge bar while
@@ -46,7 +45,9 @@ function _newRenderState() {
     sessionTokensIn: 0,
     sessionTokensOut: 0,
     sessionTurns: 0,
-    ctxPercentage: null
+    ctxPercentage: null,
+    // Command view turn (per-tab): the slash command whose reply is held for its full-page view
+    commandTurn: null
   };
 }
 
@@ -70,7 +71,6 @@ function _saveRenderState(tabId) {
     taskPanelCollapsed: taskPanel ? taskPanel.classList.contains('collapsed') : false,
     // History loading state
     _loadingHistory: _loadingHistory,
-    _loadingHistoryTimeout: _loadingHistoryTimeout,
     // Thought stream state
     currentThoughtEl: currentThoughtEl,
     currentThoughtBodyEl: currentThoughtBodyEl,
@@ -82,7 +82,8 @@ function _saveRenderState(tabId) {
     sessionTokensIn: sessionTokensIn,
     sessionTokensOut: sessionTokensOut,
     sessionTurns: sessionTurns,
-    ctxPercentage: ctxPercentage
+    ctxPercentage: ctxPercentage,
+    commandTurn: commandTurn
   };
 }
 
@@ -104,7 +105,6 @@ function _loadRenderState(tabId) {
   taskDescription = rs.taskDescription;
   // Restore history loading state
   _loadingHistory = rs._loadingHistory;
-  _loadingHistoryTimeout = rs._loadingHistoryTimeout;
   // Restore thought stream globals
   currentThoughtEl = rs.currentThoughtEl;
   currentThoughtBodyEl = rs.currentThoughtBodyEl;
@@ -117,12 +117,13 @@ function _loadRenderState(tabId) {
   sessionTokensOut = rs.sessionTokensOut;
   sessionTurns = rs.sessionTurns;
   ctxPercentage = rs.ctxPercentage;
+  commandTurn = rs.commandTurn || null;
 }
 
 // Push the currently-loaded tab's status metrics (session credits/tokens/
 // turns + context meter) into the shared badge-bar DOM. Must be called
 // after _loadRenderState() so the globals it reads are already the target
-// tab's values. Mirrors _syncSkillStripToActiveTab()'s role for skills.
+// tab's values. Mirrors _syncSkillsToActiveTab()'s role for skills.
 function _syncStatusMetricsToActiveTab() {
   if (typeof updateStatusCenter === 'function') updateStatusCenter();
   if (ctxPercentage == null) {
@@ -133,7 +134,7 @@ function _syncStatusMetricsToActiveTab() {
 }
 
 // Update task panel DOM to reflect the active tab's task state.
-// Called only on switchTab — NOT during background context swaps.
+// Called only on switchTab - NOT during background context swaps.
 function _syncTaskPanelToActiveTab() {
   var rs = tabs[activeTabId] && tabs[activeTabId].renderState;
   if (!rs) rs = _newRenderState();
@@ -217,8 +218,7 @@ function createTab() {
 
   // Reuse rule: only one live welcome allowed at a time. If any existing tab
   // is still promptless (welcome node present, no messages sent), switch to
-  // it instead of spawning another empty tab. Prevents two welcome canvases
-  // racing for the singleton WebGL refs in 06-welcome.js.
+  // it instead of spawning another empty tab.
   var tabIds = Object.keys(tabs);
   for (var i = 0; i < tabIds.length; i++) {
     var t = tabs[tabIds[i]];
@@ -232,17 +232,6 @@ function createTab() {
     if (!tabId) return; // limit reached, error pushed from backend
     _addTabToUI(tabId, 'New Chat');
     switchTab(tabId);
-    // Mount the WebGL2 noise field behind the welcome. requestAnimationFrame
-    // ensures the tab's msgsEl has laid out (display swap from switchTab has
-    // taken effect) before we read its dimensions.
-    var host = tabs[tabId] && tabs[tabId].msgsEl;
-    if (host) {
-      requestAnimationFrame(function() {
-        if (typeof startWelcomeNoise === 'function' && host.querySelector('.welcome')) {
-          startWelcomeNoise(host);
-        }
-      });
-    }
   });
 }
 
@@ -256,7 +245,7 @@ function _addTabToUI(tabId, title, sessionId) {
   var mainLayout = document.querySelector('.main-layout');
   mainLayout.appendChild(msgsContainer);
 
-  // Create sidebar tab item — 3-column grid: [chip] [title] [close]
+  // Create sidebar tab item - 3-column grid: [chip] [title] [close]
   var tabEl = document.createElement('div');
   tabEl.className = 'nav-tab sidebar-tab-item';
   tabEl.setAttribute('data-tab-id', tabId);
@@ -312,18 +301,19 @@ function switchTab(tabId) {
   // Load the new tab's render state
   _loadRenderState(tabId);
 
-  // Rebuild the shared topbar skill strip from this tab's own activeSkills
-  // map — clears badges left over from the previously active tab and
-  // surfaces any skills that activated while this tab was in the background.
-  if (window._syncSkillStripToActiveTab) window._syncSkillStripToActiveTab();
+  // Redraw the shared skills chip from this tab's own activeSkills map -
+  // drops the previous tab's skills and surfaces any that activated while
+  // this tab was in the background.
+  if (window._syncSkillsToActiveTab) window._syncSkillsToActiveTab();
 
   // Push this tab's own session credits/tokens/turns and context-usage
-  // percentage into the shared badge bar — otherwise the bar keeps
+  // percentage into the shared badge bar - otherwise the bar keeps
   // showing whichever tab last finished a turn instead of the active tab.
   _syncStatusMetricsToActiveTab();
 
   // Sync task panel DOM to the new active tab's task state
   _syncTaskPanelToActiveTab();
+  if (window._syncWorkflowCards) window._syncWorkflowCards();
 
   // Swap the global `msgs` reference to point to this tab's container
   msgs = tabs[tabId].msgsEl;
@@ -337,7 +327,7 @@ function switchTab(tabId) {
   }
 
   // Update the global `state` variable to match this tab's state
-  // This is critical — send() and cancel() check this global
+  // This is critical - send() and cancel() check this global
   var tabState = tabs[tabId].state || 'ready';
   state = tabState;
   statusEl.textContent = tabState;
@@ -408,7 +398,7 @@ function closeTab(tabId) {
 
   _updateTabBadge();
 
-  // The closed tab's session (if any) is no longer "open" — surface it back
+  // The closed tab's session (if any) is no longer "open" - surface it back
   // in the Sessions list immediately instead of waiting for the sidebar to
   // be toggled closed/reopened.
   if (typeof refreshSessions === 'function' && sidebar && sidebar.classList.contains('open')) {
@@ -421,38 +411,7 @@ function _escTabHtml(str) {
 }
 
 function _showWelcomeInTab(container) {
-  var w = document.createElement('div');
-  w.className = 'welcome noise-field';
-  w.innerHTML = '<svg class="welcome-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35.02 35.02" fill="currentColor"><path d="M13.58,20.85c.19,0,.28-.23.15-.36,0,0-5.08-5.08-6.1-6.11-.11-.11-.27-.14-.42-.09L.34,17.01c-.45.18-.45.82,0,1l7.05,2.79c.11.04.22.06.33.06.98,0,5.85,0,5.85,0Z"/><path d="M20.85,27.42v-6.3c0-.12-.1-.21-.21-.21h-6.26c-.12,0-.21.1-.21.21v6.3s0,.03-.01.05l2.85,7.21c.18.45.82.45,1,0l2.85-7.21s-.01-.03-.01-.05Z"/><path d="M34.68,17.01l-7.87-3.11c-2.6-1.03-4.66-3.08-5.68-5.68L18.01.34c-.18-.45-.82-.45-1,0l-2.85,7.21s.01.03.01.05v6.3c0,.12.1.21.21.21h6.09c.27,0,.52.11.71.3,1.14,1.14,5.26,5.26,6.2,6.2.12.12.29.15.44.09l6.85-2.71c.45-.18.45-.82,0-1Z"/></svg>'
-    + '<span class="welcome-text"></span>'
-    + '<div class="welcome-prompts"></div>';
-  var greetingEl = w.querySelector('.welcome-text');
-  if (window.HvGreeting) {
-    window.HvGreeting.applyTo(greetingEl);
-  } else {
-    greetingEl.textContent = 'ready when you are.';
-  }
-  var chips = w.querySelector('.welcome-prompts');
-  welcomePrompts.forEach(function(p) {
-    var chip = document.createElement('button');
-    chip.className = 'welcome-chip';
-    if (typeof p === 'string') {
-      chip.textContent = p;
-      chip.onclick = function() { input.value = p; send(); };
-    } else {
-      chip.textContent = p.text;
-      chip.onclick = function() { if (window[p.action]) window[p.action](); };
-    }
-    chips.appendChild(chip);
-  });
-  container.appendChild(w);
-  // Mount the welcome noise field (WI-113 Phase 6). Deferred to next paint so
-  // layout is complete before HvNoiseField reads container dimensions, and
-  // pass the tab container so startWelcomeNoise finds the .welcome inside it
-  // (default host is #messages, which is empty in tab mode).
-  requestAnimationFrame(function() {
-    if (typeof startWelcomeNoise === 'function') startWelcomeNoise(container);
-  });
+  container.appendChild(buildWelcome());
 }
 
 // --- Get open session IDs (for sidebar filtering) ---
@@ -516,7 +475,7 @@ function _markDone(data) {
 
 // Helper: show a transient toast notification.
 // Delegates to window.HvToast (canonical ecosystem toast from 00-core.js
-// initToasts, WI-113 Phase 9). Kept as _showToast for internal callers in
+// initToasts). Kept as _showToast for internal callers in
 // this file; new call sites should prefer window.HvToast.show(msg) directly.
 function _showToast(message) {
   if (window.HvToast) {
@@ -528,7 +487,7 @@ function _showToast(message) {
 window.__acpUpdate = function(update) {
   var tabId = update && update._tabId;
 
-  // Update tab indicator state — only if tab is actually prompting
+  // Update tab indicator state - only if tab is actually prompting
   if (tabId && tabs[tabId] && tabs[tabId].state === 'prompting') {
     tabs[tabId].el.classList.add('prompting');
   }
@@ -556,7 +515,7 @@ window.__acpTurnEnd = function(data) {
   if (_isActiveTab(data)) {
     if (_origAcpTurnEnd) _origAcpTurnEnd(data);
   } else if (tabId && tabs[tabId]) {
-    // Background tab execution complete — mark as done and show toast
+    // Background tab execution complete - mark as done and show toast
     _markDone(data);
     _showToast({ variant: 'success', message: 'Execution complete: ' + (tabs[tabId].title || 'Tab') });
     _withTabContext(tabId, function() {
@@ -571,6 +530,23 @@ window.__acpStateChange = function(data) {
   // Register initial tab on first push with _tabId
   if (tabId && !_initialTabRegistered) {
     _registerInitialTab(tabId);
+  }
+
+  // Pull plan usage once, when the first tab's agent is up.
+  if (data && data.state === 'ready' && !_planUsageAutoPulled && typeof refreshPlanCredits === 'function') {
+    _planUsageAutoPulled = true;
+    refreshPlanCredits(true);
+  }
+
+  // Per-tab loading block: an empty tab shows it while its agent starts, and
+  // it goes once the tab is ready or crashed (a session load replaces it first).
+  if (tabId && tabs[tabId] && tabs[tabId].msgsEl) {
+    var box = tabs[tabId].msgsEl;
+    if (data.state === 'starting') {
+      if (tabHasNoContent(box) && !activeTabLoading(box)) showTabLoading(box, 'Starting agent');
+    } else if (data.state === 'ready' || data.state === 'crashed') {
+      clearTabLoading(box);
+    }
   }
 
   // Update tab state
@@ -618,7 +594,7 @@ window.__acpSessionIdChanged = function(data) {
 
 window.__acpSessionTitle = function(data) {
   var tabId = data && data._tabId;
-  // Respect a manual rename — a generated title arriving after the user typed
+  // Respect a manual rename - a generated title arriving after the user typed
   // their own name must not overwrite it.
   if (tabId && tabs[tabId] && tabs[tabId].titleLocked) return;
   // Update sidebar tab title
@@ -665,18 +641,16 @@ window.__acpSessionLoaded = function(data) {
 window.__acpSkillActivation = function(data) {
   if (_isActiveTab(data)) {
     if (_origAcpSkillActivation) _origAcpSkillActivation(data);
-    // Active tab (or legacy no-tab-routing case): surface immediately in
-    // the shared topbar strip. _origAcpSkillActivation only tracks the
-    // badge in activeSkills — appending is this wrapper's job so the
-    // shared strip always reflects just the active tab's skills.
-    if (window._syncSkillStripToActiveTab) window._syncSkillStripToActiveTab();
+    // Active tab (or legacy no-tab-routing case): redraw the shared chip now
+    // and flag the new activation. _origAcpSkillActivation only tracks the
+    // skill in activeSkills.
+    if (window._syncSkillsToActiveTab) window._syncSkillsToActiveTab(true);
   } else {
     var tabId = data && data._tabId;
     if (tabId && tabs[tabId]) {
-      // Background tab: track the badge in that tab's own activeSkills
-      // map (via context swap) but do not touch the shared strip — it
-      // will be rebuilt from this tab's activeSkills when the user
-      // switches to it (see switchTab()).
+      // Background tab: track the skill in that tab's own activeSkills map
+      // (via context swap) but leave the shared chip alone - it is redrawn
+      // from this tab's map when the user switches to it (see switchTab()).
       _withTabContext(tabId, function() {
         if (_origAcpSkillActivation) _origAcpSkillActivation(data);
       });
@@ -710,7 +684,7 @@ window.__acpError = function(data) {
       prefix = (tabs[tabId].title || 'Tab') + ': ';
     }
     var msg = String(data.error);
-    // Trim very long errors so the toast stays readable — full text remains in
+    // Trim very long errors so the toast stays readable - full text remains in
     // the errorBar and in the hyperagent.log file.
     if (msg.length > 240) msg = msg.slice(0, 237) + '...';
     window.HvToast.show({ variant: 'error', message: prefix + msg });
@@ -774,6 +748,7 @@ document.addEventListener('keydown', function(e) {
 // The backend creates an initial tab on startup. We register it here when we
 // get the first state change with a _tabId.
 var _initialTabRegistered = false;
+var _planUsageAutoPulled = false;
 
 function _registerInitialTab(tabId) {
   if (_initialTabRegistered) return;
@@ -782,7 +757,7 @@ function _registerInitialTab(tabId) {
   // The original #messages div becomes this tab's container
   var originalMsgs = document.getElementById('messages');
 
-  // Create sidebar tab item for initial tab — 3-column grid: [chip] [title] [close]
+  // Create sidebar tab item for initial tab - 3-column grid: [chip] [title] [close]
   var tabEl = document.createElement('div');
   tabEl.className = 'nav-tab sidebar-tab-item active';
   tabEl.setAttribute('data-tab-id', tabId);
@@ -870,7 +845,7 @@ function _makeTabTitleEditable(tabEl, tabId) {
         tabEl.classList.remove('title-pending');
         _ensureEditedMark(tabEl);
       }
-      // A pending generation for this tab is now moot — drop its activity badge.
+      // A pending generation for this tab is now moot - drop its activity badge.
       if (window.HaActivity) window.HaActivity.clear('title:' + tabId);
       // Persist via rename_session
       if (window.pywebview && window.pywebview.api && window.pywebview.api.rename_session) {

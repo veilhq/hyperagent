@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Hyperagent — Standalone AI chat app powered by Kiro CLI's ACP protocol.
+Hyperagent - Standalone AI chat app powered by Kiro CLI's ACP protocol.
 
 Runs as an independent PyWebView process. Can be launched from Hypervisor
 or directly (Start menu, taskbar shortcut, etc.).
@@ -24,18 +24,18 @@ from helpers import (
     PREFS_FILE,
     PORTAL_ROOT,
     SESSIONS_DIR,
+    _write_prefs_atomic,
     logger,
 )
 from acp_pool import ACPClientPool
 from bridge_api import HyperagentAPI
 
 # Auto-build: regenerate generated_html.py from current source before import
-import subprocess, sys
-subprocess.run(
-    [sys.executable, str(Path(__file__).parent / "build.py")],
-    cwd=str(Path(__file__).parent),
-)
+import sys
+from launch_build import build_or_warn, with_notice
+_build_notice = build_or_warn(Path(__file__).parent, "Hyperagent")
 from generated_html import HTML
+HTML = with_notice(HTML, _build_notice)
 
 
 # ---------------------------------------------------------------------------
@@ -130,12 +130,12 @@ def _cleanup_stale_locks(sessions_dir):
             # Check if the process's parent (bridge) is still alive
             parent_pid = _get_parent_pid(pid)
             if parent_pid is not None:
-                # Parent exists — check if it's still running
+                # Parent exists - check if it's still running
                 handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, parent_pid)
                 if handle:
                     kernel32.CloseHandle(handle)
-                    continue  # Parent alive — lock is valid
-            # Parent dead or unknown — orphan. Kill the kiro-cli process and remove lock.
+                    continue  # Parent alive - lock is valid
+            # Parent dead or unknown - orphan. Kill the kiro-cli process and remove lock.
             handle = kernel32.OpenProcess(PROCESS_TERMINATE, False, pid)
             if handle:
                 kernel32.TerminateProcess(handle, 1)
@@ -193,7 +193,7 @@ def _get_parent_pid(pid):
 
 
 # ---------------------------------------------------------------------------
-# MCP Service Fallback — launch the shared HTTP MCP server if Hypervisor
+# MCP Service Fallback - launch the shared HTTP MCP server if Hypervisor
 # hasn't already started it. Whichever app starts first owns the process.
 # ---------------------------------------------------------------------------
 
@@ -243,7 +243,7 @@ def _ensure_mcp_service():
         _probe.connect(("127.0.0.1", 8321))
         _probe.close()
         logger.info(
-            "port 8321 is open but no lock file — another instance is starting, "
+            "port 8321 is open but no lock file - another instance is starting, "
             "waiting for lock"
         )
         for _wait in range(20):  # up to 10 seconds
@@ -253,22 +253,22 @@ def _ensure_mcp_service():
                     lines = _MCP_LOCK_FILE.read_text(encoding="utf-8").strip().split("\n")
                     pid = int(lines[0])
                     logger.info(
-                        "lock appeared (PID %d) — attaching to existing service", pid
+                        "lock appeared (PID %d) - attaching to existing service", pid
                     )
                     return
                 except (ValueError, OSError, IndexError):
                     pass
-        # Lock never appeared — stray process on port, cannot safely launch
+        # Lock never appeared - stray process on port, cannot safely launch
         logger.warning(
-            "port 8321 held by unknown process with no lock file — "
+            "port 8321 held by unknown process with no lock file - "
             "skipping launch to avoid conflict"
         )
         return
     except (OSError, ConnectionRefusedError):
-        pass  # port free — proceed to launch
+        pass  # port free - proceed to launch
 
-    # Launch — NOT detached, so it dies when Hyperagent exits
-    logger.info("launching MCP HTTP service (fallback — Hypervisor not running)")
+    # Launch - NOT detached, so it dies when Hyperagent exits
+    logger.info("launching MCP HTTP service (fallback - Hypervisor not running)")
     _mcp_service_proc = _subprocess.Popen(
         [_sys.executable, str(_MCP_SERVER_SCRIPT), "--http"],
         cwd=str(_MCP_SERVER_SCRIPT.parent),
@@ -335,7 +335,7 @@ def main():
 
     # Clean up empty sessions (0 messages) left over from scratch session protocol.
     # Only delete sessions NOT owned by the user. Ownership is the union of the
-    # explicit ownedSessions set and every session that carries a title — a
+    # explicit ownedSessions set and every session that carries a title - a
     # titled session was created and prompted by the user, so it is protected
     # even if it never made it into ownedSessions (registration drift).
     sessions_dir = SESSIONS_DIR
@@ -380,7 +380,7 @@ def main():
                     logger.info("startup: reconciled ownedSessions with titles (+%d)",
                                 len(merged) - len(owned))
             if changed:
-                PREFS_FILE.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
+                _write_prefs_atomic(prefs)
                 logger.info("startup: cleared stale tab associations from preferences")
         except Exception:
             pass
@@ -423,6 +423,17 @@ def main():
     pool.save_tab_state()
     pool.stop_all()
     _stop_mcp_service()
+
+    # A backend switch from the UI closes the window and asks for a relaunch;
+    # the new process resolves the backend from preferences.json.
+    if getattr(api, "restart_requested", False):
+        logger.info("relaunching Hyperagent")
+        _subprocess.Popen(
+            [_sys.executable, str(Path(__file__).resolve())],
+            cwd=str(Path(__file__).resolve().parent),
+            creationflags=_subprocess.DETACHED_PROCESS | _subprocess.CREATE_NEW_PROCESS_GROUP,
+            close_fds=True,
+        )
 
 
 if __name__ == "__main__":

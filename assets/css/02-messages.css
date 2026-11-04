@@ -3,44 +3,33 @@
 #messages {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-1-25) var(--space-5);
+  padding: var(--space-5) var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: var(--space-0-3);
+  gap: var(--space-1);
 }
-/* When the welcome screen is present, drop container padding so the noise
-   field canvas (mounted inside .welcome via HvNoiseField, WI-113 Phase 6)
-   renders edge-to-edge — matches pre-refresh visual where the canvas
-   covered the full #messages area. Padding restores automatically once
-   welcome is torn down and real messages appear. */
-#messages:has(> .welcome),
-.tab-messages:has(> .welcome) {
-  padding: 0;
-}
-
 #messages.no-animate .msg { animation: none; }
 
 /* ---- Gap rhythm: more space at turn boundaries ---- */
-.msg-user { margin-top: 1rem; }
+.msg-user { margin-top: var(--space-4); }
 .msg-user:first-child { margin-top: 0; }
-.msg-agent + .msg-user { margin-top: 1rem; }
-.msg-user + .msg-agent { margin-top: 1rem; }
+.msg-agent + .msg-user { margin-top: var(--space-4); }
+.msg-user + .msg-agent { margin-top: var(--space-4); }
 
 /* ---- Message base ---- */
 .msg {
   max-width: clamp(300px, 90%, 900px);
   padding: var(--space-3) var(--space-4);
-  font-size: var(--fs-h5-6);
-  line-height: 1.7;
+  font-size: var(--fs-mono);
+  line-height: var(--lh-prose);
   white-space: pre-wrap;
   word-wrap: break-word;
   animation: fadeSlideIn var(--motion-base) var(--ease);
   border: var(--border-hair) solid var(--border);
   background: var(--bg-card);
-  transition: transform var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease);
+  transition: border-color var(--motion-fast) var(--ease);
 }
 .msg:hover {
-  transform: translateY(-1px);
   border-color: var(--border-strong);
 }
 
@@ -49,17 +38,16 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  margin-bottom: var(--space-0-3);
+  margin-bottom: var(--space-1);
 }
 .msg-role {
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-bold);
+  font-size: var(--fs-mono);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-dim);
+  letter-spacing: var(--track-label);
+  color: var(--text-muted);
 }
 .msg-time {
-  font-size: var(--fs-micro);
+  font-size: var(--fs-mono);
   color: var(--text-dim);
   opacity: 0;
   transition: opacity var(--motion-fast) var(--ease);
@@ -71,7 +59,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
-  margin-bottom: var(--space-0-3);
+  margin-bottom: var(--space-1);
 }
 .msg-image {
   max-width: 240px;
@@ -81,9 +69,9 @@
   display: block;
 }
 /* Placeholder shown where a prior-turn image could not be rehydrated.
-   Composes with the shared .hv-media-missing primitive; this only sizes it to
+   Composes with the shared .media-missing primitive; this only sizes it to
    the transcript's inline-image footprint. */
-.msg-images .hv-media-missing {
+.msg-images .media-missing {
   width: 160px;
   height: 120px;
 }
@@ -95,7 +83,7 @@
   background: var(--bg-surface);
   color: var(--text-bright);
   max-width: clamp(200px, 75%, 600px);
-  padding: var(--space-2) 0.85rem;
+  padding: var(--space-2) var(--space-3);
   position: relative;
 }
 .msg-user::before {
@@ -105,10 +93,14 @@
   left: 0;
   width: 6px;
   height: 6px;
-  background: var(--comp);
+  background: var(--speaker-tone);
 }
-.msg-user .msg-role { color: var(--comp); }
-.msg-user .msg-body { display: block; }
+.msg-user { --speaker-tone: var(--comp); }
+.msg-user .msg-role { color: var(--speaker-tone); }
+.msg-user .msg-body { display: block;
+  font-family: var(--font-body);
+  font-size: var(--fs-prose-ui);
+}
 
 /* ---- Agent messages ---- */
 .msg-agent {
@@ -118,72 +110,80 @@
   position: relative;
 }
 .msg-agent::before {
+  --speaker-tone-dim: var(--accent-dim);
   content: '';
   position: absolute;
   top: 0;
   left: 0;
   width: 6px;
   height: 6px;
-  background: var(--accent-dim);
+  background: var(--speaker-tone-dim);
 }
-.msg-agent .msg-role { color: var(--accent-dim); }
+.msg-agent .msg-role { --speaker-tone-dim: var(--accent-dim); color: var(--speaker-tone-dim); }
 
 /* Message copy button */
 .msg-copy {
   position: absolute;
-  top: var(--space-0-4);
-  right: var(--space-0-4);
+  top: var(--space-2);
+  right: var(--space-2);
   background: var(--bg-surface);
   border: var(--border-hair) solid var(--border);
   color: var(--text-dim);
-  font: 0.55rem/1 var(--font);
-  padding: var(--space-0-2) var(--space-0-4);
+  font: var(--fs-mono)/1 var(--font);
+  padding: var(--space-1) var(--space-2);
   cursor: pointer;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--track-label);
   opacity: 0;
   transition: opacity var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease);
 }
 .msg-agent:hover .msg-copy { opacity: 1; }
-.msg-copy:hover { color: var(--accent); border-color: var(--accent); }
-.msg-copy.copied { color: var(--accent); border-color: var(--accent); }
+.msg-copy:hover { color: var(--interactive); border-color: var(--interactive); }
+.msg-copy.copied { color: var(--success); border-color: var(--success); }
 
 /* ---- Markdown Typography ---- */
 .msg-agent h1, .msg-agent h2, .msg-agent h3 {
-  color: var(--accent);
-  font-size: var(--fs-h5-6);
+  color: var(--text-bright);
+  font-size: var(--fs-mono);
   text-transform: uppercase;
-  margin: var(--space-0-8) 0 var(--space-0-3);
+  margin: var(--space-4) 0 var(--space-1);
 }
-.msg-agent h3 { color: var(--warm); text-transform: none; }
-.msg-agent h4 { color: var(--cool); text-transform: none; font-size: 0.8rem; margin: 0.6rem 0 0.2rem; }
-.msg-agent p { margin: 0.3rem 0; }
-.msg-agent ul, .msg-agent ol { margin: 0.3rem 0; padding-left: 1.2rem; }
-.msg-agent li { margin: 0.15rem 0; }
+.msg-agent h3 { color: var(--text-bright); text-transform: none; }
+.msg-agent h4 { color: var(--text); text-transform: none; font-size: var(--fs-mono); margin: var(--space-2) 0 var(--space-1); }
+.msg-agent p { margin: var(--space-1) 0;
+  font-family: var(--font-body);
+  font-size: var(--fs-prose-ui);
+}
+.msg-agent ul, .msg-agent ol { margin: var(--space-1) 0; padding-left: var(--space-4); }
+.msg-agent li { margin: var(--border-rail) 0;
+  font-family: var(--font-body);
+  font-size: var(--fs-prose-ui);
+}
 .msg-agent strong { color: var(--text-bright); }
 .msg-agent em { color: var(--text-muted); font-style: italic; }
-.msg-agent a { color: var(--accent); text-decoration: none; }
+.msg-agent a { color: var(--interactive); text-decoration: none; }
 .msg-agent a:hover { text-decoration: underline; }
-.msg-agent hr { border: none; border-top: 1px solid var(--border); margin: 0.6rem 0; }
+.msg-agent hr { border: none; border-top: var(--border-hair) solid var(--border); margin: var(--space-2) 0; }
 
 /* Inline code */
 .msg-agent code {
-  background: var(--bg-elevated);
-  padding: var(--space-0-1) 0.35rem;
-  font-size: 0.75rem;
+  background: var(--bg-raised);
+  padding: var(--space-1) var(--space-1);
+  font-size: var(--fs-mono);
   border: var(--border-hair) solid var(--border);
-  color: var(--warm);
+  color: var(--text-bright);
+  font-family: var(--font-code);
 }
 
 /* Code blocks */
 .msg-agent pre {
   background: var(--bg-surface);
   border: var(--border-hair) solid var(--border);
-  padding: var(--space-0-6) var(--space-0-8);
+  padding: var(--space-3) var(--space-4);
   margin: var(--space-2) 0;
   overflow-x: auto;
-  font-size: 0.72rem;
-  line-height: 1.5;
+  font-size: var(--fs-mono);
+  line-height: var(--lh-body);
 }
 .msg-agent pre code {
   background: none;
@@ -199,22 +199,22 @@
 }
 .code-block pre { margin: 0; }
 .code-lang {
+  --code-lang-tone-dim: var(--accent-dim);
   position: absolute;
   top: 0;
   right: 0;
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-bold);
+  font-size: var(--fs-mono);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: var(--space-0-2) var(--space-2);
+  letter-spacing: var(--track-label);
+  padding: var(--space-1) var(--space-2);
   color: var(--bg);
-  background: var(--accent-dim);
+  background: var(--code-lang-tone-dim);
   opacity: 0;
   transition: opacity var(--motion-fast) var(--ease);
 }
 .code-block:hover .code-lang { opacity: 1; }
 
-/* Code block copy button — sits to the left of the language label */
+/* Code block copy button - sits to the left of the language label */
 .code-copy {
   position: absolute;
   top: 0;
@@ -222,11 +222,11 @@
   background: var(--bg-surface);
   border: var(--border-hair) solid var(--border);
   color: var(--text-dim);
-  font: 0.55rem/1 var(--font);
-  padding: var(--space-0-2) var(--space-0-4);
+  font: var(--fs-mono)/1 var(--font);
+  padding: var(--space-1) var(--space-2);
   cursor: pointer;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--track-label);
   opacity: 0;
   z-index: 2;
   transition: opacity var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease);
@@ -235,8 +235,8 @@
 .code-block .code-lang ~ .code-copy,
 .code-block:has(.code-lang) .code-copy { right: 3.2rem; }
 .code-block:hover .code-copy { opacity: 1; }
-.code-copy:hover { color: var(--accent); border-color: var(--accent); }
-.code-copy.copied { color: var(--accent); border-color: var(--accent); }
+.code-copy:hover { color: var(--interactive); border-color: var(--interactive); }
+.code-copy.copied { color: var(--success); border-color: var(--success); }
 
 /* ---- Tables ---- */
 .table-wrap {
@@ -247,38 +247,39 @@
 .msg-agent table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 0.72rem;
+  font-size: var(--fs-mono);
 }
 .msg-agent th {
   text-align: left;
-  padding: 0.35rem var(--space-0-6);
-  border-bottom: var(--border-hair) solid var(--accent-border);
-  color: var(--warm);
-  font-weight: var(--fw-bold);
+  padding: var(--space-1) var(--space-3);
+  border-bottom: var(--border-hair) solid var(--border-strong);
+  color: var(--text-bright);
   text-transform: uppercase;
-  font-size: 0.6rem;
-  letter-spacing: 0.05em;
+  font-size: var(--fs-mono);
+  letter-spacing: var(--track-label);
 }
 .msg-agent td {
-  padding: var(--space-0-3) var(--space-0-6);
+  padding: var(--space-1) var(--space-3);
   border-bottom: var(--border-hair) solid var(--border);
   color: var(--text);
 }
-.msg-agent tr:hover td { background: var(--accent-glow); }
+.msg-agent tr:hover td { background: var(--interactive-wash); }
 
 /* ---- Blockquotes ---- */
 .msg-agent blockquote {
-  border-left: var(--border-rail) solid var(--accent-border);
-  padding: var(--space-0-3) var(--space-0-8);
+  border-left: var(--border-rail) solid var(--border-strong);
+  padding: var(--space-1) var(--space-4);
   margin: var(--space-2) 0;
   color: var(--text-muted);
   background: var(--bg-surface);
   font-style: italic;
+  font-family: var(--font-body);
+  font-size: var(--fs-prose-ui);
 }
 
 /* ---- Typing indicator (blinking box) ---- */
 .typing-indicator {
-  padding: var(--space-0-6) var(--space-4);
+  padding: var(--space-3) var(--space-4);
   animation: fadeSlideIn var(--motion-base) var(--ease);
 }
 .typing-indicator .thinking-dot {
@@ -287,9 +288,9 @@
   opacity: 1;
   width: 6px;
   height: 6px;
-  background: var(--comp);
+  background: var(--live);
   border: none;
-  animation: splashBlink 1s step-end infinite; /* off-scale: blink rhythm */
+  animation: splashBlink var(--period-blink) step-end infinite; /* off-scale: blink rhythm */
 }
 
 /* ---- Streaming cursor ---- */
@@ -297,17 +298,17 @@
   display: inline-block;
   width: 5px;
   height: 0.85em;
-  background: var(--accent);
-  margin-left: 2px;
+  background: var(--live);
+  margin-left: var(--border-rail);
   vertical-align: text-bottom;
-  animation: splashBlink 0.6s step-end infinite; /* off-scale: faster blink for streaming state */
+  animation: splashBlink var(--period-blink) step-end infinite; /* off-scale: faster blink for streaming state */
 }
 
 /* ---- Stream word fade-in ---- */
 .stream-word {
   display: inline;
   opacity: 0;
-  animation: wordIn 0.5s ease-out forwards; /* off-scale: tuned for reading cadence */
+  animation: wordIn var(--motion-enter) ease-out forwards; /* off-scale: tuned for reading cadence */
 }
 @keyframes wordIn {
   from { opacity: 0; }
@@ -332,69 +333,32 @@
   align-items: center;
   justify-content: center;
   flex: 1;
-  gap: var(--space-3);
+  gap: var(--space-4);
   color: var(--text-dim);
   z-index: 1;
 }
-/* Noise field canvas — the shared module (HvNoiseField) creates a canvas with
-   .noise-field-canvas + legacy .home-anchor-canvas classes. The primitive
-   rule `.noise-field > canvas` (in 00-primitives.css) provides positioning;
-   we add the fade transition and opacity 0/1 states here so destroyWelcomeNoise
-   (fadeMs > 0) can trigger a smooth exit. Kept `.welcome-canvas` selector for
-   backward-compat with any legacy path that still adds it. */
-.noise-field > canvas,
-.welcome-canvas {
-  opacity: 1;
-  transition: opacity var(--motion-slow) var(--ease);
-}
-.noise-field > canvas.fade-out,
-.welcome-canvas.fade-out { opacity: 0; }
 #messages, .tab-messages { position: relative; }
-.welcome-icon { width: var(--icon-4xl); height: var(--icon-4xl); color: var(--text-dim); opacity: 0; animation: fadeSlideIn var(--motion-slow) var(--ease) 0.1s forwards; } /* 0.1s delay: stagger after canvas init */
-.welcome-text { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0; animation: fadeSlideIn var(--motion-slow) var(--ease) 0.2s forwards; } /* 0.2s delay: stagger after icon */
-/* Kaomoji greeting variant — compound selector beats plain .emote in
-   specificity so the combined fadeSlideIn + emote-glow animation isn't
-   overwritten by .emote's single-animation rule further down. */
-.welcome-text.emote {
-  text-transform: none;
-  letter-spacing: normal;
-  animation: fadeSlideIn var(--motion-slow) var(--ease) var(--motion-base) forwards,
-             emote-glow 8s infinite ease-in-out;
-}
-/* Welcome exit — fade out when first message arrives */
 .welcome.welcome-exit {
   opacity: 0;
-  transform: scale(0.97);
-  transition: opacity var(--motion-fast) var(--ease),
-              transform var(--motion-fast) var(--ease);
+  transition: opacity var(--motion-fast) var(--ease);
 }
-.welcome-prompts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-0-4);
-  justify-content: center;
-  max-width: 500px;
-  margin-top: var(--space-2);
-  opacity: 0;
-  animation: fadeSlideIn var(--motion-slow) var(--ease) 0.35s forwards; /* off-scale delay: stagger after welcome text */
-}
-.welcome-chip {
-  background: var(--bg-card);
-  border: var(--border-hair) solid var(--border);
-  color: var(--text-muted);
-  font: 0.65rem/1.4 var(--font);
-  padding: var(--space-0-4) 0.7rem;
-  cursor: pointer;
-  transition: border-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
-}
-.welcome-chip:hover { border-color: var(--accent); color: var(--accent); }
 
+.welcome-icon {
+  width: calc(var(--icon-xl) * 2);
+  height: calc(var(--icon-xl) * 2);
+  color: var(--brand);
+  opacity: 0;
+  animation: fadeSlideIn var(--motion-slow) var(--ease) calc(var(--motion-stagger) * 2) forwards;
+}
 
 /* ---- ASCII emote glow (palette color cycling) ---- */
 .emote {
   display: inline-block;
-  animation: emote-glow 8s infinite ease-in-out; /* off-scale: slow ambient palette cycle */
+  font-family: var(--font);
+  animation: emote-glow var(--period-ambient) infinite ease-in-out; /* off-scale: slow ambient palette cycle */
 }
+/* Inside a message the emote sits in prose text; keep the mono on its pixel grid. */
+.msg .emote { font-size: var(--fs-mono); }
 
 
 /* ---- Log panel (Check Logs welcome chip) ---- */
@@ -407,19 +371,18 @@
   animation: fadeSlideIn var(--motion-base) var(--ease);
 }
 .log-panel-header {
-  padding: var(--space-0-3) var(--space-0-6);
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-bold);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--fs-mono);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--accent-dim);
+  letter-spacing: var(--track-label);
+  color: var(--text-bright);
   border-bottom: var(--border-hair) solid var(--border);
   background: var(--bg-surface);
 }
 .log-panel-body {
-  padding: var(--space-0-6) var(--space-0-8);
-  font-size: 0.65rem;
-  line-height: 1.5;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--fs-mono);
+  line-height: var(--lh-body);
   color: var(--text-muted);
   overflow-x: auto;
   max-height: 24rem;
@@ -434,16 +397,15 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-0-3) var(--space-0-6);
-  margin: var(--space-0-2) 0;
-  font-size: var(--fs-micro);
+  padding: var(--space-1) var(--space-3);
+  margin: var(--space-1) 0;
+  font-size: var(--fs-mono);
   animation: fadeSlideIn var(--motion-slow) var(--ease);
 }
 .steering-label {
-  font-weight: var(--fw-bold);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-dim);
+  letter-spacing: var(--track-label);
+  color: var(--text-muted);
   white-space: nowrap;
 }
 .steering-files {
@@ -453,15 +415,46 @@
   text-overflow: ellipsis;
 }
 
+/* ---- Compaction card (conversation compacted: trigger, tokens before/after, duration) ---- */
+.compaction-card {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  margin: var(--space-2) 0;
+  background: var(--bg-card);
+  border: var(--border-hair) solid var(--info);
+  border-radius: var(--radius);
+  font-size: var(--fs-mono);
+  color: var(--text-muted);
+  animation: fadeSlideIn var(--motion-slow) var(--ease);
+}
+.compaction-label {
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+  white-space: nowrap;
+}
+.compaction-figures {
+  color: var(--text);
+  white-space: nowrap;
+}
+.compaction-meter {
+  width: calc(var(--space-6) * 2);
+  flex: none;
+}
+.compaction-duration {
+  white-space: nowrap;
+}
+
 
 /* ==================================================================
-   Thought stream (WI-114) — extended-thinking reasoning surface
+   Thought stream (WI-114) - extended-thinking reasoning surface
    ==================================================================
    agent_thought_chunk events accumulate in a collapsed-by-default bar
    under the Agent nameplate. A Bayer-dither indicator (shared HvNoiseField
    module) animates only while chunks are actively arriving; goes static
-   under reduce-motion. Bespoke styles instead of composing .content-section-quiet
-   — the surface is too small for a section-rail treatment and needs its
+   under reduce-motion. Bespoke styles instead of composing .content-section-quiet - the surface is too small for a section-rail treatment and needs its
    own inline silhouette (follows the .ha-cluster-chip precedent from WI-113
    for intentional local overrides on tiny chrome).
    ================================================================== */
@@ -469,40 +462,40 @@
 .msg-thought {
   align-self: flex-start;
   margin: 0;
-  padding: var(--space-0-3) 0;
+  padding: var(--space-1) 0;
   max-width: clamp(300px, 90%, 900px);
-  font-size: var(--fs-micro);
+  font-size: var(--fs-mono);
   color: var(--text-dim);
   animation: fadeSlideIn var(--motion-base) var(--ease);
 }
 
-/* Collapsed bar — always visible, click to expand.
+/* Collapsed bar - always visible, click to expand.
    Deliberately borderless: sits inside the .msg-agent's own border, and a
    second frame would create box-in-box noise. Bar reads as inline meta,
    integrated with the nameplate rhythm above. */
 .msg-thought-bar {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-0-4);
+  gap: var(--space-2);
   padding: 0;
   background: transparent;
   border: none;
   color: var(--text-dim);
-  font: var(--fs-micro)/1.4 var(--font);
+  font: var(--fs-mono)/1.4 var(--font);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--track-label);
   cursor: pointer;
   transition: color var(--motion-fast) var(--ease);
 }
 .msg-thought-bar:hover { color: var(--text-muted); }
 .msg-thought-bar:hover .msg-thought-dither { opacity: 0.7; }
 
-/* Grid activity indicator — a 3×3 grid of accent cells. When the stream is
+/* Grid activity indicator - a 3x3 grid of accent cells. When the stream is
    active, cells pulse in a clockwise chase around the perimeter, tracing
    circular motion within a grid silhouette. Center cell stays empty. Pure
-   CSS animation — no WebGL, no JS lifecycle. The reduce-motion catch-all
+   CSS animation - no WebGL, no JS lifecycle. The reduce-motion catch-all
    in zz-accessibility.css halts the pulse automatically. Grid geometry
-   drives everything — no border-radius, no smooth easing on the chase,
+   drives everything - no border-radius, no smooth easing on the chase,
    preserving the brutalist pixel feel. */
 .msg-thought-dither {
   --cell: 3px;
@@ -516,30 +509,30 @@
   flex-shrink: 0;
 }
 .msg-thought-dither > span {
-  background: var(--accent);
+  background: var(--live);
   opacity: 0.2;
   transition: opacity var(--motion-fast) var(--ease);
 }
-/* Center cell: never lit — keeps the ring silhouette clean */
+/* Center cell: never lit - keeps the ring silhouette clean */
 .msg-thought-dither > span:nth-child(5) {
   opacity: 0;
 }
 
-/* Active state — perimeter chase.
+/* Active state - perimeter chase.
    DOM order is row-major (1..9). Clockwise perimeter starting from top-left
-   is 1 → 2 → 3 → 6 → 9 → 8 → 7 → 4. Each cell gets an animation-delay
+   is 1 -> 2 -> 3 -> 6 -> 9 -> 8 -> 7 -> 4. Each cell gets an animation-delay
    spaced 1/8 of the cycle so brightness sweeps around the ring. */
 .msg-thought[data-active="true"] .msg-thought-dither > span {
-  animation: msg-thought-cell-pulse 1s linear infinite; /* off-scale: 1s perimeter chase cycle, delays are 1/8 divisions */
+  animation: msg-thought-cell-pulse var(--period-blink) linear infinite; /* off-scale: 1s perimeter chase cycle, delays are 1/8 divisions */
 }
 .msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(1) { animation-delay: 0s; }
-.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(2) { animation-delay: 0.125s; }
-.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(3) { animation-delay: 0.25s; }
-.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(6) { animation-delay: 0.375s; }
-.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(9) { animation-delay: 0.5s; }
-.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(8) { animation-delay: 0.625s; }
-.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(7) { animation-delay: 0.75s; }
-.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(4) { animation-delay: 0.875s; }
+.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(2) { animation-delay: calc(var(--period-blink) * 1 / 8); }
+.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(3) { animation-delay: calc(var(--period-blink) * 2 / 8); }
+.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(6) { animation-delay: calc(var(--period-blink) * 3 / 8); }
+.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(9) { animation-delay: calc(var(--period-blink) * 4 / 8); }
+.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(8) { animation-delay: calc(var(--period-blink) * 5 / 8); }
+.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(7) { animation-delay: calc(var(--period-blink) * 6 / 8); }
+.msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(4) { animation-delay: calc(var(--period-blink) * 7 / 8); }
 /* Center cell stays dark even when active */
 .msg-thought[data-active="true"] .msg-thought-dither > span:nth-child(5) {
   animation: none;
@@ -551,13 +544,12 @@
   25%      { opacity: 0.2; }
 }
 
-/* Marker label — reads "thought" in the chip type register */
+/* Marker label - reads "thought" in the chip type register */
 .msg-thought-marker {
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.1em;
+  letter-spacing: var(--track-caps);
 }
 .msg-thought-marker::before {
-  content: '▸ ';
+  content: '\25B8  ';
   display: inline-block;
   transition: transform var(--motion-fast) var(--ease);
 }
@@ -565,25 +557,27 @@
   transform: rotate(90deg);
 }
 
-/* Live char count — dimmer than the marker, monospace tab-friendly */
+/* Live char count - dimmer than the marker, monospace tab-friendly */
 .msg-thought-count {
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
   opacity: 0.7;
 }
-.msg-thought-count::before { content: '· '; opacity: 0.5; }
+.msg-thought-count::before { content: '\00B7  '; opacity: 0.5; }
 
-/* Expanded body — dimmed monospace, no markdown, no fade animation.
+/* Expanded body - dimmed monospace, no markdown, no fade animation.
    Thoughts are stream-of-consciousness; preserve raw formatting. */
 .msg-thought-body {
-  margin: var(--space-0-3) 0 0;
-  padding: var(--space-0-4) var(--space-0-6);
+  margin: var(--space-1) 0 0;
+  padding: var(--space-2) var(--space-3);
   background: var(--bg-surface);
   color: var(--text-muted);
-  font: var(--fs-micro)/1.6 var(--font);
+  line-height: var(--lh-prose);
   white-space: pre-wrap;
   word-wrap: break-word;
   max-height: 24rem;
   overflow-y: auto;
+  font-family: var(--font-body);
+  font-size: var(--fs-prose-sm);
 }
 .msg-thought-body[hidden] { display: none; }

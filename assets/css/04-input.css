@@ -1,7 +1,7 @@
 /* ===== Hyperagent: Input Area ===== */
 
 .input-area {
-  padding: var(--space-1-2) var(--space-1-25);
+  padding: var(--space-5) var(--space-5);
   border-top: var(--border-hair) solid var(--border);
   display: flex;
   align-items: center;
@@ -24,9 +24,9 @@
   position: relative;
   transition: border-color var(--motion-base) var(--ease), color var(--motion-base) var(--ease);
 }
-.input-icon-btn:hover { border-color: var(--accent); color: var(--text-bright); }
+.input-icon-btn:hover { border-color: var(--interactive); color: var(--text-bright); }
 
-/* Attach affordance — gated on the agent's advertised image capability.
+/* Attach affordance - gated on the agent's advertised image capability.
    Hidden until #app carries .image-capable so images are never offered to an
    agent that would reject them. */
 .attach-btn { display: none; }
@@ -39,17 +39,17 @@
   pointer-events: none;
 }
 
-/* Pending-attachment thumbnail strip — sits above the input row, only
+/* Pending-attachment thumbnail strip - sits above the input row, only
    occupies space once it holds chips. */
 .attach-strip {
   display: none;
   flex-wrap: wrap;
   gap: var(--space-2);
-  padding: 0 var(--space-1-25);
+  padding: 0 var(--space-5);
 }
 .attach-strip.has-items {
   display: flex;
-  padding: var(--space-1-2) var(--space-1-25) 0;
+  padding: var(--space-5) var(--space-5) 0;
 }
 .attach-chip {
   position: relative;
@@ -72,18 +72,18 @@
   right: 0;
   width: 16px;
   height: 16px;
-  line-height: 1;
+  line-height: var(--lh-tight);
   border: none;
   background: var(--bg);
   color: var(--text-muted);
   cursor: pointer;
-  font: var(--fs-caption) var(--font);
+  font: var(--fs-mono) var(--font);
   display: flex;
   align-items: center;
   justify-content: center;
   transition: color var(--motion-base) var(--ease);
 }
-.attach-chip-remove:hover { color: var(--warm); }
+.attach-chip-remove:hover { color: var(--error); }
 
 /* Drop target cue while dragging an image over the input wrap. */
 /* Drag-over drop zone: the input grows into a taller, obviously-droppable
@@ -92,12 +92,12 @@
    inline auto-grow height. */
 .input-wrap.drag-over #input {
   min-height: 88px;
-  border: var(--border-hair) dashed var(--accent);
-  box-shadow: 0 0 0 var(--border-hair) var(--accent-border);
-  background: var(--accent-glow);
+  border: var(--border-hair) dashed var(--selected);
+  box-shadow: 0 0 0 var(--border-hair) var(--selected-border);
+  background: var(--selected-wash);
 }
 .input-wrap.drag-over #input::placeholder {
-  color: var(--accent);
+  color: var(--selected);
 }
 
 .input-wrap {
@@ -106,11 +106,11 @@
 }
 
 #input {
-  /* Composes with .form-input — silhouette + focus ring from primitive.
+  /* Composes with .form-input - silhouette + focus ring from primitive.
      Specific: textarea-only dimensions + font shorthand for line-height. */
-  font: var(--fs-label) var(--font);
-  line-height: 1.4;
-  padding: var(--space-0-4) var(--space-0-8);
+  font: var(--fs-mono) var(--font);
+  line-height: var(--lh-ui);
+  padding: var(--space-2) var(--space-4);
   resize: none;
   min-height: 30px;
   max-height: 180px;
@@ -120,25 +120,25 @@
   transition: border-color var(--motion-base) var(--ease), box-shadow var(--motion-base) var(--ease), background var(--motion-base) var(--ease), height var(--motion-tick) var(--ease), min-height var(--motion-base) var(--ease);
 }
 
-/* Send button — composes with .action-button. Specific: accent-glow fill + prompting state. */
+/* Send button - composes with .action-button. Specific: accent-glow fill + prompting state. */
 #send-btn {
-  background: var(--accent-glow);
-  border-color: var(--accent-border);
-  color: var(--accent);
+  background: var(--interactive-wash);
+  border-color: var(--interactive-border);
+  color: var(--interactive);
   padding: 0 var(--space-4);
   height: 30px;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--track-body);
 }
-#send-btn:hover:not(:disabled) { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+#send-btn:hover:not(:disabled) { background: var(--interactive); color: var(--bg); border-color: var(--interactive); }
 #send-btn:disabled { opacity: 0.25; cursor: default; }
-#send-btn:disabled:hover { background: var(--accent-glow); color: var(--accent); }
+#send-btn:disabled:hover { background: var(--interactive-wash); color: var(--interactive); }
 
-/* Cancel button (shown during prompting) — composes with .action-button-danger. Specific: hidden by default + tighter padding. */
+/* Cancel button (shown during prompting) - composes with .action-button-danger. Specific: hidden by default + tighter padding. */
 #cancel-btn {
   display: none;
-  padding: 0 var(--space-0-8);
+  padding: 0 var(--space-4);
   height: 30px;
 }
 .prompting #cancel-btn { display: flex; }
-.prompting #send-btn { border-color: var(--warm); color: var(--warm); }
-.prompting #send-btn:hover:not(:disabled) { background: var(--warm); color: var(--bg); border-color: var(--warm); }
+.prompting #send-btn { border-color: var(--warning); color: var(--warning); }
+.prompting #send-btn:hover:not(:disabled) { background: var(--warning); color: var(--bg); border-color: var(--warning); }

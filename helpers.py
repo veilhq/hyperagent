@@ -1,5 +1,5 @@
 """
-Hyperagent helpers â€” standalone utility functions and shared state.
+Hyperagent helpers - standalone utility functions and shared state.
 
 Contains: kiro-cli binary lookup, model read/write, auth helpers, skill
 metadata cache, title-subprocess inflight tracking, and palette math.
@@ -25,6 +25,7 @@ HYPERSPACE_ROOT = HYPERAGENT_DIR.parent
 PORTAL_ROOT = HYPERSPACE_ROOT.parent
 HYPERVISOR_DIR = HYPERSPACE_ROOT / ".hypervisor"
 SKILLS_DIR = PORTAL_ROOT / ".kiro" / "skills"
+CLAUDE_SKILLS_DIR = PORTAL_ROOT / ".claude" / "skills"
 PREFS_FILE = HYPERAGENT_DIR / "preferences.json"
 ICON_FILE = HYPERAGENT_DIR / "assets" / "hyperagent.ico"
 SESSIONS_DIR = Path(os.environ.get("USERPROFILE", "")) / ".kiro" / "sessions" / "cli"
@@ -46,10 +47,18 @@ def read_prefs():
     """Return the parsed preferences dict, or {} if absent/unreadable."""
     if PREFS_FILE.exists():
         try:
-            return json.loads(PREFS_FILE.read_text(encoding="utf-8"))
+            data = json.loads(PREFS_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+            logger.error("preferences.json is not a JSON object; ignoring it")
         except Exception:
             pass
     return {}
+
+
+def prompt_key(text):
+    """Stable key for matching a saved turn-end record to its user message."""
+    return (text or "").strip()[:80]
 
 
 def update_prefs(mutator):
@@ -61,12 +70,64 @@ def update_prefs(mutator):
     final prefs dict that was written.
     """
     with _PREFS_LOCK:
-        prefs = read_prefs()
+        try:
+            prefs = _read_prefs_strict()
+        except (OSError, ValueError) as e:
+            # Never fall back to {} here: writing that back would wipe the file.
+            logger.error("update_prefs: preferences unreadable, update skipped: %s", e)
+            raise
         result = mutator(prefs)
-        if result is not None:
+        # Only a dict replaces the prefs. Mutators written as lambdas often
+        # return incidental values (dict.pop returns the removed item), which
+        # must never overwrite the file.
+        if isinstance(result, dict):
             prefs = result
-        PREFS_FILE.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
+        _write_prefs_atomic(prefs)
         return prefs
+
+
+# Retries for preferences I/O while another process (a second Hyperagent,
+# antivirus, a sync client) briefly holds the file.
+_PREFS_IO_ATTEMPTS = 5
+_PREFS_IO_BACKOFF = 0.05  # seconds, doubled per attempt
+
+
+def _read_prefs_strict():
+    """Return the prefs dict ({} only when the file is absent); raise if it exists but stays unreadable."""
+    last_error = None
+    for attempt in range(_PREFS_IO_ATTEMPTS):
+        if not PREFS_FILE.exists():
+            return {}
+        try:
+            data = json.loads(PREFS_FILE.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            last_error = e
+            time.sleep(_PREFS_IO_BACKOFF * (2 ** attempt))
+            continue
+        if isinstance(data, dict):
+            return data
+        raise ValueError("preferences.json is not a JSON object")
+    raise last_error
+
+
+def _write_prefs_atomic(prefs):
+    """Write prefs to a per-process temp file, then swap it into place."""
+    tmp = PREFS_FILE.with_name("%s.%d.tmp" % (PREFS_FILE.name, os.getpid()))
+    tmp.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
+    last_error = None
+    for attempt in range(_PREFS_IO_ATTEMPTS):
+        try:
+            os.replace(tmp, PREFS_FILE)
+            return
+        except PermissionError as e:
+            last_error = e
+            time.sleep(_PREFS_IO_BACKOFF * (2 ** attempt))
+    try:
+        tmp.unlink()
+    except OSError:
+        pass
+    logger.error("update_prefs: could not replace preferences.json: %s", last_error)
+    raise last_error
 
 # ---------------------------------------------------------------------------
 # Structured logging (shared ecosystem logger)
@@ -115,7 +176,7 @@ def delete_session_files(session_id):
 
     Used to reap scratch sessions. Loading an existing session over ACP requires
     protocol state that only session/new establishes, so a scratch session is
-    created and discarded on every load â€” and its metadata .json is written
+    created and discarded on every load - and its metadata .json is written
     immediately, which makes it visible in the session list until removed.
     """
     if not session_id:
@@ -131,7 +192,7 @@ def delete_session_files(session_id):
 
 
 # ---------------------------------------------------------------------------
-# Model helpers â€” read/write kiro-cli's chat.defaultModel via `kiro-cli settings`
+# Model helpers - read/write kiro-cli's chat.defaultModel via `kiro-cli settings`
 # ---------------------------------------------------------------------------
 
 def _kiro_settings_run(args, timeout=5):
@@ -243,7 +304,7 @@ def get_kiro_version():
         )
         if r.returncode != 0 or not r.stdout.strip():
             return None
-        # Output: "kiro-cli-chat 2.16.1" â€” extract the version number
+        # Output: "kiro-cli-chat 2.16.1" - extract the version number
         parts = r.stdout.strip().split()
         version = parts[-1] if parts else r.stdout.strip()
         _KIRO_VERSION_CACHE = version
@@ -262,7 +323,7 @@ def invalidate_kiro_version_cache():
 
 # Header line: "Version 2.21.1 (2026-09-03)"
 _CHANGELOG_HEADER_RE = re.compile(r"^Version\s+(\S+)\s+\((\d{4}-\d{2}-\d{2})\)\s*$")
-# Entry line: "  - Fixed: [V3] some text" â€” type is one of the known categories,
+# Entry line: "  - Fixed: [V3] some text" - type is one of the known categories,
 # an optional "[V3]" (or similar) engine tag may lead the text.
 _CHANGELOG_ENTRY_RE = re.compile(
     r"^\s*-\s*(Added|Changed|Fixed|Security|Deprecated):\s*(.*)$"
@@ -285,7 +346,7 @@ def get_kiro_changelog(version):
                         {"type": "Changed", "tag": "V3", "text": "..."}],
         }
 
-    Results are cached per version â€” changelog content is immutable for a
+    Results are cached per version - changelog content is immutable for a
     released version, so a fetch only ever needs to run once per version.
     """
     if not version:
@@ -378,7 +439,7 @@ def get_kiro_all_changelogs():
 
     Shells out to `kiro-cli version --changelog=all` and parses all version
     blocks. Returns a list of dicts (newest-first), or [] on failure. Not
-    cached â€” this is the capture source, meant to run on update events.
+    cached - this is the capture source, meant to run on update events.
     """
     kiro = _find_kiro()
     if not kiro:
@@ -399,7 +460,7 @@ def get_kiro_all_changelogs():
     return _parse_changelog_blocks(r.stdout)
 
 
-# Persistent changelog archive â€” lives in the hypervisor data dir so the
+# Persistent changelog archive - lives in the hypervisor data dir so the
 # hypervisor viewer utility can read it. Hyperagent owns the write side (it
 # detects updates and talks to the CLI); hypervisor only reads.
 CHANGELOG_CACHE_DIR = HYPERVISOR_DIR / "data"
@@ -534,11 +595,14 @@ def _kill_inflight_title_subprocesses():
 # ---------------------------------------------------------------------------
 
 def _load_skill_metadata():
-    """Scan .kiro/skills/*/SKILL.md and extract name + description from frontmatter."""
+    """Read name + description from the active backend's skills (.claude/skills
+    for Claude Code, .kiro/skills otherwise) for the skill cards."""
     skills = {}
-    if not SKILLS_DIR.exists():
+    # Matches ClaudeCodeBackend.name; backends imports helpers, so it can't be imported here.
+    skills_root = CLAUDE_SKILLS_DIR if read_prefs().get("backend") == "claude-code" else SKILLS_DIR
+    if not skills_root.exists():
         return skills
-    for skill_dir in SKILLS_DIR.iterdir():
+    for skill_dir in skills_root.iterdir():
         if not skill_dir.is_dir():
             continue
         skill_file = skill_dir / "SKILL.md"
@@ -564,7 +628,98 @@ def _load_skill_metadata():
 
 
 _SKILL_CACHE = _load_skill_metadata()
-_SKILL_MD_PATTERN = re.compile(r"[/\\]\.kiro[/\\]skills[/\\]([^/\\]+)[/\\]SKILL\.md")
+_SKILL_TITLE_PATTERN = re.compile(r"^Load skill:\s*(\S.*)$")
+_SKILL_MD_PATTERN = re.compile(r"[/\\]\.(?:kiro|claude)[/\\]skills[/\\]([^/\\]+)[/\\]SKILL\.md")
+
+
+# ---------------------------------------------------------------------------
+# Tool-call payload accessors (kiro and Claude Code shapes)
+# ---------------------------------------------------------------------------
+#
+# kiro puts its tool name in _meta.kiro.toolName and uses kiro tool schemas in
+# rawInput (path, operations[], insertLine). The Claude Code adapter puts it in
+# _meta.claudeCode.toolName (plus a top-level `name`) and passes Claude tool
+# schemas through (file_path, old_string, ...), streaming rawInput in pieces
+# across tool_call_update events. These accessors read either shape.
+
+def _meta_block(update, key):
+    meta = update.get("_meta") if isinstance(update, dict) else None
+    block = meta.get(key) if isinstance(meta, dict) else None
+    return block if isinstance(block, dict) else {}
+
+
+def tool_name_of(update):
+    """Agent-native tool name ("Read", "fs_write", ...) or ""."""
+    return (_meta_block(update, "claudeCode").get("toolName")
+            or _meta_block(update, "kiro").get("toolName")
+            or update.get("name") or "")
+
+
+def tool_input_of(update):
+    raw = update.get("rawInput")
+    return raw if isinstance(raw, dict) else {}
+
+
+def parent_tool_use_id(update):
+    """Id of the subagent launch this update belongs to, or None for the main thread."""
+    return _meta_block(update, "claudeCode").get("parentToolUseId")
+
+
+def tool_paths_of(update):
+    """Every file path an update mentions, most specific first."""
+    paths = []
+    for item in update.get("content") or []:
+        if isinstance(item, dict) and item.get("path"):
+            paths.append(item["path"])
+    for loc in update.get("locations") or []:
+        if isinstance(loc, dict) and loc.get("path"):
+            paths.append(loc["path"])
+    raw = tool_input_of(update)
+    for key in ("file_path", "path"):
+        if raw.get(key):
+            paths.append(raw[key])
+    for op in raw.get("operations") or []:
+        if isinstance(op, dict) and op.get("path"):
+            paths.append(op["path"])
+    return paths
+
+
+def tool_line_of(update):
+    """1-based start line an update points at, or None."""
+    raw = tool_input_of(update)
+    if raw.get("insertLine") is not None:
+        try:
+            return int(raw["insertLine"]) + 1
+        except (TypeError, ValueError):
+            pass
+    for loc in update.get("locations") or []:
+        if isinstance(loc, dict) and isinstance(loc.get("line"), int):
+            return loc["line"]
+    return None
+
+
+def skill_name_of(update):
+    """Skill an update loads: Claude's Skill tool input, its "Load skill: name" title, or a SKILL.md path. None if not a skill load."""
+    skill = tool_input_of(update).get("skill") if tool_name_of(update) == "Skill" else None
+    if not (isinstance(skill, str) and skill.strip()):
+        # Later Skill updates may omit the tool name and input but title the call "Load skill: name".
+        match = _SKILL_TITLE_PATTERN.match(update.get("title") or "")
+        skill = match.group(1) if match else None
+    if isinstance(skill, str) and skill.strip():
+        # Namespaced skills arrive as "plugin:name"; the cache is keyed by name.
+        return skill.split(":")[-1].strip()
+    if tool_name_of(update) == "Skill":
+        return None
+    for path in tool_paths_of(update):
+        match = _SKILL_MD_PATTERN.search(path)
+        if match:
+            return match.group(1)
+    return None
+
+
+def skill_info(name):
+    """Display metadata for a skill name, falling back to the bare name."""
+    return _SKILL_CACHE.get(name, {"name": name, "description": ""})
 
 
 # ---------------------------------------------------------------------------
@@ -578,9 +733,9 @@ AUTH_UNKNOWN = None
 
 def _check_auth():
     """Determine kiro-cli auth state. Tri-state return:
-        True  (AUTH_OK)      â€” logged in
-        False (AUTH_NO)      â€” definitively not logged in
-        None  (AUTH_UNKNOWN) â€” could not determine; the .exe was locked
+        True  (AUTH_OK)      - logged in
+        False (AUTH_NO)      - definitively not logged in
+        None  (AUTH_UNKNOWN) - could not determine; the .exe was locked
     """
     delays = (0.25, 0.5, 1.0, 2.0, 4.0)
     locked = False
@@ -608,7 +763,7 @@ def _check_auth():
                     )
                     time.sleep(delay)
                     continue
-                logger.warning("_check_auth: exe locked through full backoff (~7.75s) â€” auth state UNKNOWN")
+                logger.warning("_check_auth: exe locked through full backoff (~7.75s) - auth state UNKNOWN")
                 return AUTH_UNKNOWN
             logger.error("_check_auth error (attempt %d): %s", attempt + 1, e)
             return AUTH_NO

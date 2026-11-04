@@ -1,6 +1,6 @@
 /* ===== Hyperagent: App-Local Variables & Reset =====
    Universal tokens (:root block) and box-sizing reset relocated to
-   .hyperkit/css/tokens.css (WI-142 Phase 1) — loaded before this file.
+   .hyperkit/css/tokens.css (WI-142 Phase 1) - loaded before this file.
    This file now holds only Hyperagent-specific globals: custom cursors,
    cursor companion box, focus ring mirror, scrollbar, shortcuts overlay,
    in-session search bar, and responsive breakpoints. */
@@ -13,7 +13,7 @@ body, body * {
   cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2300ff41' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z'/></svg>") 2 2, auto !important;
   cursor: var(--cursor-default, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2300ff41' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z'/></svg>") 2 2, auto) !important;
 }
-a, button, [role="button"], .session-item, .session-item-title, .session-delete-btn, .search-close, .input-icon-btn, #send-btn, #cancel-btn, .msg-copy, .welcome-chip, .tool-indicator {
+a, button, [role="button"], .session-item, .session-item-title, .session-delete-btn, .search-close, .input-icon-btn, #send-btn, #cancel-btn, .msg-copy, .tool-indicator {
   cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='%2300ff41' stroke='%2300ff41' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z'/></svg>") 2 2, pointer !important;
   cursor: var(--cursor-pointer, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='%2300ff41' stroke='%2300ff41' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z'/></svg>") 2 2, pointer) !important;
 }
@@ -24,62 +24,57 @@ textarea, input[type="text"], input[type="search"] {
 *:disabled { cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23666666' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><path d='m4.9 4.9 14.2 14.2'/></svg>") 10 10, not-allowed !important; }
 
 /* ---- Cursor companion box ---- */
-/* Relocated to Hyperkit (.hyperkit/css/primitives.css) — was byte-identical
+/* Relocated to Hyperkit (.hyperkit/css/primitives.css) - was byte-identical
    between Hypervisor and Hyperagent. Edit there, not here. */
 
 body {
   font-family: var(--font);
-  font-size: 13px;
+  font-size: 14px; /* design-lint: allow - the one root size every app shares; rem scales from it */
   background: var(--bg);
   color: var(--text);
-  line-height: 1.6;
+  line-height: var(--lh-prose);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-::selection { background: var(--accent); color: var(--bg); }
+::selection { background: var(--selected); color: var(--bg); }
 
-/* ---- Focus ring (accessibility) — mirrors Hypervisor's canonical rule.
+/* ---- Focus ring (accessibility) - mirrors Hypervisor's canonical rule.
    Every interactive element that receives keyboard focus gets an accent
    outline. `:focus-visible` (not `:focus`) so mouse clicks don't show it. */
 :focus-visible {
-  outline: var(--border-hair) solid var(--accent);
+  outline: var(--border-hair) solid var(--focus);
   outline-offset: 2px;
 }
 
-::-webkit-scrollbar { width: var(--scrollbar-width); }
-::-webkit-scrollbar-track { background: var(--scrollbar-track); }
-::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border: var(--border-hair) solid var(--bg); }
-::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
-/* ---- Shortcuts overlay — composes with .modal-overlay .modal-panel ----
+/* ---- Shortcuts overlay - composes with .modal-overlay .modal-panel ----
    Primitive provides fullscreen backdrop, blur, visible-fade.
    Specific overrides: darker backdrop (0.85 vs 0.8) + tighter panel size. */
 .shortcuts-overlay {
-  background: rgba(0,0,0,0.85);
+  background: var(--scrim);
   /* z-index bumped from primitive default so shortcuts sits above other modals */
   z-index: var(--z-modal);
 }
 .shortcuts-panel {
-  padding: var(--space-1-2) var(--space-5);
+  padding: var(--space-5) var(--space-5);
   max-width: 340px;
   width: 90%;
 }
 .shortcuts-title {
-  font-size: var(--fs-caption);
-  font-weight: var(--fw-bold);
+  font-size: var(--fs-mono);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--accent);
-  margin-bottom: var(--space-0-8);
+  letter-spacing: var(--track-caps);
+  color: var(--text-bright);
+  margin-bottom: var(--space-4);
 }
-.shortcuts-grid { display: flex; flex-direction: column; gap: 0.35rem; }
-.sc-row { display: flex; align-items: center; gap: var(--space-0-6); font-size: var(--fs-caption); color: var(--text); }
+.shortcuts-grid { display: flex; flex-direction: column; gap: var(--space-1); }
+.sc-row { display: flex; align-items: center; gap: var(--space-3); font-size: var(--fs-mono); color: var(--text); }
 .sc-row kbd {
   /* Aligned hint column with a wider fixed key + smaller text. Base kbd
      silhouette (bg, color) comes from the shared primitive; this context keeps
      the lighter --border frame rather than the primitive's --border-strong. */
-  font-size: 0.6rem;
+  font-size: var(--fs-mono);
   min-width: 60px;
   border-color: var(--border);
 }
@@ -89,7 +84,7 @@ body {
   display: none;
   align-items: center;
   gap: var(--space-2);
-  padding: 0.35rem var(--space-3);
+  padding: var(--space-1) var(--space-3);
   border-bottom: var(--border-hair) solid var(--border);
   background: var(--bg-surface);
   position: fixed;
@@ -105,42 +100,41 @@ body {
   background: var(--bg);
   border: var(--border-hair) solid var(--border);
   color: var(--text-bright);
-  font: var(--fs-label) var(--font);
-  padding: var(--space-0-3) var(--space-0-6);
+  font: var(--fs-mono) var(--font);
+  padding: var(--space-1) var(--space-3);
   outline: none;
 }
-.search-input:focus { border-color: var(--accent); }
-.search-count { font-size: var(--fs-micro); color: var(--text-dim); white-space: nowrap; }
+.search-input:focus { border-color: var(--focus); }
+.search-count { font-size: var(--fs-mono); color: var(--text-dim); white-space: nowrap; }
 .search-close {
   background: none;
   border: none;
   color: var(--text-dim);
-  font-size: var(--fs-hero);
+  font-size: var(--fs-mono);
   cursor: pointer;
-  line-height: 1;
+  line-height: var(--lh-tight);
 }
 .search-close:hover { color: var(--text-bright); }
 
 /* Search hit highlight */
-.msg.search-hit { border-color: var(--accent); background: var(--accent-glow); }
+.msg.search-hit { border-color: var(--selected); background: var(--selected-wash); }
 
 /* ---- Responsive: narrow window ---- */
 @media (max-width: 600px) {
   #messages { padding: var(--space-3); }
-  .msg { max-width: 98%; font-size: 0.75rem; }
+  .msg { max-width: 98%; font-size: var(--fs-mono); }
   .msg-user { max-width: 90%; }
-  .input-area { padding: var(--space-0-6) var(--space-3); }
-  .topbar { padding: var(--space-0-3) var(--space-2); }
+  .input-area { padding: var(--space-3) var(--space-3); }
+  .topbar { padding: var(--space-1) var(--space-2); }
   .ctx-meter-bar { width: 40px; }
   .sidebar.open { width: 180px; }
-  .welcome-prompts { max-width: 90%; }
 }
 
 /* ---- Responsive: wide window ---- */
 @media (min-width: 1200px) {
   .msg { max-width: clamp(400px, 70%, 900px); }
   .msg-user { max-width: clamp(200px, 55%, 600px); }
-  #messages { padding: var(--space-5) 3rem; }
+  #messages { padding: var(--space-5) var(--surface-inset); }
 }
 
 /* ---- Ecosystem radius propagation ----
@@ -150,11 +144,11 @@ body {
 .msg pre,
 .msg code,
 .tool-indicator,
+.tool-detail,
 .tool-header,
 .input-area,
 .input-wrap,
 .input-icon-btn,
-.welcome-chip,
 .session-item,
 .search-bar,
 .model-picker,

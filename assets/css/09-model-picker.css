@@ -1,7 +1,7 @@
 /* =========================================================================
-   Model Picker — topbar dropdown for switching the active kiro-cli model.
+   Model Picker - topbar dropdown for switching the active kiro-cli model.
    Styled to match hypervisor nav-item / menu-dropdown ecosystem patterns.
-   Uses hyperkit tokens throughout — no raw values.
+   Uses hyperkit tokens throughout - no raw values.
    ========================================================================= */
 
 .model-picker {
@@ -10,7 +10,10 @@
   align-items: center;
 }
 
-/* ---- Trigger button — ha-cluster-chip override with interactive state ---- */
+/* The effort picker hides itself when the agent offers no effort setting. */
+.model-picker[hidden] { display: none; }
+
+/* ---- Trigger button - ha-cluster-chip override with interactive state ---- */
 .model-picker-btn {
   display: inline-flex;
   align-items: center;
@@ -18,11 +21,10 @@
   cursor: pointer;
   border: var(--border-hair) solid var(--border-strong);
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text);
   font-family: var(--font);
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.06em;
+  font-size: var(--fs-mono);
+  letter-spacing: var(--track-label);
   text-transform: uppercase;
   padding: 0 var(--space-2);
   height: 20px;
@@ -32,13 +34,13 @@
               background var(--motion-fast) var(--ease);
 }
 .model-picker-btn:hover {
-  color: var(--accent);
-  border-color: var(--accent);
+  color: var(--interactive);
+  border-color: var(--interactive);
 }
 .model-picker-btn.model-picker-open {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--accent-glow);
+  color: var(--selected);
+  border-color: var(--selected);
+  background: var(--selected-wash);
 }
 
 .model-picker-label {
@@ -58,7 +60,7 @@
   transform: rotate(180deg);
 }
 
-/* ---- Dropdown panel — follows .menu-dropdown open/close via .open class ---- */
+/* ---- Dropdown panel - follows .menu-dropdown open/close via .open class ---- */
 .model-picker-dropdown {
   /* Surface (bg/border/radius/z-index) comes from .floating-panel-raised.
      Only positioning, width, and the max-height reveal are specific here. */
@@ -84,15 +86,14 @@
 .model-picker-dropdown::-webkit-scrollbar-track { background: var(--bg-card); }
 .model-picker-dropdown::-webkit-scrollbar-thumb { background: var(--border-strong); }
 
-/* ---- Panel header — matches .panel-header / .nav-panel-header ---- */
+/* ---- Panel header - matches .panel-header / .nav-panel-header ---- */
 .model-picker-header {
   padding: var(--space-2) var(--space-3);
   border-bottom: var(--border-hair) solid var(--border);
-  font-size: var(--fs-caption);
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.08em;
+  font-size: var(--fs-mono);
+  letter-spacing: var(--track-label);
   text-transform: uppercase;
-  color: var(--text-dim);
+  color: var(--text-muted);
 }
 .model-picker-default-label { display: inline-block; }
 .model-picker-default-label #model-picker-default {
@@ -106,33 +107,32 @@
   padding: var(--space-1) 0;
 }
 
-/* ---- Group headers — matches .nav-group-label / .site-nav-header ---- */
+/* ---- Group headers - matches .nav-group-label / .site-nav-header ---- */
 .model-picker-group-header {
   padding: var(--space-2) var(--space-3) var(--space-1);
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-bold);
-  color: var(--text-dim);
+  font-size: var(--fs-mono);
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: var(--track-caps);
   border-top: var(--border-hair) solid var(--border);
 }
 .model-picker-group-header:first-child { border-top: none; }
 
-/* ---- Model items — follows .nav-link / .site-nav-item pattern ---- */
+/* ---- Model items - follows .nav-link / .site-nav-item pattern ---- */
 .model-picker-item {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  margin: var(--space-0-1) var(--space-2);
+  margin: var(--space-1) var(--space-2);
   cursor: pointer;
   border: var(--border-hair) solid transparent;
   border-radius: var(--radius);
   background: transparent;
   color: var(--text);
   font-family: var(--font);
-  font-size: var(--fs-label);
+  font-size: var(--fs-mono);
   text-align: left;
   position: relative;
   transition: background var(--motion-fast) var(--ease),
@@ -142,10 +142,10 @@
 .model-picker-item:hover {
   background: var(--bg-card-hover);
   border-color: var(--border);
-  color: var(--accent);
+  color: var(--interactive);
 }
 .model-picker-item:hover .model-picker-item-name {
-  color: var(--accent);
+  color: var(--interactive);
 }
 .model-picker-item:hover .model-picker-item-desc {
   color: var(--text-muted);
@@ -161,8 +161,7 @@
 .model-picker-item-body { min-width: 0; }
 .model-picker-item-name {
   display: block;
-  font-size: var(--fs-label);
-  font-weight: var(--fw-bold);
+  font-size: var(--fs-mono);
   color: var(--text-bright);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -171,9 +170,9 @@
 }
 .model-picker-item-desc {
   display: block;
-  font-size: var(--fs-micro);
+  font-size: var(--fs-mono);
   color: var(--text-dim);
-  margin-top: var(--space-0-1);
+  margin-top: var(--space-1);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -184,75 +183,64 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  font-size: var(--fs-micro);
+  font-size: var(--fs-mono);
   color: var(--text-muted);
 }
 
 /* ---- Credit-rate multiplier chip ---- */
 .model-picker-item-rate {
   display: inline-block;
-  padding: 0.1rem var(--chip-padding-x);
+  padding: var(--border-rail) var(--chip-padding-x);
   border: var(--border-hair) solid var(--border-strong);
   border-radius: var(--radius);
   font-family: var(--font);
-  font-size: var(--fs-micro);
+  font-size: var(--fs-mono);
   font-weight: var(--chip-font-weight);
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
+  letter-spacing: var(--track-tight);
   min-width: 2.4rem;
   text-align: center;
   transition: border-color var(--motion-fast) var(--ease);
 }
-.model-picker-item-rate[data-tier="cheap"]   { color: var(--accent); border-color: var(--accent-border); }
+.model-picker-item-rate[data-tier="cheap"]   { color: var(--success); border-color: var(--success-border); }
 .model-picker-item-rate[data-tier="normal"]  { color: var(--text-muted); }
-.model-picker-item-rate[data-tier="warm"]    { color: var(--warm); border-color: var(--warm); }
-.model-picker-item-rate[data-tier="premium"] { color: var(--comp); border-color: var(--comp); }
+.model-picker-item-rate[data-tier="warm"]    { --rate-tone: var(--warm); color: var(--rate-tone); border-color: var(--rate-tone); }
+.model-picker-item-rate[data-tier="premium"] { --rate-tone: var(--comp); color: var(--rate-tone); border-color: var(--rate-tone); }
 
-/* ---- Active model — matches .site-nav-item.active / .nav-link.active ---- */
+/* ---- Active model - matches .site-nav-item.active / .nav-link.active ---- */
 .model-picker-item.is-current {
-  background: var(--accent-glow);
-  border-color: var(--accent-border);
-  color: var(--accent);
+  background: var(--selected-wash);
+  border-color: var(--selected-border);
+  color: var(--selected);
 }
 .model-picker-item.is-current .model-picker-item-name {
-  color: var(--accent);
+  color: var(--selected);
 }
 .model-picker-item.is-current .model-picker-item-desc {
   color: var(--text-muted);
 }
 .model-picker-item.is-current .model-picker-item-rate {
-  border-color: var(--accent-border);
+  border-color: var(--selected-border);
 }
 .model-picker-item.is-current .model-picker-item-default-badge {
-  color: var(--accent);
-  border-color: var(--accent-border);
+  color: var(--selected);
+  border-color: var(--selected-border);
 }
 
-/* ---- "default" badge — outline chip, matches .label-badge pattern ---- */
+/* ---- "default" badge - outline chip, matches .label-badge pattern ---- */
 .model-picker-item-default-badge {
-  display: inline-block;
-  font-family: var(--font);
-  font-size: var(--fs-micro);
-  font-weight: var(--chip-font-weight);
-  padding: 0.1rem var(--chip-padding-x);
-  border: var(--border-hair) solid var(--border-strong);
-  border-radius: var(--radius);
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: var(--chip-letter-spacing);
 }
 
-/* ---- "Set as default" button — appears on hover ---- */
+/* ---- "Set as default" button - appears on hover ---- */
 .model-picker-set-default {
   opacity: 0;
   font-family: var(--font);
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-bold);
-  padding: 0.1rem var(--chip-padding-x);
+  font-size: var(--fs-mono);
+  padding: var(--border-rail) var(--chip-padding-x);
   border: var(--border-hair) solid var(--border-strong);
   border-radius: var(--radius);
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text);
   cursor: pointer;
   text-transform: uppercase;
   letter-spacing: var(--chip-letter-spacing);
@@ -263,8 +251,142 @@
 .model-picker-item:hover .model-picker-set-default,
 .model-picker-set-default:focus { opacity: 1; }
 .model-picker-set-default:hover {
-  color: var(--accent);
-  border-color: var(--accent);
+  color: var(--interactive);
+  border-color: var(--interactive);
 }
 
 /* ---- Reduced motion: handled by Hyperkit accessibility.css blanket ---- */
+
+/* =========================================================================
+   Model meta line - backend / model / effort / skills / version sit in one
+   quiet row above the input instead of the top status cluster. Text-only
+   triggers in dim ink; dropdowns open upward.
+   ========================================================================= */
+
+.model-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-5) 0;
+  background: var(--bg-surface);
+}
+.model-meta:not(:has(.model-picker:not([hidden]), .cli-version:not(:empty))) { display: none; }
+
+.model-meta .model-picker-btn,
+.model-meta .cli-version {
+  border-color: transparent;
+  color: var(--text-dim);
+}
+.model-meta .model-picker-btn:hover,
+.model-meta .cli-version:hover {
+  color: var(--interactive);
+  border-color: var(--border);
+}
+.model-meta .model-picker-btn.model-picker-open,
+.model-meta .cli-version.cli-version-open {
+  color: var(--selected);
+  border-color: var(--selected);
+}
+
+.model-meta .model-picker-dropdown,
+.model-meta .cli-version-dropdown {
+  top: auto;
+  bottom: calc(100% + var(--space-1));
+  right: 0;
+  left: auto;
+  transform: translateY(4px);
+}
+.model-meta .model-picker-dropdown.open,
+.model-meta .cli-version-dropdown.open {
+  transform: translateY(0);
+}
+
+/* ---- Ultracode: the effort dropdown's toggle row and the per-tab window marks ---- */
+body { --ultracode-tone: var(--comp); }
+.effort-ultracode-row {
+  border-top: var(--border-hair) solid var(--border);
+}
+
+/* Status chip: filled comp, same silhouette as .status-title. */
+.status-ultracode {
+  color: var(--bg);
+  background: var(--ultracode-tone);
+  border-color: var(--ultracode-tone);
+  animation: ultracodeChipIn var(--motion-enter) var(--ease);
+}
+.status-ultracode[hidden] { display: none; }
+@keyframes ultracodeChipIn {
+  from { opacity: 0; transform: translateY(calc(var(--space-1) * -1)); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* An ultracode tab frames its chat area: a comp border over a soft inner glow.
+   The frame is an overlay on the layout row (right of the sidebar), so the
+   panes' scrollbars sit inside it instead of covering its edge. */
+#app .main-layout::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  pointer-events: none;
+  border: var(--border-hair) solid var(--ultracode-tone);
+  box-shadow: inset 0 0 var(--space-5) color-mix(in srgb, var(--ultracode-tone) 30%, transparent);
+  opacity: 0;
+  transition: left var(--motion-base) var(--ease), opacity var(--motion-reveal) var(--ease);
+}
+#app.ultracode .main-layout::after {
+  opacity: 1;
+  animation: ultracodeFlare var(--motion-linger) var(--ease);
+}
+/* The frame flares past its resting glow, then settles into it. Opacity stays
+   on the transition (not here) so the frame also fades out when the mark clears. */
+@keyframes ultracodeFlare {
+  0%   { box-shadow: inset 0 0 var(--space-3) color-mix(in srgb, var(--ultracode-tone) 0%, transparent),
+                                 inset 0 0 var(--space-2) color-mix(in srgb, var(--ultracode-tone) 0%, transparent); }
+  35%  { box-shadow: inset 0 0 var(--space-6) color-mix(in srgb, var(--ultracode-tone) 75%, transparent),
+                                 inset 0 0 var(--space-3) color-mix(in srgb, var(--ultracode-tone) 60%, transparent); }
+  100% { box-shadow: inset 0 0 var(--space-5) color-mix(in srgb, var(--ultracode-tone) 30%, transparent),
+                                 inset 0 0 var(--space-2) color-mix(in srgb, var(--ultracode-tone) 0%, transparent); }
+}
+#app .main-layout:has(.sidebar.open)::after { left: var(--sidebar-w); }
+
+/* Sparkles twinkle inside the frame's glow band; the field tracks the frame's bounds. */
+.ultracode-sparkles {
+  --sparkle-color: var(--ultracode-tone);
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+}
+.main-layout:has(.sidebar.open) > .ultracode-sparkles { left: var(--sidebar-w); }
+
+/* Ultracode scrollbar thumb takes the comp tint (track is clear app-wide). */
+#app.ultracode #messages,
+#app.ultracode .tab-messages {
+  scrollbar-color: color-mix(in srgb, var(--ultracode-tone) 60%, transparent) transparent;
+}
+
+/* The calibration-dot backdrop takes the comp tint too (dots only; the bottom haze stays hairline ink). */
+@property --calib-dot-color {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+body::before { transition: --calib-dot-color var(--motion-reveal) var(--ease); }
+body:has(#app.ultracode)::before {
+  --calib-dot-color: color-mix(in srgb, var(--ultracode-tone) 45%, var(--border));
+}
+
+/* Its sidebar entry carries a comp left rule. */
+.sidebar-tab-item.ultracode {
+  border-left: var(--border-rail) solid var(--ultracode-tone);
+}

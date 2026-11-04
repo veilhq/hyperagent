@@ -16,44 +16,24 @@
 </div>
 <div id="app">
   <div class="status-cluster">
-    <div class="skill-strip" id="skill-strip"></div>
     <div class="activity-strip" id="activity-strip"></div>
-    <span class="ha-cluster-chip topbar-status">connecting</span>
+    <span class="ha-cluster-chip topbar-status" data-tooltip="Agent state">connecting</span>
     <span class="ha-cluster-chip status-title" id="session-title"></span>
+    <span class="ha-cluster-chip status-ultracode" id="status-ultracode" data-tooltip="Ultracode is on for this tab" hidden>ultracode</span>
+    <span class="ha-cluster-chip status-mode" id="session-mode" data-tooltip="Session permission mode"></span>
     <div class="status-center" id="status-center">
-      <span class="ha-cluster-chip status-center-item" id="status-turns"></span>
-      <span class="ha-cluster-chip status-center-item" id="status-credits"></span>
-      <span class="ha-cluster-chip status-center-item" id="status-tokens"></span>
+      <span class="ha-cluster-chip status-center-item" id="status-turns" data-tooltip="Turns completed this session"></span>
+      <span class="ha-cluster-chip status-center-item" id="status-credits" data-tooltip="Credits spent this session"></span>
+      <span class="ha-cluster-chip status-center-item" id="status-tokens-in" data-tooltip="Input tokens this session (includes re-read context)"></span>
+      <span class="ha-cluster-chip status-center-item" id="status-tokens-out" data-tooltip="Output tokens this session"></span>
     </div>
-    <div class="ctx-meter" id="ctx-meter" data-tooltip="Context window usage">
+    <div class="ctx-meter" id="ctx-meter" data-tooltip="Context window used">
       <span class="ctx-meter-label" id="ctx-label"></span>
       <div class="ctx-meter-bar"><div class="ctx-meter-fill" id="ctx-fill"></div></div>
     </div>
-    <div class="plan-credits" id="plan-credits" data-tooltip="Plan credits used this period">
+    <div class="plan-credits" id="plan-credits" data-tooltip="Plan usage">
       <span class="ha-cluster-chip plan-credits-label" id="plan-credits-label"></span>
       <button class="plan-credits-refresh" id="plan-credits-refresh" onclick="refreshPlanCredits()" data-tooltip="Refresh usage" aria-label="Refresh usage">&#x21bb;</button>
-    </div>
-    <div class="model-picker" id="model-picker">
-      <button class="ha-cluster-chip model-picker-btn" id="model-picker-btn" onclick="toggleModelPicker(event)" data-tooltip="Model">
-        <span class="model-picker-label" id="model-picker-label">model</span>
-        <svg class="model-picker-caret" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-      </button>
-      <div class="floating-panel floating-panel-raised model-picker-dropdown" id="model-picker-dropdown">
-        <div class="panel-header model-picker-header">
-          <span class="model-picker-default-label">default: <span id="model-picker-default">—</span></span>
-        </div>
-        <div class="model-picker-list" id="model-picker-list"></div>
-      </div>
-    </div>
-    <div class="cli-version-picker" id="cli-version-picker">
-      <button class="ha-cluster-chip cli-version" id="cli-version" data-tooltip="Kiro CLI version - click for release notes" aria-label="Kiro CLI version - click for release notes" onclick="toggleChangelog(event)"></button>
-      <div class="floating-panel floating-panel-raised cli-version-dropdown" id="cli-version-dropdown">
-        <div class="panel-header cli-version-header">
-          <span class="cli-version-header-title">What's new</span>
-          <span class="cli-version-header-meta" id="cli-version-header-meta"></span>
-        </div>
-        <div class="cli-version-list" id="cli-version-list"></div>
-      </div>
     </div>
   </div>
   <div class="error-bar"><span class="error-bar-msg"></span><span class="error-bar-actions"></span></div>
@@ -74,11 +54,72 @@
         </div>
         <div id="session-list" class="session-list"></div>
       </div>
+      <div id="sidebar-workflows" class="sidebar-workflows"></div>
     </aside>
     <div id="messages"></div>
   </div>
   <canvas id="thinking-bar" class="thinking-bar"></canvas>
   <div id="attach-strip" class="attach-strip" aria-label="Pending image attachments"></div>
+  <div class="model-meta" id="model-meta">
+    <div class="model-picker backend-picker" id="backend-picker">
+      <button class="ha-cluster-chip model-picker-btn" id="backend-picker-btn" onclick="toggleBackendPicker(event)" data-tooltip="Agent backend" aria-label="Agent backend" aria-haspopup="true">
+        <span class="model-picker-label" id="backend-picker-label">agent</span>
+        <svg class="model-picker-caret" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="floating-panel floating-panel-raised model-picker-dropdown" id="backend-picker-dropdown">
+        <div class="panel-header model-picker-header">
+          <span class="model-picker-default-label">agent backend - applies on restart</span>
+        </div>
+        <div class="model-picker-list" id="backend-picker-list"></div>
+      </div>
+    </div>
+    <div class="model-picker" id="model-picker">
+      <button class="ha-cluster-chip model-picker-btn" id="model-picker-btn" onclick="toggleModelPicker(event)" data-tooltip="Model">
+        <span class="model-picker-label" id="model-picker-label">model</span>
+        <svg class="model-picker-caret" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="floating-panel floating-panel-raised model-picker-dropdown" id="model-picker-dropdown">
+        <div class="panel-header model-picker-header">
+          <span class="model-picker-default-label">default: <span id="model-picker-default">&mdash;</span></span>
+        </div>
+        <div class="model-picker-list" id="model-picker-list"></div>
+      </div>
+    </div>
+    <div class="model-picker effort-picker" id="effort-picker" hidden>
+      <button class="ha-cluster-chip model-picker-btn" id="effort-picker-btn" onclick="toggleEffortPicker(event)" data-tooltip="Effort" aria-label="Effort" aria-haspopup="true" data-testid="effort-picker-button">
+        <span class="model-picker-label" id="effort-picker-label">effort</span>
+        <svg class="model-picker-caret" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="floating-panel floating-panel-raised model-picker-dropdown" id="effort-picker-dropdown">
+        <div class="panel-header model-picker-header">
+          <span class="model-picker-default-label">effort - applies to this tab</span>
+        </div>
+        <div class="model-picker-list" id="effort-picker-list"></div>
+      </div>
+    </div>
+    <div class="model-picker skills-picker" id="skills-picker" hidden>
+      <button class="ha-cluster-chip model-picker-btn" id="skills-picker-btn" onclick="toggleSkillsPicker(event)" data-tooltip="Skills loaded in this session" aria-label="Skills loaded in this session" aria-haspopup="true" data-testid="skills-picker-button">
+        <span class="model-picker-label" id="skills-picker-label">skills</span>
+        <svg class="model-picker-caret" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="floating-panel floating-panel-raised model-picker-dropdown" id="skills-picker-dropdown">
+        <div class="panel-header model-picker-header">
+          <span class="model-picker-default-label">skills - loaded in this tab</span>
+        </div>
+        <div class="model-picker-list" id="skills-picker-list"></div>
+      </div>
+    </div>
+    <div class="cli-version-picker" id="cli-version-picker">
+      <button class="ha-cluster-chip cli-version" id="cli-version" data-tooltip="CLI version - click for release notes" aria-label="CLI version - click for release notes" onclick="toggleChangelog(event)"></button>
+      <div class="floating-panel floating-panel-raised cli-version-dropdown" id="cli-version-dropdown">
+        <div class="panel-header cli-version-header">
+          <span class="cli-version-header-title">What's new</span>
+          <span class="cli-version-header-meta" id="cli-version-header-meta"></span>
+        </div>
+        <div class="cli-version-list" id="cli-version-list"></div>
+      </div>
+    </div>
+  </div>
   <div class="input-area">
     <button class="input-icon-btn" id="sidebar-toggle-btn" onclick="toggleSidebar()" data-tooltip="Sessions (Ctrl+B)" aria-label="Sessions (Ctrl+B)">
       <!-- Lucide panel-left silhouette (brutalist: no border-radius, stroke 1.5, round caps per WI-113 Phase 7) -->
@@ -105,7 +146,7 @@
     <button id="cancel-btn" class="action-button action-button-danger">Stop</button>
   </div>
 </div>
-<!-- Lucide icon runtime — hydrates <i data-lucide="..."> elements (toast variants, etc.) -->
+<!-- Lucide icon runtime - hydrates <i data-lucide="..."> elements (toast variants, etc.) -->
 <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
 {{JS_BLOCKS}}
 </body>

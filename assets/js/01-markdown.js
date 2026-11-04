@@ -22,7 +22,7 @@ function renderMarkdown(text) {
     .replace(/\u{1F6A8}/gu, '\u25B2')   // 🚨 → ▲
     .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F1E0}-\u{1F1FF}]/gu, '');
 
-  // Code blocks (fenced) — stash in placeholders to protect from later transforms
+  // Code blocks (fenced) - stash in placeholders to protect from later transforms
   var codeBlocks = [];
   html = html.replace(/```(\w*)\n([\s\S]*?)```/g, function(_, lang, code) {
     var label = lang ? '<span class="code-lang">' + lang + '</span>' : '';
@@ -59,14 +59,14 @@ function renderMarkdown(text) {
       out += '</tr>';
       if (isHeader) isHeader = false;
     }
-    out += '</table></div>';
+    out += '</table></div>\n';
     return out;
   });
 
   // Blockquotes
   html = html.replace(/(^&gt; .+(\n|$))+/gm, function(block) {
     var inner = block.replace(/^&gt; /gm, '');
-    return '<blockquote>' + inner.trim() + '</blockquote>';
+    return '<blockquote>' + inner.trim().replace(/\n/g, '<br>') + '</blockquote>\n';
   });
 
   // Headers
@@ -87,19 +87,38 @@ function renderMarkdown(text) {
 
   // Ordered lists
   html = html.replace(/^(\d+)\. (.+)$/gm, '<li class="ol-item" value="$1">$2</li>');
-  html = html.replace(/(<li class="ol-item"[^>]*>.*<\/li>\n?)+/g, '<ol>$&</ol>');
+  html = html.replace(/(<li class="ol-item"[^>]*>.*<\/li>\n?)+/g, '<ol>$&</ol>\n');
 
   // Unordered lists (only lines not already wrapped)
   html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
   html = html.replace(/(<li>(?!class).*<\/li>\n?)+/g, function(m) {
     if (m.indexOf('ol-item') > -1) return m;
-    return '<ul>' + m + '</ul>';
+    return '<ul>' + m + '</ul>\n';
   });
 
-  // Paragraphs (double newlines)
-  html = html.replace(/\n\n/g, '</p><p>');
+  // Paragraphs: wrap every run of loose lines in <p>; block elements pass through.
+  // Blocks are joined without newlines so pre-wrap does not render them as blank lines.
+  var blockStart = /^(<\/?(ul|ol|li|h[1-6]|hr|blockquote|div|table|pre)\b|\x00CODEBLOCK)/;
+  var blocks = [];
+  var paragraphLines = [];
+  function flushParagraph() {
+    if (paragraphLines.length) blocks.push('<p>' + paragraphLines.join('\n') + '</p>');
+    paragraphLines = [];
+  }
+  html.split('\n').forEach(function(line) {
+    if (line.trim() === '') {
+      flushParagraph();
+    } else if (blockStart.test(line)) {
+      flushParagraph();
+      blocks.push(line);
+    } else {
+      paragraphLines.push(line);
+    }
+  });
+  flushParagraph();
+  html = blocks.join('');
 
-  // ASCII emotes — wrap known emotes in glow span (skip if inside code/pre)
+  // ASCII emotes - wrap known emotes in glow span (skip if inside code/pre)
   var emotes = [
     '\\[\\+1\\]', '\\(-_-\\)b', '\\(\\._.\\)b', '\\[✓\\]',
     '\\\\o/',

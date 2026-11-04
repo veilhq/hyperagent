@@ -53,7 +53,6 @@ Example: `msg-agent--hover.png`, `tool-card--completed.png`, `sidebar--open.png`
 | `welcome-text-emote` | Welcome text (kaomoji + glow) | rest | [ ] | [ ] | Bayer-dither backdrop |
 | `welcome-canvas` | Bayer-dither noise field backdrop | rest, fade-out | [ ] | [ ] | Migrating to HvNoiseField |
 | `welcome-chip` | Prompt suggestion chip | rest, hover | [ ] | [ ] | |
-| `welcome-prompts` | Prompt chip row | rest | [ ] | [ ] | |
 
 ### Messages
 

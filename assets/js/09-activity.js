@@ -24,7 +24,7 @@ function _haActivityStrip() {
 
 function _haActivityBuildBadge(label) {
   var el = document.createElement('span');
-  el.className = 'activity-badge';
+  el.className = 'label-badge activity-badge';
   var text = document.createElement('span');
   text.className = 'activity-badge-label';
   text.textContent = label;
@@ -124,7 +124,7 @@ window.__acpTitleActivity = function (data) {
   var phase = data.phase;
 
   if (phase === 'start') {
-    // A tab the user has manually renamed is locked — no pending state, and
+    // A tab the user has manually renamed is locked - no pending state, and
     // __acpSessionTitle will reject the incoming title as well.
     if (tabId && typeof tabs !== 'undefined' && tabs[tabId] && tabs[tabId].titleLocked) return;
     window.HaActivity.start(key, data.label || 'title');
@@ -139,12 +139,12 @@ window.__acpTitleActivity = function (data) {
       _haFlashTitleSettled(tabId);
     } else {
       window.HaActivity.fail(key);
-      // Surface the failure — a silently-heuristic title is exactly the kind of
+      // Surface the failure - a silently-heuristic title is exactly the kind of
       // invisible fallback this module exists to expose.
       if (window.HvToast) {
         window.HvToast.show({
           variant: 'error',
-          message: 'Title generation failed — using fallback name'
+          message: 'Title generation failed - using fallback name'
         });
       }
     }
@@ -157,7 +157,7 @@ window.__acpTitleActivity = function (data) {
    Phases: attempting | recovered | exhausted | failed.
 
    Recovery used to be entirely invisible and, because __acpError clobbered the
-   Reconnect link, effectively unreachable — the only way back was closing and
+   Reconnect link, effectively unreachable - the only way back was closing and
    reopening the tab. This surfaces the automatic attempt so the user can tell
    "recovering" apart from "dead", and leaves a manual action when it gives up. */
 
@@ -172,7 +172,7 @@ window.__acpRecovery = function (data) {
     if (window.HaErrorBar) {
       window.HaErrorBar.setMessage(
         'Connection lost (code ' + (data.exitCode != null ? data.exitCode : '?') +
-        ') — reconnecting automatically...', 'info'
+        ') - reconnecting automatically...', 'info'
       );
       // Automatic attempt in progress; a manual button here would race it.
       window.HaErrorBar.clearAction();
@@ -191,7 +191,7 @@ window.__acpRecovery = function (data) {
 
   if (phase === 'exhausted' || phase === 'failed') {
     window.HaActivity.fail(key);
-    // Auto-recovery is done trying — hand control back with an explicit action.
+    // Auto-recovery is done trying - hand control back with an explicit action.
     // __acpStateChange('crashed') also installs one; setAction replaces rather
     // than appends, so the user never sees duplicate buttons.
     if (window.HaErrorBar) {
@@ -211,7 +211,7 @@ window.__acpRecovery = function (data) {
       });
     }
     if (window.HvToast) {
-      window.HvToast.show({ variant: 'error', message: 'Auto-reconnect failed — use Reconnect' });
+      window.HvToast.show({ variant: 'error', message: 'Auto-reconnect failed - use Reconnect' });
     }
   }
 };
@@ -219,7 +219,7 @@ window.__acpRecovery = function (data) {
 
 /* ---- Self-update detection (0xC0000138) ----
    Pushed by ACPClient._handle_update_restart() when kiro-cli exits with
-   STATUS_DLL_NOT_FOUND — the signature of the auto-updater replacing the
+   STATUS_DLL_NOT_FOUND - the signature of the auto-updater replacing the
    binary in-place. Shows a calm "updating" banner instead of the alarming
    crash state, and auto-dismisses once the tab reaches ready.
 
@@ -242,7 +242,7 @@ window.__acpUpdating = function (data) {
       if (data.poll && data.max) {
         msg += ' (' + data.poll + '/' + data.max + ')';
       }
-      msg += ' — will reconnect automatically';
+      msg += ' - will reconnect automatically';
       window.HaErrorBar.setMessage(msg, 'info');
       window.HaErrorBar.clearAction();
     }
@@ -254,7 +254,7 @@ window.__acpUpdating = function (data) {
   if (phase === 'reconnecting') {
     window.HaActivity.start(key, 'reconnecting');
     if (window.HaErrorBar) {
-      window.HaErrorBar.setMessage('Update complete — reconnecting...', 'info');
+      window.HaErrorBar.setMessage('Update complete - reconnecting...', 'info');
       window.HaErrorBar.clearAction();
     }
     return;
@@ -265,7 +265,7 @@ window.__acpUpdating = function (data) {
     window.HaActivity.fail(key);
     if (errorBar) errorBar.classList.remove('is-updating');
     if (window.HaErrorBar) {
-      window.HaErrorBar.setMessage('Update timed out — kiro-cli may still be installing.', 'error');
+      window.HaErrorBar.setMessage('Update timed out - kiro-cli may still be installing.', 'error');
       var tabId = data._tabId || null;
       window.HaErrorBar.setAction('Reconnect', function () {
         window.HaErrorBar.setMessage('Reconnecting...', 'info');
@@ -276,7 +276,7 @@ window.__acpUpdating = function (data) {
       });
     }
     if (window.HvToast) {
-      window.HvToast.show({ variant: 'error', message: 'Update timeout — try Reconnect' });
+      window.HvToast.show({ variant: 'error', message: 'Update timeout - try Reconnect' });
     }
   }
 };
@@ -315,16 +315,17 @@ window.__acpCliVersion = function (data) {
   if (!data || !data.version) return;
   window._kiroCliVersion = data.version;
   var badge = document.getElementById('cli-version');
+  var cli = (window._activeBackendName || 'CLI') + ' CLI';
   if (badge) {
     badge.textContent = 'v' + data.version;
     // Cue unseen release notes with an accent outline until the user opens
     // the changelog dropdown (which acknowledges the version server-side).
     if (data.isNew) {
       badge.classList.add('has-new');
-      badge.setAttribute('data-tooltip', 'Kiro CLI v' + data.version + ' - new release notes, click to view');
+      badge.setAttribute('data-tooltip', cli + ' v' + data.version + ' - new release notes, click to view');
     } else {
       badge.classList.remove('has-new');
-      badge.setAttribute('data-tooltip', 'Kiro CLI v' + data.version + ' - click for release notes');
+      badge.setAttribute('data-tooltip', cli + ' v' + data.version + ' - click for release notes');
     }
   }
 };

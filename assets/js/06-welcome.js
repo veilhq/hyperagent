@@ -1,26 +1,20 @@
-/* ===== Hyperagent: Welcome noise field (WI-113 Phase 6 shim) =====
-   Delegates to window.HvNoiseField from 00-shared-modules.js.
-   Keeps the startWelcomeNoise(container) / destroyWelcomeNoise(immediate)
-   signatures so existing callers in 02-handlers.js, 03-ui.js, 08-tabs.js
-   don't have to change. The 06- filename ordering is preserved to keep the
-   file's load position in the concat pipeline.
+/* ===== Hyperagent: Welcome screen =====
+   One builder for the empty-tab welcome: the centered brand mark.
+   Used by the first tab (showWelcome) and by every
+   tab created later (08-tabs.js).
 */
 
-function startWelcomeNoise(container) {
-  var host = container || (typeof msgs !== 'undefined' ? msgs : null);
-  if (!host) return;
-  var w = host.querySelector('.welcome');
-  if (!w) return;
-  if (window.HvNoiseField) {
-    // Hyperagent's welcome sits inside a chat window — finer dither reads
-    // better here than Hypervisor's homepage-optimized default. cellDivisor
-    // 400 restores the pre-Phase-6 visual density.
-    window.HvNoiseField.start(w, { cellDivisor: 400 });
-  }
+var WELCOME_MARK_SVG = '<svg class="welcome-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35.02 35.02" fill="currentColor" aria-hidden="true"><path d="M13.58,20.85c.19,0,.28-.23.15-.36,0,0-5.08-5.08-6.1-6.11-.11-.11-.27-.14-.42-.09L.34,17.01c-.45.18-.45.82,0,1l7.05,2.79c.11.04.22.06.33.06.98,0,5.85,0,5.85,0Z"/><path d="M20.85,27.42v-6.3c0-.12-.1-.21-.21-.21h-6.26c-.12,0-.21.1-.21.21v6.3s0,.03-.01.05l2.85,7.21c.18.45.82.45,1,0l2.85-7.21s-.01-.03-.01-.05Z"/><path d="M34.68,17.01l-7.87-3.11c-2.6-1.03-4.66-3.08-5.68-5.68L18.01.34c-.18-.45-.82-.45-1,0l-2.85,7.21s.01.03.01.05v6.3c0,.12.1.21.21.21h6.09c.27,0,.52.11.71.3,1.14,1.14,5.26,5.26,6.2,6.2.12.12.29.15.44.09l6.85-2.71c.45-.18.45-.82,0-1Z"/></svg>';
+
+function buildWelcome() {
+  var w = document.createElement('div');
+  w.className = 'welcome';
+  w.innerHTML = WELCOME_MARK_SVG;
+  return w;
+}
+function showWelcome() {
+  msgs.appendChild(buildWelcome());
 }
 
-function destroyWelcomeNoise(immediate) {
-  if (window.HvNoiseField) {
-    window.HvNoiseField.stop(immediate ? 0 : 600);
-  }
-}
+// Show welcome on load if empty
+showWelcome();

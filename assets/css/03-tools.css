@@ -10,65 +10,48 @@
   flex-wrap: wrap;
   gap: var(--space-1);
   align-self: flex-start;
-  padding: var(--space-0-3) 0;
+  padding: var(--space-1) 0;
 }
 
-/* Category color per MCP group — the only value this layer owns. The primitive
+/* Category color per MCP group - the only value this layer owns. The primitive
    reads --indicator-color for every state (running fill, completed fade), so
    one declaration per group covers all states and no state is left uncolored. */
-.tool-indicator.tc-core      { --indicator-color: var(--warm); }
-.tool-indicator.tc-web       { --indicator-color: var(--cool); }
-.tool-indicator.tc-aws       { --indicator-color: var(--tool-aws); }
+.tool-indicator.tc-core      { --indicator-color: var(--text-muted); }
+.tool-indicator.tc-read      { --indicator-color: var(--tool-read); }
+.tool-indicator.tc-write     { --indicator-color: var(--tool-write); }
+.tool-indicator.tc-shell     { --indicator-color: var(--tool-shell); }
+.tool-indicator.tc-web       { --indicator-color: var(--tool-web); }
 .tool-indicator.tc-devops    { --indicator-color: var(--tool-devops); }
-.tool-indicator.tc-hyper     { --indicator-color: var(--accent); }
-.tool-indicator.tc-knowledge { --indicator-color: var(--comp); }
-.tool-indicator.tc-subagent  { --indicator-color: var(--comp); }
-.tool-indicator.tc-tasks     { --indicator-color: var(--warm); }
+.tool-indicator.tc-hyper     { --indicator-color: var(--tool-hyper); }
+.tool-indicator.tc-knowledge { --indicator-color: var(--tool-knowledge); }
+.tool-indicator.tc-subagent  { --indicator-color: var(--tool-subagent); }
+.tool-indicator.tc-tasks     { --indicator-color: var(--tool-tasks); }
 
 
-/* Inline error snippet shown below failed tool cards */
-.tool-error-inline {
-  display: block;
-  align-self: flex-start;
-  background: var(--bg-surface);
-  border: var(--border-hair) solid var(--comp);
-  padding: var(--space-0-3) var(--space-2);
-  margin: var(--space-0-1) 0 var(--space-0-2);
-  font-size: var(--fs-micro);
-  line-height: 1.4;
-  color: var(--comp);
-  max-width: clamp(300px, 85%, 800px);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 80px;
-  overflow-y: auto;
-  animation: fadeSlideIn var(--motion-fast) var(--ease);
-}
-
-/* Long-running warning — handled by the shared .tool-indicator-long primitive state. */
+/* Long-running warning - handled by the shared .tool-indicator-long primitive state. */
 
 /* ---- Tool detail panel (expandable) ---- */
 .tool-detail {
   display: none;
   align-self: flex-start;
+  flex-shrink: 0;
   background: var(--bg-surface);
   border: var(--border-hair) solid var(--border);
-  padding: var(--space-0-4) var(--space-0-6);
-  margin: var(--space-0-1) 0;
-  font-size: 0.6rem;
-  line-height: 1.5;
+  padding: var(--space-2) var(--space-3);
+  margin: var(--space-1) 0;
+  font-size: var(--fs-mono);
+  line-height: var(--lh-body);
   max-width: clamp(300px, 85%, 800px);
   overflow: hidden;
   animation: fadeSlideIn var(--motion-fast) var(--ease);
 }
 .tool-detail.visible { display: block; }
 .tool-detail-header {
-  font-weight: var(--fw-bold);
-  color: var(--text-muted);
+  color: var(--text);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-size: 0.5rem;
-  margin-bottom: var(--space-0-2);
+  letter-spacing: var(--track-label);
+  font-size: var(--fs-mono);
+  margin-bottom: var(--space-1);
 }
 .tool-detail-body {
   color: var(--text);
@@ -81,31 +64,29 @@
 /* ---- Turn-end divider ---- */
 .turn-end {
   align-self: flex-start;
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-bold);
+  font-size: var(--fs-mono);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-dim);
-  margin: var(--space-0-3) 0 var(--space-0-6);
+  letter-spacing: var(--track-caps);
+  color: var(--text-muted);
+  margin: var(--space-1) 0 var(--space-3);
   opacity: 0;
   animation: fadeSlideIn var(--motion-slow) var(--ease) forwards;
 }
 .turn-end.turn-failed {
-  color: var(--comp);
+  color: var(--error);
   display: flex;
   align-items: center;
-  gap: 0.8rem;
+  gap: var(--space-3);
 }
 .turn-end.turn-failed .retry-btn {
   font-family: var(--font);
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-bold);
+  font-size: var(--fs-mono);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--track-label);
   color: var(--bg);
-  background: var(--comp);
+  background: var(--error);
   border: none;
-  padding: 0.2rem 0.7rem;
+  padding: var(--space-1) var(--space-3);
   cursor: pointer;
   transition: opacity var(--motion-fast) var(--ease);
 }
@@ -113,13 +94,13 @@
 
 
 /* subagent/tasks now fill via --indicator-color like every other group
-   (see the category map above) — no border-only special case needed. */
+   (see the category map above) - no border-only special case needed. */
 
 /* ---- Trace Card (semantic_search retrieval sources) ---- */
 .trace-card {
   border: var(--border-hair) solid var(--border);
   margin: var(--space-1) 0;
-  font-size: 0.68rem;
+  font-size: var(--fs-mono);
   background: var(--bg-surface);
   max-width: 480px;
 }
@@ -129,17 +110,16 @@
   gap: var(--space-1);
   padding: var(--space-1) var(--space-2);
   cursor: pointer;
-  color: var(--text-muted);
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.06em;
+  color: var(--text);
+  letter-spacing: var(--track-label);
   text-transform: uppercase;
-  font-size: var(--fs-micro);
+  font-size: var(--fs-mono);
   user-select: none;
   transition: color var(--motion-fast) var(--ease);
 }
-.trace-header:hover { color: var(--accent); }
+.trace-header:hover { color: var(--interactive); }
 .trace-toggle {
-  font-size: 0.55rem;
+  font-size: var(--fs-mono);
   color: var(--text-dim);
 }
 .trace-body {
@@ -151,17 +131,15 @@
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-0-3) 0;
+  padding: var(--space-1) 0;
   color: var(--text-muted);
 }
 .trace-chip {
-  font-size: var(--fs-micro) !important;
-  padding: 0.1rem 0.3rem !important;
   flex-shrink: 0;
 }
 .trace-section {
-  color: var(--warm);
-  font-size: var(--fs-micro);
+  color: var(--text);
+  font-size: var(--fs-mono);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -174,34 +152,32 @@
   height: 0.5rem;
 }
 .trace-score {
-  color: var(--text-dim);
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-bold);
+  color: var(--text-muted);
+  font-size: var(--fs-mono);
   flex-shrink: 0;
 }
 
 /* ---- /hs Peek Panel (zero-token semantic search) ---- */
-.msg-hs .msg-role { color: var(--accent); }
+.msg-hs .msg-role { --speaker-tone: var(--accent); color: var(--speaker-tone); }
 .hs-results {
   border: var(--border-hair) solid var(--border);
   background: var(--bg-surface);
   margin: var(--space-1) 0;
   max-width: 520px;
-  font-size: 0.7rem;
+  font-size: var(--fs-mono);
 }
 .hs-header {
   padding: var(--space-1) var(--space-2);
-  color: var(--text-dim);
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-bold);
+  color: var(--text-muted);
+  font-size: var(--fs-mono);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--track-label);
   border-bottom: var(--border-hair) solid var(--border);
 }
 .hs-empty {
   padding: var(--space-2);
   color: var(--text-dim);
-  font-size: var(--fs-label);
+  font-size: var(--fs-mono);
 }
 .hs-result {
   padding: var(--space-2);
@@ -214,8 +190,8 @@
   gap: var(--space-1);
 }
 .hs-section {
-  color: var(--warm);
-  font-size: var(--fs-micro);
+  color: var(--text);
+  font-size: var(--fs-mono);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -223,17 +199,17 @@
 }
 .hs-score {
   margin-left: auto;
-  color: var(--text-dim);
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-bold);
+  color: var(--text-muted);
+  font-size: var(--fs-mono);
 }
 .hs-snippet {
   color: var(--text-muted);
-  font-size: 0.62rem;
+  font-size: var(--fs-prose-sm);
   margin-top: var(--space-1);
-  line-height: 1.5;
+  line-height: var(--lh-body);
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
+  font-family: var(--font-body);
 }

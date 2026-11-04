@@ -4,7 +4,7 @@
    pendingAttachments holds {mimeType, dataUrl} for images staged but not yet
    sent. Capture is gated on window._imageCapable (set from the ACP agent's
    advertised promptCapabilities.image). Data-URI prefix is stripped to raw
-   base64 at send time — the ACP image content block wants raw base64. */
+   base64 at send time - the ACP image content block wants raw base64. */
 var pendingAttachments = [];
 
 function _rawBase64(dataUrl) {
@@ -154,6 +154,8 @@ function send() {
     return;
   }
 
+  if (!hasImages && tryCommandView(text)) return;
+
   // If currently prompting, cancel first then send (interrupt)
   if (state === 'prompting') {
     var qText = text;
@@ -163,7 +165,7 @@ function send() {
     input.style.height = 'auto';
     clearAttachments();
     pywebview.api.cancel('interrupt');
-    // Queue the new prompt — poll until state becomes ready
+    // Queue the new prompt - poll until state becomes ready
     var attempts = 0;
     var pollReady = setInterval(function() {
       attempts++;
@@ -204,6 +206,7 @@ function newSession() {
 
 // Keyboard shortcuts
 input.addEventListener('keydown', function(e) {
+  if (commandMenuKey(e)) return;
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
 });
 document.addEventListener('keydown', function(e) {
@@ -224,7 +227,7 @@ input.addEventListener('input', function() {
   this.style.height = Math.min(this.scrollHeight, 180) + 'px';
 });
 
-// Message copy (delegated) — attached to document so it catches clicks in
+// Message copy (delegated) - attached to document so it catches clicks in
 // any per-tab messages container (08-tabs.js creates a new #messages-{tabId}
 // div per tab; only the first tab reuses the original #messages).
 document.addEventListener('click', function(e) {
@@ -292,6 +295,7 @@ function toggleShortcuts() {
       + sc('Ctrl+T', 'New tab')
       + sc('Ctrl+W', 'Close tab')
       + sc('Ctrl+F', 'Search messages')
+      + sc('!','Toggle ultracode')
       + sc('Esc', 'Cancel / close')
       + sc('Enter', 'Send message')
       + sc('Shift+Enter', 'New line')
@@ -371,67 +375,7 @@ function clearHighlights() {
   msgs.querySelectorAll('.search-hit').forEach(function(el) { el.classList.remove('search-hit'); });
 }
 
-// ---- Welcome state ----
-// Greeting text is provided by window.HvGreeting from 00-shared-modules.js
-// (mirrored from Hypervisor per WI-113 Phase 6). Kaomoji detection + .emote
-// class application is handled by HvGreeting.applyTo(element).
-var welcomeGreetingsFallback = ['ready when you are.'];
-
-var welcomePrompts = [
-  'What\'s in flight right now?',
-  'Let\'s review a PR.',
-  'Run a health check.',
-  { text: 'Check logs', action: '_showRecentLogs' }
-];
-
-function showWelcome() {
-  var w = document.createElement('div');
-  w.className = 'welcome noise-field';
-  w.innerHTML = '<svg class="welcome-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35.02 35.02" fill="currentColor"><path d="M13.58,20.85c.19,0,.28-.23.15-.36,0,0-5.08-5.08-6.1-6.11-.11-.11-.27-.14-.42-.09L.34,17.01c-.45.18-.45.82,0,1l7.05,2.79c.11.04.22.06.33.06.98,0,5.85,0,5.85,0Z"/><path d="M20.85,27.42v-6.3c0-.12-.1-.21-.21-.21h-6.26c-.12,0-.21.1-.21.21v6.3s0,.03-.01.05l2.85,7.21c.18.45.82.45,1,0l2.85-7.21s-.01-.03-.01-.05Z"/><path d="M34.68,17.01l-7.87-3.11c-2.6-1.03-4.66-3.08-5.68-5.68L18.01.34c-.18-.45-.82-.45-1,0l-2.85,7.21s.01.03.01.05v6.3c0,.12.1.21.21.21h6.09c.27,0,.52.11.71.3,1.14,1.14,5.26,5.26,6.2,6.2.12.12.29.15.44.09l6.85-2.71c.45-.18.45-.82,0-1Z"/></svg>'
-    + '<span class="welcome-text"></span>'
-    + '<div class="welcome-prompts"></div>';
-  var greetingEl = w.querySelector('.welcome-text');
-  if (window.HvGreeting) {
-    window.HvGreeting.applyTo(greetingEl);
-  } else {
-    greetingEl.textContent = welcomeGreetingsFallback[0];
-  }
-  var chips = w.querySelector('.welcome-prompts');
-  welcomePrompts.forEach(function(p) {
-    var chip = document.createElement('button');
-    chip.className = 'welcome-chip';
-    if (typeof p === 'string') {
-      chip.textContent = p;
-      chip.onclick = function() { input.value = p; send(); };
-    } else {
-      chip.textContent = p.text;
-      chip.onclick = function() { if (window[p.action]) window[p.action](); };
-    }
-    chips.appendChild(chip);
-  });
-  msgs.appendChild(w);
-  // Defer noise mount to next animation frame so layout is complete before
-  // HvNoiseField reads container dimensions. Matches the pattern used in
-  // createTab (08-tabs.js) which reliably shows the dither. Previously used
-  // setTimeout(0) which fires after script parse but not necessarily after
-  // first layout — leaving the canvas mounted at 0x0 on initial launch.
-  // WI-118 fix: per-module <script> blocks mean startWelcomeNoise (from
-  // 06-welcome.js) may not be defined yet at RAF time when this is called
-  // from initial script parse. Wait until all inline scripts have parsed.
-  function _mountNoise() {
-    if (typeof startWelcomeNoise === 'function') startWelcomeNoise();
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() { requestAnimationFrame(_mountNoise); });
-  } else {
-    requestAnimationFrame(_mountNoise);
-  }
-}
-
-// Show welcome on load if empty
-showWelcome();
-
-// WebGL cursor trail (WI-119) — same shared module Hypervisor uses.
+// WebGL cursor trail - same shared module Hypervisor uses.
 // Idempotent, idle-suspending, a11y-gated internally.
 if (window.HvCursorTrail) {
   window.HvCursorTrail.start(document.body);
@@ -523,8 +467,8 @@ function _handleHsSearch(query) {
         if (r.content && r.content.length > 150) snippet += '...';
         row.innerHTML =
           '<div class="hs-result-header">' +
-            '<span class="status-chip status-chip-outlined-muted">' + path.split('/').pop().replace('.md', '') + '</span>' +
-            '<span class="hs-section">' + section + '</span>' +
+            '<span class="status-chip status-chip-outlined-muted">' + HvUtils.escapeHtml(path.split('/').pop().replace('.md', '')) + '</span>' +
+            '<span class="hs-section">' + HvUtils.escapeHtml(section) + '</span>' +
             '<span class="hs-score">' + score + '</span>' +
           '</div>' +
           '<div class="hs-snippet">' + snippet + '</div>';
@@ -552,10 +496,7 @@ function _showRecentLogs() {
 
   // Remove welcome screen
   var w = msgs.querySelector('.welcome');
-  if (w) {
-    destroyWelcomeNoise(true);
-    w.remove();
-  }
+  if (w) w.remove();
 
   pywebview.api.get_recent_logs(40).then(function(results) {
     if (!results || !results.length) {
@@ -584,8 +525,8 @@ function _showRecentLogs() {
 window._showRecentLogs = _showRecentLogs;
 
 // --- Cursor companion box ---
-// Relocated to Hyperkit (WI-142 follow-up) — window.HvCursorBox is loaded
-// before this file. Edit the module in .hyperkit/js/cursor-box.js, not here.
+// Provided by the shared hyperkit module - window.HvCursorBox is loaded
+// before this file. Edit the shared module, not here.
 (function() {
   if (!window.HvCursorBox) return;
   HvCursorBox.start(document.body);

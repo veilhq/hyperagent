@@ -1,5 +1,5 @@
 """
-ACPClientPool — manages multiple ACPClient instances for the tabbed UI.
+ACPClientPool - manages multiple ACPClient instances for the tabbed UI.
 
 One pool per application lifetime. Handles tab creation, switching, closing,
 and preference persistence for tab/session state.
@@ -60,14 +60,17 @@ class ACPClientPool:
         """Stop and remove a tab's client."""
         with self._lock:
             client = self._clients.pop(tab_id, None)
-            if client:
-                client.stop()
             if self._active_tab == tab_id:
                 self._active_tab = next(iter(self._clients), None)
+            new_active = self._active_tab
             logger.info("close_tab: tab=%s remaining=%d active=%s",
                         str(tab_id)[:6], len(self._clients),
-                        str(self._active_tab)[:6] if self._active_tab else "-")
-            return self._active_tab
+                        str(new_active)[:6] if new_active else "-")
+        # Stopping waits on process exit; keep it outside the lock so other
+        # tabs can open and close meanwhile.
+        if client:
+            client.stop()
+        return new_active
 
     def switch_tab(self, tab_id):
         """Set the active tab."""
@@ -81,8 +84,10 @@ class ACPClientPool:
                 if client:
                     try:
                         client._push_models_event()
+                        client._push_effort_event()
+                        client._push_mode_event()
                     except Exception as e:
-                        logger.debug("switch_tab: _push_models_event failed: %s", e)
+                        logger.debug("switch_tab: model/effort/mode push failed: %s", e)
             return True
         logger.warning("switch_tab: unknown tab=%s", str(tab_id)[:6])
         return False

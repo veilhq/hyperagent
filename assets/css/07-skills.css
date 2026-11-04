@@ -1,53 +1,19 @@
 /* ===== Hyperagent: Skill Activation UI ===== */
 
-/* ---- Topbar skill strip ---- */
-.skill-strip {
-  display: flex;
-  align-items: center;
-  gap: var(--space-0-3);
+/* ---- Topbar skills chip (dropdown rows reuse the model picker's) ---- */
+.skills-picker-item {
+  padding: var(--space-2) var(--space-3);
+}
+.skills-picker-item .model-picker-item-desc {
+  white-space: normal;
 }
 
-/* Collapse when idle: an always-flex empty strip still consumes a parent
-   `gap` slot, pushing the first visible chip right and unbalancing the
-   cluster's left edge against its right. Hidden until a badge lands. */
-.skill-strip:empty { display: none; }
-
-.skill-strip:not(:empty) {
-  padding-right: var(--space-0-3);
-  border-right: var(--border-hair) solid var(--border);
-  margin-right: var(--space-0-1);
+/* One-shot border flash on a fresh activation. */
+.skills-picker-pulse {
+  animation: skillsChipPulse var(--motion-linger) var(--ease);
 }
-
-.skill-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: 0.12rem var(--space-0-4);
-  font-size: 0.5rem;
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  color: var(--cool);
-  border: var(--border-hair) solid var(--cool);
-  border-radius: var(--radius);
-  animation: skillBadgeIn var(--motion-medium) var(--ease);
-  box-shadow: 0 0 4px var(--cool), inset 0 0 4px rgba(0, 204, 204, 0.05);
-}
-.skill-badge-icon {
-  font-size: var(--fs-micro);
-  line-height: 1;
-  animation: skillIconPulse 2.5s ease-in-out infinite; /* off-scale: slow ambient glow */
-}
-
-@keyframes skillBadgeIn {
-  from { opacity: 0; transform: translateY(-3px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes skillIconPulse {
-  0%, 100% { opacity: 0.8; }
-  50% { opacity: 0.3; }
+@keyframes skillsChipPulse {
+  from { border-color: var(--live); color: var(--live); }
 }
 
 /* ---- Inline skill card (message stream) ---- */
@@ -55,32 +21,28 @@
   align-self: flex-start;
   display: flex;
   align-items: baseline;
-  gap: var(--space-0-4);
-  padding: var(--space-0-3) var(--space-0-6);
-  margin: var(--space-0-2) 0;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  margin: var(--space-1) 0;
   background: transparent;
   border: var(--border-hair) solid var(--border);
   border-radius: var(--radius);
   max-width: clamp(300px, 85%, 600px);
   animation: skillCardIn var(--motion-slow) var(--ease);
-  transition: border-color var(--motion-fast) var(--ease),
-              box-shadow var(--motion-fast) var(--ease);
+  transition: border-color var(--motion-fast) var(--ease);
 }
 .skill-card:hover {
-  border-color: var(--cool);
-  box-shadow: 0 0 6px rgba(0, 204, 204, 0.15);
+  border-color: var(--interactive);
 }
 .skill-card-name {
-  font-size: 0.6rem;
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.03em;
+  font-size: var(--fs-mono);
+  letter-spacing: var(--track-body);
   text-transform: uppercase;
-  color: var(--cool);
+  color: var(--text-bright);
   white-space: nowrap;
-  animation: skillTextGlow 2s ease-in-out 1; /* off-scale: one-shot text glow on appear */
 }
 .skill-card-desc {
-  font-size: var(--fs-micro);
+  font-size: var(--fs-mono);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -92,8 +54,3 @@
   to   { opacity: 1; transform: translateX(0); }
 }
 
-@keyframes skillTextGlow {
-  0% { text-shadow: 0 0 6px var(--cool); }
-  50% { text-shadow: 0 0 12px var(--cool), 0 0 2px var(--cool); }
-  100% { text-shadow: none; }
-}

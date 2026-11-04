@@ -8,9 +8,9 @@
 html.a11y-reduce-motion *,
 html.a11y-reduce-motion *::before,
 html.a11y-reduce-motion *::after {
-  animation-duration: 0.001ms !important;
+  animation-duration: var(--motion-off) !important;
   animation-iteration-count: 1 !important;
-  transition-duration: 0.001ms !important;
+  transition-duration: var(--motion-off) !important;
   scroll-behavior: auto !important;
 }
 
@@ -43,9 +43,6 @@ html.a11y-high-contrast {
 /* ===== Light mode component overrides =====
    Base tokens (--bg, --text, etc.) come from .hyperkit/css/accessibility.css.
    These target hyperagent-specific components that need explicit overrides. */
-html.a11y-bw-theme .shortcuts-overlay {
-  background: rgba(200, 200, 200, 0.85);
-}
 html.a11y-bw-theme .sidebar {
   background: var(--bg-surface);
 }
@@ -56,11 +53,5 @@ html.a11y-bw-theme .task-panel {
   background: var(--bg-card);
 }
 html.a11y-bw-theme .welcome {
-  color: var(--accent);
-}
-html.a11y-bw-theme .welcome-icon {
-  color: var(--accent);
-}
-html.a11y-bw-theme .welcome-text {
-  color: var(--accent);
+  color: var(--text-bright);
 }

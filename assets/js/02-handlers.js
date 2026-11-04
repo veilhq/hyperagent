@@ -1,4 +1,4 @@
-/* ===== Hyperagent: ACP Handlers ===== */
+/* ===== Hyperagent: ACP Handlers + Message Helpers ===== */
 
 function scrollBottom() { msgs.scrollTo({ top: msgs.scrollHeight, behavior: 'smooth' }); }
 
@@ -22,7 +22,7 @@ function _renderTraceCard() {
     var items = [];
     try { items = typeof output === 'string' ? JSON.parse(output) : output; } catch (e) { continue; }
     if (!Array.isArray(items)) {
-      // MCP returns [{content:[{text:"[...]"}]}] — unwrap if nested
+      // MCP returns [{content:[{text:"[...]"}]}] - unwrap if nested
       if (items.content && Array.isArray(items.content)) {
         for (var ci = 0; ci < items.content.length; ci++) {
           try { items = JSON.parse(items.content[ci].text || '[]'); } catch (e2) { items = []; }
@@ -55,8 +55,8 @@ function _renderTraceCard() {
     var section = s.section ? ' §' + s.section : '';
     var score = s.similarity != null ? s.similarity.toFixed(2) : '';
     row.innerHTML =
-      '<span class="status-chip status-chip-outlined-muted trace-chip">' + path.split('/').pop().replace('.md', '') + '</span>' +
-      '<span class="trace-section">' + section + '</span>' +
+      '<span class="status-chip status-chip-outlined-muted trace-chip">' + HvUtils.escapeHtml(path.split('/').pop().replace('.md', '')) + '</span>' +
+      '<span class="trace-section">' + HvUtils.escapeHtml(section) + '</span>' +
       '<span class="trace-dots"></span>' +
       '<span class="trace-score">' + score + '</span>';
     body.appendChild(row);
@@ -71,18 +71,18 @@ function msgTime() {
 }
 
 // Shared markup for the broken/missing-media placeholder primitive
-// (.hv-media-missing lives in hyperkit/css/primitives.css). Used when a
+// (.media-missing lives in hyperkit/css/primitives.css). Used when a
 // prior-turn image cannot be rehydrated from session history. Lucide image-off.
 function mediaMissingHTML() {
-  return '<div class="hv-media-missing" role="img" aria-label="image not available">'
-    + '<svg class="hv-media-missing-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="2" x2="22" y1="2" y2="22"/><path d="M10.41 10.41a2 2 0 1 1-2.83-2.83"/><line x1="13.5" x2="6" y1="13.5" y2="21"/><line x1="18" x2="21" y1="12" y2="15"/><path d="M3.59 3.59A1.99 1.99 0 0 0 3 5v14a2 2 0 0 0 2 2h14c.55 0 1.052-.22 1.41-.59"/><path d="M21 15V5a2 2 0 0 0-2-2H9"/></svg>'
-    + '<span class="hv-media-missing-label">image not available</span>'
+  return '<div class="media-missing" role="img" aria-label="image not available">'
+    + '<svg class="media-missing-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="2" x2="22" y1="2" y2="22"/><path d="M10.41 10.41a2 2 0 1 1-2.83-2.83"/><line x1="13.5" x2="6" y1="13.5" y2="21"/><line x1="18" x2="21" y1="12" y2="15"/><path d="M3.59 3.59A1.99 1.99 0 0 0 3 5v14a2 2 0 0 0 2 2h14c.55 0 1.052-.22 1.41-.59"/><path d="M21 15V5a2 2 0 0 0-2-2H9"/></svg>'
+    + '<span class="media-missing-label">image not available</span>'
     + '</div>';
 }
 
 function appendUser(text, images) {
   var w = msgs.querySelector('.welcome');
-  if (w) { destroyWelcomeNoise(); w.classList.add('welcome-exit'); setTimeout(function() { if (w.parentNode) w.remove(); }, 200); }
+  if (w) { w.classList.add('welcome-exit'); setTimeout(function() { if (w.parentNode) w.remove(); }, 200); }
   var el = document.createElement('div');
   el.className = 'msg msg-user';
   el.innerHTML = '<span class="msg-meta"><span class="msg-role">(一︿一+ )</span><span class="msg-time">' + msgTime() + '</span></span>';
@@ -111,7 +111,7 @@ function appendUser(text, images) {
 
 function ensureAgentMsg() {
   if (!currentMsgEl) {
-    // A new agent message starts a fresh phase — close any in-flight
+    // A new agent message starts a fresh phase - close any in-flight
     // thought batch so the next thought_chunk creates its own row below.
     resetThoughtStream();
     currentMsgEl = document.createElement('div');
@@ -123,369 +123,72 @@ function ensureAgentMsg() {
   return currentMsgEl;
 }
 
-// --- Stream buffer + word-by-word drain ---
-var streamBuffer = '';
-var streamDraining = false;
-var streamDrainMs = 120;        // ms between word renders
-var streamMaxBuffer = 200;      // chars in buffer before we speed up
-
-function drainStream() {
-  if (!streamBuffer.length) { streamDraining = false; return; }
-  // Adaptive: drain faster when buffer is deep
-  var wordsThisTick = 1;
-  var delay = streamDrainMs;
-  if (streamBuffer.length > streamMaxBuffer) {
-    wordsThisTick = Math.ceil(streamBuffer.length / 40);
-    delay = 16;
-  }
-  // Pull words (preserving whitespace boundaries)
-  var pulled = '';
-  var count = 0;
-  var i = 0;
-  while (i < streamBuffer.length && count < wordsThisTick) {
-    while (i < streamBuffer.length && /\s/.test(streamBuffer[i])) { pulled += streamBuffer[i]; i++; }
-    while (i < streamBuffer.length && !/\s/.test(streamBuffer[i])) { pulled += streamBuffer[i]; i++; }
-    count++;
-  }
-  streamBuffer = streamBuffer.slice(i);
-  if (!pulled) { streamDraining = false; return; }
-  // Append to currentMsgText and re-render
-  currentMsgText += pulled;
-  if (currentMsgEl) {
-    currentMsgEl._rawText = currentMsgText;
-    var meta = currentMsgEl.querySelector('.msg-meta');
-    currentMsgEl.innerHTML = '';
-    if (meta) currentMsgEl.appendChild(meta);
-    var rendered = renderMarkdown(currentMsgText);
-    currentMsgEl.insertAdjacentHTML('beforeend', rendered + '<button class="msg-copy">Copy</button>');
-    // Fade-in: wrap trailing chars in .stream-word
-    fadeTrailingText(currentMsgEl, pulled.length);
-    scrollBottom();
-  }
-  if (streamBuffer.length) {
-    setTimeout(drainStream, delay);
-  } else {
-    streamDraining = false;
-  }
-}
-
-function fadeTrailingText(el, charCount) {
-  var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-  var nodes = [];
-  var node;
-  while (node = walker.nextNode()) {
-    var p = node.parentElement;
-    if (p && (p.classList.contains('msg-meta') || p.classList.contains('msg-role') || p.classList.contains('msg-time') || p.classList.contains('msg-copy') || p.classList.contains('streaming-cursor'))) continue;
-    nodes.push(node);
-  }
-  var remaining = charCount;
-  for (var i = nodes.length - 1; i >= 0 && remaining > 0; i--) {
-    var n = nodes[i];
-    var text = n.textContent;
-    if (text.length <= remaining) {
-      var wrap = document.createElement('span');
-      wrap.className = 'stream-word';
-      n.parentNode.insertBefore(wrap, n);
-      wrap.appendChild(n);
-      remaining -= text.length;
-    } else {
-      var splitAt = text.length - remaining;
-      var tail = n.splitText(splitAt);
-      var wrap2 = document.createElement('span');
-      wrap2.className = 'stream-word';
-      tail.parentNode.insertBefore(wrap2, tail);
-      wrap2.appendChild(tail);
-      remaining = 0;
-    }
-  }
-}
-
-function flushStream() {
-  if (streamBuffer.length) {
-    currentMsgText += streamBuffer;
-    streamBuffer = '';
-  }
-  streamDraining = false;
-  if (currentMsgEl) {
-    currentMsgEl._rawText = currentMsgText;
-    var meta = currentMsgEl.querySelector('.msg-meta');
-    currentMsgEl.innerHTML = '';
-    if (meta) currentMsgEl.appendChild(meta);
-    currentMsgEl.insertAdjacentHTML('beforeend', renderMarkdown(currentMsgText) + '<button class="msg-copy">Copy</button>');
-    currentMsgEl.querySelectorAll('.stream-word').forEach(function(sw) {
-      while (sw.firstChild) sw.parentNode.insertBefore(sw.firstChild, sw);
-      sw.remove();
-    });
-  }
-}
-
-// --- Thought stream (WI-114) ---
-// agent_thought_chunk arrives per-word from reasoning-enabled models.
-// Rendered into a collapsed-by-default panel under the Agent nameplate,
-// with a live char count and a CSS-masked Bayer dither indicator that
-// animates only while chunks are actively arriving. Distinct from the
-// visible message stream: no word-fade, no markdown parsing.
-var currentThoughtEl = null;      // .msg-thought container for current turn
-var currentThoughtBodyEl = null;  // <pre> holding the accumulated text
-var currentThoughtCountEl = null; // live char/token count on the bar
-var thoughtCharCount = 0;
-var thoughtIdleTimer = null;
-var thoughtIdleMs = 500;          // idle ms before the dither settles
-var thoughtIdSeq = 0;
-
-function ensureThoughtEl() {
-  // Called on first agent_thought_chunk of a reasoning batch. The row is a
-  // sibling of .msg-user / .msg-agent / .tool-row inside #messages — each
-  // reasoning batch reads as its own phase of the turn, matching how tool
-  // rows are their own line rather than nested inside a message bubble.
-  if (currentThoughtEl) return currentThoughtEl;
-  var id = 'thought-body-' + (++thoughtIdSeq);
-  var wrap = document.createElement('div');
-  wrap.className = 'msg-thought';
-  wrap.setAttribute('data-expanded', 'false');
-  wrap.setAttribute('data-active', 'false');
-
-  var bar = document.createElement('button');
-  bar.type = 'button';
-  bar.className = 'msg-thought-bar';
-  bar.setAttribute('aria-expanded', 'false');
-  bar.setAttribute('aria-controls', id);
-
-  var dither = document.createElement('span');
-  dither.className = 'msg-thought-dither';
-  dither.setAttribute('aria-hidden', 'true');
-  // 9 grid cells: 8 perimeter cells + 1 center. CSS assigns animation-delay
-  // per :nth-child to trace a clockwise perimeter chase; center stays empty.
-  for (var i = 0; i < 9; i++) {
-    dither.appendChild(document.createElement('span'));
-  }
-
-  var marker = document.createElement('span');
-  marker.className = 'msg-thought-marker';
-  marker.textContent = 'thought';
-
-  var count = document.createElement('span');
-  count.className = 'msg-thought-count';
-  count.textContent = '0';
-
-  bar.appendChild(dither);
-  bar.appendChild(marker);
-  bar.appendChild(count);
-
-  var body = document.createElement('pre');
-  body.className = 'msg-thought-body';
-  body.id = id;
-  body.hidden = true;
-
-  bar.addEventListener('click', function () {
-    var expanded = wrap.getAttribute('data-expanded') === 'true';
-    var next = !expanded;
-    wrap.setAttribute('data-expanded', next ? 'true' : 'false');
-    bar.setAttribute('aria-expanded', next ? 'true' : 'false');
-    body.hidden = !next;
-    if (next) scrollBottom();
-  });
-
-  wrap.appendChild(bar);
-  wrap.appendChild(body);
-  msgs.appendChild(wrap);
-
-  currentThoughtEl = wrap;
-  currentThoughtBodyEl = body;
-  currentThoughtCountEl = count;
-  thoughtCharCount = 0;
-  return wrap;
-}
-
-function setThoughtActive(active) {
-  if (currentThoughtEl) {
-    currentThoughtEl.setAttribute('data-active', active ? 'true' : 'false');
-  }
-}
-
-function bumpThoughtIdle() {
-  if (thoughtIdleTimer) clearTimeout(thoughtIdleTimer);
-  // Capture the element at schedule time. With per-tab render state, the
-  // module-level `currentThoughtEl` may point at a different tab by the time
-  // this timer fires — closing over `el` ensures the idle release lands on
-  // the same element that scheduled it.
-  var el = currentThoughtEl;
-  thoughtIdleTimer = setTimeout(function () {
-    thoughtIdleTimer = null;
-    if (el) el.setAttribute('data-active', 'false');
-  }, thoughtIdleMs);
-}
-
-function appendThoughtChunk(text) {
-  if (!text) return;
-  ensureThoughtEl();
-  if (currentThoughtBodyEl) {
-    currentThoughtBodyEl.appendChild(document.createTextNode(text));
-  }
-  thoughtCharCount += text.length;
-  if (currentThoughtCountEl) {
-    currentThoughtCountEl.textContent = String(thoughtCharCount);
-  }
-  setThoughtActive(true);
-  bumpThoughtIdle();
-}
-
-function resetThoughtStream() {
-  if (thoughtIdleTimer) { clearTimeout(thoughtIdleTimer); thoughtIdleTimer = null; }
-  currentThoughtEl = null;
-  currentThoughtBodyEl = null;
-  currentThoughtCountEl = null;
-  thoughtCharCount = 0;
-}
-
-// --- Tool icon mapping ---
-function toolIcon(name) {
-  var n = (name || '').toLowerCase();
-  if (n.indexOf('read') > -1 || n.indexOf('file') > -1) return '<';
-  if (n.indexOf('write') > -1 || n.indexOf('create') > -1 || n.indexOf('edit') > -1) return '>';
-  if (n.indexOf('shell') > -1 || n.indexOf('command') > -1 || n.indexOf('terminal') > -1) return '$';
-  if (n.indexOf('search') > -1 || n.indexOf('grep') > -1 || n.indexOf('find') > -1) return '?';
-  if (n.indexOf('web') > -1 || n.indexOf('fetch') > -1 || n.indexOf('http') > -1) return '~';
-  if (n.indexOf('code') > -1 || n.indexOf('symbol') > -1) return '@';
-  if (n.indexOf('glob') > -1 || n.indexOf('directory') > -1) return '/';
-  if (n.indexOf('knowledge') > -1 || n.indexOf('index') > -1) return '%';
-  if (n.indexOf('aws') > -1) return '^';
-  if (n.indexOf('git') > -1 || n.indexOf('repo') > -1 || n.indexOf('pull') > -1) return '&';
-  // Hypervisor MCP tools
-  if (n.indexOf('work_item') > -1 || n.indexOf('move_work') > -1 || n.indexOf('outline') > -1) return '=';
-  if (n.indexOf('tag') > -1) return '#';
-  if (n.indexOf('health') > -1 || n.indexOf('validate') > -1 || n.indexOf('migrate') > -1) return '!';
-  if (n.indexOf('session_brief') > -1 || n.indexOf('suggest_next') > -1 || n.indexOf('recent_activity') > -1 || n.indexOf('stale') > -1) return '.';
-  if (n.indexOf('hyperspace') > -1 || n.indexOf('similar') > -1 || n.indexOf('hypervisor') > -1) return '*';
-  if (n.indexOf('subagent') > -1) return '※';
-  if (n.indexOf('todo_list') > -1 || n.indexOf('goal') > -1) return '☰';
-  if (n.indexOf('introspect') > -1) return '◉';
-  return '+';
-}
-
-// --- Tool MCP group for badge color ---
-function toolGroup(name) {
-  var n = (name || '').toLowerCase();
-  if (n.indexOf('aws') > -1) return 'aws';
-  if (n.indexOf('web') > -1 || n.indexOf('fetch') > -1 || n.indexOf('http') > -1) return 'web';
-  if (n.indexOf('git') > -1 || n.indexOf('repo') > -1 || n.indexOf('pull') > -1 || n.indexOf('wit') > -1) return 'devops';
-  if (n.indexOf('work_item') > -1 || n.indexOf('move_work') > -1 || n.indexOf('outline') > -1 || n.indexOf('tag') > -1 || n.indexOf('health') > -1 || n.indexOf('validate') > -1 || n.indexOf('migrate') > -1 || n.indexOf('session_brief') > -1 || n.indexOf('suggest_next') > -1 || n.indexOf('recent_activity') > -1 || n.indexOf('stale') > -1 || n.indexOf('hyperspace') > -1 || n.indexOf('similar') > -1 || n.indexOf('hypervisor') > -1 || n.indexOf('search_hyper') > -1 || n.indexOf('create_doc') > -1 || n.indexOf('update_doc') > -1) return 'hyper';
-  if (n.indexOf('knowledge') > -1 || n.indexOf('index') > -1) return 'knowledge';
-  if (n.indexOf('subagent') > -1) return 'subagent';
-  if (n.indexOf('todo_list') > -1 || n.indexOf('goal') > -1) return 'tasks';
-  return 'core';
-}
-
-// --- Truncate tool detail for display ---
-function truncateDetail(data) {
-  var str = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
-  var esc = str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  // Strip emoji from tool output (terminal aesthetic)
-  esc = esc.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F1E0}-\u{1F1FF}]/gu, '');
-  if (esc.length > 600) esc = esc.slice(0, 600) + '\n… (truncated)';
-  return esc;
-}
-
-// --- Long-running tool detection ---
-var toolTypicalMs = {
-  'read': 3000, 'write': 3000, 'glob': 5000, 'grep': 5000,
-  'code': 10000, 'search': 10000, 'knowledge': 10000,
-  'web_fetch': 15000, 'web_search': 15000,
-  'shell': 30000, 'use_aws': 30000, 'subagent': 120000
-};
-var toolTimers = {};
-
-function getToolTimeout(name) {
-  var n = (name || '').toLowerCase();
-  var keys = Object.keys(toolTypicalMs);
-  for (var i = 0; i < keys.length; i++) {
-    if (n.indexOf(keys[i]) > -1) return toolTypicalMs[keys[i]];
-  }
-  return 60000;
-}
-
-// --- Tool name map (populated by dev channel hints before standard events arrive) ---
-var toolNameMap = {};
-
-window.__acpToolHint = function(data) {
-  if (data.toolCallId && data.name) {
-    toolNameMap[data.toolCallId] = data.name;
-  }
-};
-
 // --- Skill activation handler ---
-// `activeSkills` is per-tab render state (swapped by 08-tabs.js), but the
-// `#skill-strip` DOM node in the topbar is a single shared element across
-// all tabs. Appending directly to it from every tab's independent dedupe
-// map causes duplicate badges when the same skill fires in more than one
-// tab. `_isActiveTab`-gated appends (see 08-tabs.js) plus a strip rebuild
-// on tab switch keep the shared strip in sync with only the active tab's
-// activated skills.
+// `activeSkills` is per-tab state (swapped by 08-tabs.js), name -> {name, desc}.
+// The topbar skills chip (09-skills-picker.js) is a single shared element, so
+// it is redrawn from the active tab's map only: 08-tabs.js syncs it on an
+// active-tab activation and on every tab switch.
 var activeSkills = {};
 
-function getSkillStrip() {
-  return document.getElementById('skill-strip');
+// Record a skill in the current tab's map; a repeat activation is a no-op.
+function _trackSkill(name, desc) {
+  if (!activeSkills[name]) activeSkills[name] = { name: name, desc: desc };
 }
-
-// Build (but do not insert) a badge element for a skill, tracked in the
-// current tab's activeSkills map. Returns the existing badge if the skill
-// was already activated in this tab (dedup), or null if name is falsy.
-function _buildSkillBadge(name, desc) {
-  if (activeSkills[name]) return activeSkills[name];
-  var badge = document.createElement('span');
-  badge.className = 'skill-badge';
-  badge.innerHTML = '<span class="skill-badge-icon">&#9670;</span>' + name;
-  badge.title = desc;
-  activeSkills[name] = badge;
-  return badge;
-}
-
-// Rebuild the shared topbar strip from the currently-active tab's
-// activeSkills map. Called on tab switch so background-tab activations
-// (tracked but not appended) become visible when their tab is focused,
-// and other tabs' badges disappear instead of accumulating.
-window._syncSkillStripToActiveTab = function() {
-  var strip = getSkillStrip();
-  if (!strip) return;
-  strip.innerHTML = '';
-  var names = Object.keys(activeSkills);
-  for (var i = 0; i < names.length; i++) {
-    strip.appendChild(activeSkills[names[i]]);
-  }
-};
 
 window.__acpSkillActivation = function(data) {
   var name = data.name || 'unknown';
   var desc = data.description || '';
 
-  // Track the badge in this tab's activeSkills map (dedup within the tab).
-  // Whether it gets appended to the shared topbar strip right now is
-  // decided by the caller: 08-tabs.js appends only when this is the active
-  // tab, and calls _syncSkillStripToActiveTab() on switch to surface
-  // badges tracked while a tab was in the background.
-  _buildSkillBadge(name, desc);
+  // Whether the shared chip redraws now is the caller's call: 08-tabs.js
+  // syncs it for the active tab and on switch for background activations.
+  _trackSkill(name, desc);
 
   // Inline skill card in message stream (per-tab DOM, safe to always render)
   var card = document.createElement('div');
   card.className = 'skill-card';
-  card.innerHTML = '<span class="skill-card-name">&#9670; ' + name + '</span>'
-    + (desc ? '<span class="skill-card-desc">' + desc + '</span>' : '');
+  card.innerHTML = '<span class="skill-card-name">&#9670; ' + HvUtils.escapeHtml(String(name)) + '</span>'
+    + (desc ? '<span class="skill-card-desc">' + HvUtils.escapeHtml(String(desc)) + '</span>' : '');
   msgs.appendChild(card);
   scrollBottom();
+};
+
+// A session/load failed or timed out: the tab says so and offers Retry, and
+// the load's hold on sends is released.
+window.__acpSessionLoadFailed = function(data) {
+  var tabId = data && data._tabId;
+  function settle() {
+    _loadingHistory = false;
+    showTabLoadFailed(msgs, data && data.error, data && data.sessionId);
+  }
+  if (tabId && typeof tabs !== 'undefined' && tabs[tabId] && tabId !== activeTabId) {
+    _withTabContext(tabId, settle);
+  } else {
+    settle();
+    sendBtn.disabled = state !== 'ready' && state !== 'prompting';
+  }
 };
 
 // --- ACP handlers (called from Python via evaluate_js) ---
 
 window.__acpUpdate = function(update) {
   if (state === 'starting' || state !== 'prompting' || _loadingHistory) return;
+  // Subagent text is shown in the thought element, not the main transcript.
+  if (update.sessionUpdate === 'agent_message_chunk' && parentToolUseId(update)) {
+    update = Object.assign({}, update, { sessionUpdate: 'agent_thought_chunk' });
+  }
   switch (update.sessionUpdate) {
     case 'agent_message_chunk':
       var ti = document.getElementById('typing-indicator');
       if (ti) ti.remove();
+      if (commandTurn) {
+        commandTurn.buf += update.content.text;
+        refreshCommandView(commandTurn);
+        break;
+      }
       collapseToolRow();
       currentToolRow = null;
       ensureAgentMsg();
-      // Buffer the delta — drainStream renders it word-by-word with fade
+      // Buffer the delta - drainStream renders it word-by-word with fade
       streamBuffer += update.content.text;
       if (!streamDraining) {
         streamDraining = true;
@@ -505,7 +208,7 @@ window.__acpUpdate = function(update) {
       break;
 
     case 'user_message_chunk':
-      // Echo of the user's own prompt over ACP — Hyperagent renders the user
+      // Echo of the user's own prompt over ACP - Hyperagent renders the user
       // message locally in appendUser() at send time, so this event is
       // intentionally ignored to avoid double-rendering.
       break;
@@ -516,7 +219,7 @@ window.__acpUpdate = function(update) {
       // Flush buffered stream text before showing tool card
       flushStream();
       // Finalize any in-progress agent message so subsequent text appears
-      // below the tool row — but only if it has content (avoid empty boxes).
+      // below the tool row - but only if it has content (avoid empty boxes).
       if (currentMsgEl && !currentMsgText.trim()) {
         currentMsgEl.parentNode.removeChild(currentMsgEl);
       } else if (currentMsgEl) {
@@ -534,39 +237,12 @@ window.__acpUpdate = function(update) {
         currentToolRow.className = 'tool-row';
         msgs.appendChild(currentToolRow);
       }
-      var card = document.createElement('div');
-      var toolName = toolNameMap[update.toolCallId] || update.title || update.toolCallId;
+      var toolName = toolKindName(update);
       // Fade thinking bar color based on tool category
       setThinkingColorForTool(toolName);
-      card.className = 'tool-indicator tool-indicator-running show-label tc-' + toolGroup(toolName);
-      card.id = 'tool-' + update.toolCallId;
-      var icon = toolIcon(toolName);
-      var label = update.title || update.toolCallId;
-      card.innerHTML = '<span class="tool-indicator-icon">' + icon + '</span><span class="tool-indicator-label">' + label + '</span>';
-      card.title = label;
-      // Store input data for detail panel
-      card._toolData = { name: label, input: update.input || null, output: null };
-      card.addEventListener('click', function() {
-        var existing = card._detailEl;
-        if (existing) {
-          existing.classList.toggle('visible');
-          card.classList.toggle('show-label');
-        } else {
-          card.classList.toggle('show-label');
-          // Create detail panel on first click if we have data
-          var d = card._toolData;
-          if (d && (d.input || d.output)) {
-            var det = document.createElement('div');
-            det.className = 'tool-detail visible';
-            var content = '';
-            if (d.input) content += '<div class="tool-detail-header">Input</div><div class="tool-detail-body">' + truncateDetail(d.input) + '</div>';
-            if (d.output) content += '<div class="tool-detail-header">Output</div><div class="tool-detail-body">' + truncateDetail(d.output) + '</div>';
-            det.innerHTML = content;
-            currentToolRow.parentNode.insertBefore(det, currentToolRow.nextSibling);
-            card._detailEl = det;
-          }
-        }
-      });
+      var card = buildToolCard(update.toolCallId, update.title || update.toolCallId, toolName,
+        'tool-indicator-running show-label',
+        hasKeys(update.rawInput) ? update.rawInput : update.input, null);
       toolCards[update.toolCallId] = card;
       currentToolRow.appendChild(card);
       toolTimers[update.toolCallId] = setTimeout(function() {
@@ -595,56 +271,34 @@ window.__acpUpdate = function(update) {
           currentToolRow.className = 'tool-row';
           msgs.appendChild(currentToolRow);
         }
-        tc = document.createElement('div');
-        var toolNameU = toolNameMap[update.toolCallId] || update.title || update.toolCallId;
-        tc.className = 'tool-indicator tool-indicator-running tc-' + toolGroup(toolNameU);
-        tc.id = 'tool-' + update.toolCallId;
-        var iconU = toolIcon(toolNameU);
-        var labelU = update.title || update.toolCallId;
-        tc.innerHTML = '<span class="tool-indicator-icon">' + iconU + '</span><span class="tool-indicator-label">' + labelU + '</span>';
-        tc.title = labelU;
-        tc._toolData = { name: labelU, input: null, output: null };
-        tc.addEventListener('click', function() {
-          var existing = tc._detailEl;
-          if (existing) { existing.classList.toggle('visible'); tc.classList.toggle('show-label'); }
-          else { tc.classList.toggle('show-label'); var d = tc._toolData; if (d && (d.input || d.output)) { var det = document.createElement('div'); det.className = 'tool-detail visible'; var content = ''; if (d.input) content += '<div class="tool-detail-header">Input</div><div class="tool-detail-body">' + truncateDetail(d.input) + '</div>'; if (d.output) content += '<div class="tool-detail-header">Output</div><div class="tool-detail-body">' + truncateDetail(d.output) + '</div>'; det.innerHTML = content; currentToolRow.parentNode.insertBefore(det, currentToolRow.nextSibling); tc._detailEl = det; } }
-        });
+        tc = buildToolCard(update.toolCallId, update.title || update.toolCallId, toolKindName(update),
+          'tool-indicator-running', null, null);
         toolCards[update.toolCallId] = tc;
         currentToolRow.appendChild(tc);
         scrollBottom();
       }
       if (tc) {
-        clearTimeout(toolTimers[update.toolCallId]);
-        delete toolTimers[update.toolCallId];
+        // Claude Code sends a placeholder title first ("Terminal", "Edit") and
+        // the real one (the command, the file path) in a later update.
+        if (update.title && update.title !== tc._toolData.name) {
+          setToolCardIdentity(tc, update.title, toolKindName(update));
+        }
+        if (hasKeys(update.rawInput)) tc._toolData.input = update.rawInput;
+        var outputU = toolOutputOf(update);
+        if (outputU) tc._toolData.output = outputU;
         var done = update.status === 'completed';
         var fail = update.status === 'failed';
-        var grp = (tc.className.match(/tc-\w+/) || [''])[0];
-        tc.className = 'tool-indicator ' + (done ? 'tool-indicator-completed' : fail ? 'tool-indicator-failed' : 'tool-indicator-running') + (tc.classList.contains('show-label') ? ' show-label' : '') + (grp ? ' ' + grp : '');
-        // Store output
-        if (update.output) tc._toolData.output = update.output;
-        if (update.result) tc._toolData.output = update.result;
-        // Auto-show error inline for failed tools
+        // Refinement updates carry no status; only a status change moves the card's state.
+        if (update.status) {
+          clearTimeout(toolTimers[update.toolCallId]);
+          delete toolTimers[update.toolCallId];
+          var grp = (tc.className.match(/tc-\w+/) || [''])[0];
+          tc.className = 'tool-indicator ' + (done ? 'tool-indicator-completed' : fail ? 'tool-indicator-failed' : 'tool-indicator-running') + (tc.classList.contains('show-label') ? ' show-label' : '') + (grp ? ' ' + grp : '');
+        }
         if (fail) {
-          var errText = update.output || update.result || update.error || '';
-          if (typeof errText === 'object') errText = errText.message || errText.error || JSON.stringify(errText);
-          if (errText) {
-            var errEl = document.createElement('div');
-            errEl.className = 'tool-error-inline';
-            var esc = String(errText).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-            if (esc.length > 300) esc = esc.slice(0, 300) + '…';
-            errEl.textContent = esc;
-            // Insert after the tool-row containing this card
-            var row = tc.closest('.tool-row');
-            if (row && row.parentNode) {
-              row.parentNode.insertBefore(errEl, row.nextSibling);
-            } else {
-              msgs.appendChild(errEl);
-            }
-            scrollBottom();
-          }
           // Flash the error bar briefly as a notification
           var toolLabel = tc._toolData && tc._toolData.name ? tc._toolData.name : 'Tool';
-          // Don't steal the bar from a crash that's offering a Reconnect action —
+          // Don't steal the bar from a crash that's offering a Reconnect action - 
           // a transient tool failure is far less important than the recovery path.
           if (!window.HaErrorBar.hasAction()) {
             window.HaErrorBar.setMessage(toolLabel + ' failed', 'warning');
@@ -684,29 +338,25 @@ window.__acpTurnEnd = function(data) {
   // Reset thinking bar color to accent
   resetThinkingColor();
 
+  // A command view turn ends in its full-page view, not the transcript.
+  if (commandTurn) {
+    var doneTurn = commandTurn;
+    commandTurn = null;
+    var tiC = document.getElementById('typing-indicator');
+    if (tiC) tiC.remove();
+    finishCommandView(doneTurn, data);
+    return;
+  }
+
   // Clear skill badges from topbar
-  // (Skills persist for the session — only clear on new session)
+  // (Skills persist for the session - only clear on new session)
 
   // If cancelled, show short indicator with available stats
   if (data._cancelled) {
-    var cparts = [];
-    if (data._elapsed) cparts.push(data._elapsed + 's');
-    if (data._metadata) {
-      var cm = data._metadata;
-      if (cm.contextUsagePercentage != null) {
-        cparts.push(Math.round(cm.contextUsagePercentage) + '% ctx');
-        updateCtxMeter(cm.contextUsagePercentage);
-      }
-      if (cm.meteringUsage && cm.meteringUsage.length) {
-        var ctotal = 0;
-        for (var ci = 0; ci < cm.meteringUsage.length; ci++) ctotal += cm.meteringUsage[ci].value;
-        cparts.push(ctotal.toFixed(2) + ' credits');
-      } else if (cm.creditsUsed) { cparts.push(cm.creditsUsed + ' credits'); }
+    if (data._metadata && data._metadata.contextUsagePercentage != null) {
+      updateCtxMeter(data._metadata.contextUsagePercentage);
     }
-    var cdiv = document.createElement('div');
-    cdiv.className = 'turn-end cancelled';
-    cdiv.textContent = '— cancelled' + (cparts.length ? ' · ' + cparts.join(' · ') : '');
-    msgs.appendChild(cdiv);
+    msgs.appendChild(buildTurnEndEl(data, true));
     scrollBottom();
     currentMsgEl = null;
     currentMsgText = '';
@@ -718,29 +368,7 @@ window.__acpTurnEnd = function(data) {
 
   // If the prompt failed (server-side error), show inline error with retry
   if (data._failed) {
-    var failMsg = data._failedMessage || 'Unknown error';
-    var fdiv = document.createElement('div');
-    fdiv.className = 'turn-end turn-failed';
-    var ftext = document.createElement('span');
-    ftext.textContent = '\u2014 failed: ' + failMsg;
-    fdiv.appendChild(ftext);
-    // Retry button — sends a continuation nudge (agent has session context)
-    if (window._lastUserPrompt) {
-      var retryBtn = document.createElement('button');
-      retryBtn.type = 'button';
-      retryBtn.className = 'retry-btn';
-      retryBtn.textContent = 'Continue';
-      retryBtn.addEventListener('click', function() {
-        if (state === 'ready') {
-          var continuePrompt = 'You were interrupted, please continue.';
-          appendUser(continuePrompt);
-          window._lastUserPrompt = continuePrompt;
-          pywebview.api.send_prompt(continuePrompt);
-        }
-      });
-      fdiv.appendChild(retryBtn);
-    }
-    msgs.appendChild(fdiv);
+    msgs.appendChild(buildTurnEndEl(data, true));
     scrollBottom();
     currentMsgEl = null;
     currentMsgText = '';
@@ -759,27 +387,10 @@ window.__acpTurnEnd = function(data) {
   }
 
   // Build turn-end info string
-  var parts = [];
-  if (data._elapsed) parts.push(data._elapsed + 's');
-  if (data._metadata) {
-    var m = data._metadata;
-    if (m.contextUsagePercentage != null) {
-      parts.push(Math.round(m.contextUsagePercentage) + '% ctx');
-      updateCtxMeter(m.contextUsagePercentage);
-    }
-    if (m.usage) parts.push(m.usage);
-    if (m.cost) parts.push(m.cost);
-    if (m.meteringUsage && m.meteringUsage.length) {
-      var total = 0;
-      for (var i = 0; i < m.meteringUsage.length; i++) total += m.meteringUsage[i].value;
-      parts.push(total.toFixed(2) + ' credits');
-    } else if (m.creditsUsed) { parts.push(m.creditsUsed + ' credits'); }
-    if (m.inputTokens || m.outputTokens) parts.push((m.inputTokens||0) + '→' + (m.outputTokens||0) + ' tok');
+  if (data._metadata && data._metadata.contextUsagePercentage != null) {
+    updateCtxMeter(data._metadata.contextUsagePercentage);
   }
-  var div = document.createElement('div');
-  div.className = 'turn-end';
-  div.textContent = '— done' + (parts.length ? ' · ' + parts.join(' · ') : '');
-  msgs.appendChild(div);
+  msgs.appendChild(buildTurnEndEl(data, true));
 
   // Trace card: if semantic_search was called this turn, render retrieval sources
   _renderTraceCard();
@@ -797,7 +408,7 @@ window.__acpStateChange = function(data) {
   var prevState = state;
   state = data.state;
   // Track the agent's advertised image capability so the attach affordance
-  // can be gated — never offer image attach to an agent that would reject it.
+  // can be gated - never offer image attach to an agent that would reject it.
   if (typeof data.imageCapable !== 'undefined') {
     window._imageCapable = !!data.imageCapable;
     app.classList.toggle('image-capable', window._imageCapable);
@@ -807,7 +418,7 @@ window.__acpStateChange = function(data) {
   sendBtn.disabled = (state !== 'ready' && state !== 'prompting') || _loadingHistory;
   app.classList.toggle('prompting', state === 'prompting');
 
-  // Toast on successful reconnect (crashed → ready). WI-113 Phase 9.
+  // Toast on successful reconnect (crashed → ready).
   if (state === 'ready' && prevState === 'crashed' && window.HvToast) {
     window.HvToast.show({ variant: 'success', message: 'reconnected' });
   }
@@ -824,31 +435,13 @@ window.__acpStateChange = function(data) {
     hideThinking();
   }
 
-  // Show loading when switching sessions
-  if (state === 'starting' && !document.getElementById('ha-splash')) {
-    var splash = document.createElement('div');
-    splash.id = 'ha-splash';
-    splash.className = 'ha-splash';
-    splash.innerHTML = '<div class="ha-splash-flag"><svg class="ha-splash-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35.02 35.02" fill="currentColor"><path d="M13.58,20.85c.19,0,.28-.23.15-.36,0,0-5.08-5.08-6.1-6.11-.11-.11-.27-.14-.42-.09L.34,17.01c-.45.18-.45.82,0,1l7.05,2.79c.11.04.22.06.33.06.98,0,5.85,0,5.85,0Z"/><path d="M20.85,27.42v-6.3c0-.12-.1-.21-.21-.21h-6.26c-.12,0-.21.1-.21.21v6.3s0,.03-.01.05l2.85,7.21c.18.45.82.45,1,0l2.85-7.21s-.01-.03-.01-.05Z"/><path d="M34.68,17.01l-7.87-3.11c-2.6-1.03-4.66-3.08-5.68-5.68L18.01.34c-.18-.45-.82-.45-1,0l-2.85,7.21s.01.03.01.05v6.3c0,.12.1.21.21.21h6.09c.27,0,.52.11.71.3,1.14,1.14,5.26,5.26,6.2,6.2.12.12.29.15.44.09l6.85-2.71c.45-.18.45-.82,0-1Z"/></svg></div>'
-      + '<div class="ha-splash-loading">Loading session history</div>'
-      + '<div class="ha-splash-pct" id="ha-splash-pct">0%</div>';
-    document.body.appendChild(splash);
-  }
-
-  // Dismiss splash on ready — but only if history has finished loading.
-  // If history is still rendering, the renderChunk completion will dismiss it.
+  // Dismiss the boot splash once the first agent is up. Later starts and
+  // session loads show their loading state inside their own tab instead.
   if (state === 'ready') {
-    if (!_loadingHistory) {
-      var splash = document.getElementById('ha-splash');
-      if (splash) {
-        splash.classList.add('hidden');
-        setTimeout(function() { if (splash.parentNode) splash.parentNode.removeChild(splash); }, 700);
-      }
-    } else {
-      // Agent is ready but history still rendering — update splash text.
-      // renderChunk's completion path will dismiss when done.
-      var loadingEl2 = document.querySelector('.ha-splash-loading');
-      if (loadingEl2) loadingEl2.textContent = 'Rendering history';
+    var splash = document.getElementById('ha-splash');
+    if (splash) {
+      splash.classList.add('hidden');
+      setTimeout(function() { if (splash.parentNode) splash.parentNode.removeChild(splash); }, 700);
     }
   }
 
@@ -875,7 +468,7 @@ window.__acpStateChange = function(data) {
       }
     });
   } else if (state === 'ready' || state === 'starting') {
-    // Don't auto-dismiss if the error bar is showing a prompt failure — the
+    // Don't auto-dismiss if the error bar is showing a prompt failure - the
     // user needs to see it. It gets cleared on the next successful prompt or
     // when the user manually retries.
     if (!window._errorBarPromptFailed) {
@@ -890,20 +483,108 @@ window.__acpError = function(data) {
   var source = (data && data.source) ? String(data.source) : '';
   // Track prompt failures so the error bar persists through the ready state change
   window._errorBarPromptFailed = (source === 'jsonrpc');
-  // Message slot only — leaves any existing action (e.g. Reconnect) intact.
+  // Message slot only - leaves any existing action (e.g. Reconnect) intact.
   window.HaErrorBar.setMessage(msg, 'error');
   // Also mirror to the JS console so failures show up under devtools without
   // needing to reach for the hyperagent.log file.
   try { console.error('[acp-error]', source ? '(' + source + ')' : '', msg, data); } catch (e) {}
 };
 
+// Agent is slow to answer initialize: say so in the starting tab's loading
+// block, or in the info bar when the active tab has no loading block. The
+// info bar clears itself on the next ready/starting state change.
+window.__acpStartSlow = function(data) {
+  var text = 'Still starting ' + ((data && data.agent) || 'agent') + '...';
+  if (setTabLoadingText(tabContainerFor(data), text)) return;
+  if (typeof _isActiveTab === 'function' && !_isActiveTab(data)) return;
+  window.HaErrorBar.setMessage(text, 'info');
+};
+
+// Agent notice (rate-limit, policy, mode fallback...): toast it, prefixed with
+// the tab title when it comes from a background tab.
+window.__acpNotice = function(data) {
+  if (!data || !data.title || !window.HvToast) return;
+  var variant = { warning: 'warn', error: 'error', info: 'info' }[data.severity] || 'info';
+  var prefix = '';
+  if (data._tabId && typeof tabs !== 'undefined' && tabs[data._tabId] && data._tabId !== activeTabId) {
+    prefix = (tabs[data._tabId].title || 'Tab') + ': ';
+  }
+  window.HvToast.show({ variant: variant, title: prefix + data.title, message: data.description || '' });
+};
+
+// Conversation compaction ({trigger, preTokens, postTokens, durationMs}): an
+// inline card in the tab it happened in, with the retained share as a meter.
+function formatTokenCount(count) {
+  return count >= 1000 ? (count / 1000).toFixed(1) + 'k' : String(count);
+}
+
+function buildCompactionCard(data) {
+  var retained = data.preTokens > 0 ? Math.min(100, Math.round(data.postTokens * 100 / data.preTokens)) : 0;
+  var card = document.createElement('div');
+  card.className = 'compaction-card';
+  card.setAttribute('role', 'status');
+  card.setAttribute('data-testid', 'compaction-card');
+  var parts = [
+    ['compaction-label', 'compacted'],
+    ['status-chip status-chip-outlined-muted', data.trigger === 'auto' ? 'auto' : 'manual'],
+    ['compaction-figures', formatTokenCount(data.preTokens) + ' -> ' + formatTokenCount(data.postTokens) + ' tokens']
+  ];
+  parts.forEach(function(part) {
+    var span = document.createElement('span');
+    span.className = part[0];
+    span.textContent = part[1];
+    card.appendChild(span);
+  });
+  var track = document.createElement('span');
+  track.className = 'progress-track compaction-meter';
+  track.title = retained + '% of the context kept';
+  var fill = document.createElement('span');
+  fill.className = 'progress-fill';
+  fill.style.width = retained + '%';
+  track.appendChild(fill);
+  card.appendChild(track);
+  if (typeof data.durationMs === 'number') {
+    var duration = document.createElement('span');
+    duration.className = 'compaction-duration';
+    duration.textContent = (data.durationMs / 1000).toFixed(1) + 's';
+    card.appendChild(duration);
+  }
+  return card;
+}
+
+window.__acpCompaction = function(data) {
+  if (!data || typeof data.preTokens !== 'number' || typeof data.postTokens !== 'number') return;
+  var container = tabContainerFor(data);
+  if (!container) return;
+  container.appendChild(buildCompactionCard(data));
+  if (container === msgs) scrollBottom();
+};
+
+// Live context-window occupancy ({pct, used, size}) from an ACP usage_update.
+// A background tab's value is stored in its render state so the shared meter
+// shows it when that tab is activated.
+window.__acpContextUsage = function(data) {
+  if (!data || data.pct == null) return;
+  if (data._tabId && typeof tabs !== 'undefined' && tabs[data._tabId] && data._tabId !== activeTabId) {
+    var rs = tabs[data._tabId].renderState;
+    if (rs) rs.ctxPercentage = data.pct;
+    return;
+  }
+  updateCtxMeter(data.pct);
+};
+
 window.__acpAuthRequired = function(data) {
   var url = data && data.url;
   errorBar.classList.add('visible');
   if (url) {
-    errorBar.innerHTML = 'ACP auth required — complete authentication at: <a href="' + url + '" target="_blank" style="color:var(--accent)">' + url + '</a>';
+    var safeUrl = HvUtils.escapeHtml(String(url));
+    if (/^https?:\/\//i.test(String(url).trim())) {
+      errorBar.innerHTML = 'ACP auth required - complete authentication at: <a href="' + safeUrl + '" target="_blank" rel="noopener" style="color:var(--interactive)">' + safeUrl + '</a>';
+    } else {
+      errorBar.innerHTML = 'ACP auth required - complete authentication at: ' + safeUrl;
+    }
   } else {
-    errorBar.innerHTML = 'ACP auth required — waiting for device flow...';
+    errorBar.innerHTML = 'ACP auth required - waiting for device flow...';
   }
 };
 
@@ -912,7 +593,6 @@ window.__acpAuthComplete = function() {
 };
 
 window.__acpNewSession = function() {
-  destroyWelcomeNoise();
   msgs.innerHTML = '';
   currentMsgEl = null;
   currentMsgText = '';
@@ -924,9 +604,8 @@ window.__acpNewSession = function() {
   resetThoughtStream();
   sessionTitle = '';
   firstPrompt = '';
-  var skillStripEl = getSkillStrip();
-  if (skillStripEl) skillStripEl.innerHTML = '';
   activeSkills = {};
+  window._syncSkillsToActiveTab();
   var titleEl = document.getElementById('session-title');
   if (titleEl) { titleEl.textContent = ''; titleEl.classList.remove('has-title'); }
   updateCtxMeter(0);
@@ -945,19 +624,27 @@ window.__acpSessionTitle = function(data) {
 };
 
 window.__acpSessionLoaded = function(data) {
-  if (_loadingHistoryTimeout) { clearTimeout(_loadingHistoryTimeout); _loadingHistoryTimeout = null; }
   _loadingHistory = true;
   msgs.classList.add('no-animate');
-  msgs.innerHTML = '';
+  // History can arrive before the agent finishes connecting (kiro reads it
+  // from disk first). Render it behind the loading block, which stays until
+  // the tab is ready; an existing block is kept so it does not restart.
+  var connecting = state === 'starting';
+  clearTabContent(msgs, connecting);
+  if (connecting) {
+    if (!setTabLoadingText(msgs, 'Connecting to session')) showTabLoading(msgs, 'Connecting to session');
+    msgs.classList.add('tab-connecting');
+  }
   currentMsgEl = null;
   currentMsgText = '';
   toolCards = {};
   currentToolRow = null;
   resetThoughtStream();
   activeSkills = {};
-  var skillStripReset = getSkillStrip();
-  if (skillStripReset) skillStripReset.innerHTML = '';
+  if (msgs.style.display !== 'none') window._syncSkillsToActiveTab();
   var messages = data && data.messages;
+  // Restore the session's last task list (replayed sessions only).
+  if (data && Array.isArray(data.plan) && window.__acpPlanUpdate) window.__acpPlanUpdate(data.plan);
   // Derive session title from first user message
   if (messages && messages.length) {
     for (var ti = 0; ti < messages.length; ti++) {
@@ -971,14 +658,24 @@ window.__acpSessionLoaded = function(data) {
     }
   }
   if (messages && messages.length) {
-    var pctEl = document.getElementById('ha-splash-pct');
     var total = messages.length;
     var idx = 0;
     // Detect if we're rendering into a hidden container (background tab).
-    // If so, render all messages synchronously — rAF won't fire for hidden elements
+    // If so, render all messages synchronously - rAF won't fire for hidden elements
     // and the context swap in _withTabContext won't persist across async callbacks.
     var isBackground = (msgs.style.display === 'none');
+    // The tab being rendered. If the user switches away between animation
+    // frames, the rest renders synchronously in that tab's own context so it
+    // never lands in the newly active tab.
+    var renderTabId = (!isBackground && typeof activeTabId !== 'undefined') ? activeTabId : null;
     function renderChunk() {
+      if (renderTabId && activeTabId !== renderTabId) {
+        var owner = renderTabId;
+        renderTabId = null;
+        if (!tabs[owner]) return; // tab closed mid-render
+        _withTabContext(owner, function() { isBackground = true; renderChunk(); });
+        return;
+      }
       var chunkSize = isBackground ? total : 5;
       var end = Math.min(idx + chunkSize, total);
       while (idx < end) {
@@ -1021,24 +718,14 @@ window.__acpSessionLoaded = function(data) {
             el.appendChild(body);
           }
         } else if (m.role === 'skill') {
-          // Render skill activation card + topbar badge
+          // Render skill activation card + track for the topbar chip
           var sCard = document.createElement('div');
           sCard.className = 'skill-card';
-          sCard.innerHTML = '<span class="skill-card-name">&#9670; ' + m.name + '</span>'
-            + (m.description ? '<span class="skill-card-desc">' + m.description + '</span>' : '');
+          sCard.innerHTML = '<span class="skill-card-name">&#9670; ' + HvUtils.escapeHtml(String(m.name)) + '</span>'
+            + (m.description ? '<span class="skill-card-desc">' + HvUtils.escapeHtml(String(m.description)) + '</span>' : '');
           msgs.appendChild(sCard);
-          // Topbar badge (deduplicate — only if active tab)
-          if (!isBackground) {
-            var sStrip = getSkillStrip();
-            if (!activeSkills[m.name] && sStrip) {
-              var sBadge = document.createElement('span');
-              sBadge.className = 'skill-badge';
-              sBadge.innerHTML = '<span class="skill-badge-icon">&#9670;</span>' + m.name;
-              sBadge.title = m.description || '';
-              sStrip.appendChild(sBadge);
-              activeSkills[m.name] = sBadge;
-            }
-          }
+          _trackSkill(m.name, m.description || '');
+          if (!isBackground) window._syncSkillsToActiveTab();
           idx++;
           continue;
         } else if (m.role === 'tool') {
@@ -1047,19 +734,29 @@ window.__acpSessionLoaded = function(data) {
           row.className = 'tool-row';
           while (idx < total && messages[idx].role === 'tool') {
             var tm = messages[idx];
-            var card = document.createElement('div');
             var tName = tm.name || 'tool';
-            card.className = 'tool-indicator tool-indicator-completed tc-' + toolGroup(tName);
-            var tIcon = toolIcon(tName);
-            card.innerHTML = '<span class="tool-indicator-icon">' + tIcon + '</span><span class="tool-indicator-label">' + tName + '</span>';
-            card.title = tName;
-            card.addEventListener('click', (function(c) {
-              return function() { c.classList.toggle('show-label'); };
-            })(card));
-            row.appendChild(card);
+            var tKind = tm.tool ? (CLAUDE_TOOL_ALIASES[tm.tool.toLowerCase()] || tm.tool) : tName;
+            var tStatus = tm.status === 'failed' ? 'tool-indicator-failed' : 'tool-indicator-completed';
+            row.appendChild(buildToolCard(null, tName, tKind, tStatus, tm.input, tm.output));
             idx++;
           }
           msgs.appendChild(row);
+          continue;
+        } else if (m.role === 'thought') {
+          // Reasoning and subagent output render in a collapsed thought row.
+          resetThoughtStream();
+          appendThoughtChunk(m.text || '');
+          setThoughtActive(false);
+          resetThoughtStream();
+          idx++;
+          continue;
+        } else if (m.role === 'compaction') {
+          msgs.appendChild(buildCompactionCard(m));
+          idx++;
+          continue;
+        } else if (m.role === 'turnend') {
+          msgs.appendChild(buildTurnEndEl(m.data || {}, false));
+          idx++;
           continue;
         } else {
           el.className = 'msg msg-agent';
@@ -1069,7 +766,6 @@ window.__acpSessionLoaded = function(data) {
         msgs.appendChild(el);
         idx++;
       }
-      if (pctEl && !isBackground) pctEl.textContent = Math.round((idx / total) * 100) + '%';
       if (idx < total) {
         if (isBackground) {
           // Synchronous: continue immediately (no rAF for hidden containers)
@@ -1078,39 +774,19 @@ window.__acpSessionLoaded = function(data) {
           requestAnimationFrame(renderChunk);
         }
       } else {
-        msgs.scrollTop = msgs.scrollHeight;
         msgs.classList.remove('no-animate');
         _loadingHistory = false;
+        msgs.scrollTop = msgs.scrollHeight;
         // Re-enable send button now that history is done loading
         if (state === 'ready') {
           sendBtn.disabled = false;
-        }
-        // If agent is already ready, show brief 'waiting' then dismiss.
-        // If not ready, show 'Waiting for agent start' until state changes.
-        if (state === 'ready') {
-          // Agent was already ready — show the waiting message briefly so the
-          // user sees the full loading sequence, then dismiss.
-          var loadingEl = document.querySelector('.ha-splash-loading');
-          if (loadingEl) loadingEl.textContent = 'Waiting for agent start';
-          if (pctEl) pctEl.innerHTML = '<div class="ha-splash-blink"></div>';
-          setTimeout(function() {
-            var splash = document.getElementById('ha-splash');
-            if (splash) {
-              splash.classList.add('hidden');
-              setTimeout(function() { if (splash.parentNode) splash.parentNode.removeChild(splash); }, 700);
-            }
-          }, 800);
-        } else {
-          var loadingEl = document.querySelector('.ha-splash-loading');
-          if (loadingEl) loadingEl.textContent = 'Waiting for agent start';
-          if (pctEl) pctEl.innerHTML = '<div class="ha-splash-blink"></div>';
         }
       }
     }
     renderChunk();
   } else {
-    msgs.scrollTop = msgs.scrollHeight;
     msgs.classList.remove('no-animate');
     _loadingHistory = false;
+    msgs.scrollTop = msgs.scrollHeight;
   }
 };

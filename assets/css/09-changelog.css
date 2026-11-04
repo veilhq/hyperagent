@@ -1,7 +1,7 @@
 /* =========================================================================
-   Changelog Dropdown — badge-anchored panel showing kiro-cli release notes.
+   Changelog Dropdown - badge-anchored panel showing kiro-cli release notes.
    Anchored to the #cli-version badge; mirrors the model-picker dropdown
-   structure and hyperkit token vocabulary — no raw values.
+   structure and hyperkit token vocabulary - no raw values.
    ========================================================================= */
 
 .cli-version-picker {
@@ -10,7 +10,7 @@
   align-items: center;
 }
 
-/* ---- Trigger badge — keeps the quiet muted-outline chip look, adds
+/* ---- Trigger badge - keeps the quiet muted-outline chip look, adds
    interactive affordance since it's now clickable. Base chip styling
    (color/background/border) is inherited from .cli-version in 01-layout.css. */
 .cli-version {
@@ -20,24 +20,24 @@
               background var(--motion-fast) var(--ease);
 }
 .cli-version:hover {
-  color: var(--accent);
-  border-color: var(--accent);
+  color: var(--interactive);
+  border-color: var(--interactive);
 }
 .cli-version.cli-version-open {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--accent-glow);
+  color: var(--selected);
+  border-color: var(--selected);
+  background: var(--selected-wash);
 }
-/* ---- Unseen release notes cue — accent outline until acknowledged ---- */
+/* ---- Unseen release notes cue - accent outline until acknowledged ---- */
 .cli-version.has-new {
-  color: var(--accent);
-  border-color: var(--accent);
+  color: var(--live);
+  border-color: var(--live);
 }
 .cli-version.has-new:hover {
-  background: var(--accent-glow);
+  background: var(--live-wash);
 }
 
-/* ---- Dropdown panel — matches .model-picker-dropdown open/close behavior ---- */
+/* ---- Dropdown panel - matches .model-picker-dropdown open/close behavior ---- */
 .cli-version-dropdown {
   /* Surface (bg/border/radius/z-index) comes from .floating-panel-raised.
      Only positioning, width, and the max-height reveal are specific here. */
@@ -63,7 +63,7 @@
 .cli-version-dropdown::-webkit-scrollbar-track { background: var(--bg-card); }
 .cli-version-dropdown::-webkit-scrollbar-thumb { background: var(--border-strong); }
 
-/* ---- Panel header — matches .model-picker-header ---- */
+/* ---- Panel header - matches .model-picker-header ---- */
 .cli-version-header {
   display: flex;
   align-items: baseline;
@@ -71,17 +71,16 @@
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   border-bottom: var(--border-hair) solid var(--border);
-  font-size: var(--fs-caption);
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.08em;
+  font-size: var(--fs-mono);
+  letter-spacing: var(--track-label);
   text-transform: uppercase;
-  color: var(--text-dim);
+  color: var(--text-muted);
 }
 .cli-version-header-title { color: var(--text-dim); }
 .cli-version-header-meta {
-  font-size: var(--fs-micro);
+  font-size: var(--fs-mono);
   font-weight: var(--fw-normal);
-  letter-spacing: 0.02em;
+  letter-spacing: var(--track-tight);
   text-transform: none;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
@@ -94,22 +93,21 @@
   padding: var(--space-1) 0 var(--space-2);
 }
 
-/* ---- Category group headers — matches .model-picker-group-header ---- */
+/* ---- Category group headers - matches .model-picker-group-header ---- */
 .cli-version-group-header {
   padding: var(--space-2) var(--space-3) var(--space-1);
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-bold);
-  color: var(--text-dim);
+  font-size: var(--fs-mono);
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: var(--track-caps);
   border-top: var(--border-hair) solid var(--border);
 }
 .cli-version-group-header:first-child { border-top: none; }
-/* Category accent cues — reuse semantic tokens already in the palette. */
-.cli-version-group-header[data-type="Added"]      { color: var(--accent); }
-.cli-version-group-header[data-type="Fixed"]       { color: var(--cool); }
-.cli-version-group-header[data-type="Security"]    { color: var(--comp); }
-.cli-version-group-header[data-type="Deprecated"]  { color: var(--warm); }
+/* Category accent cues - reuse semantic tokens already in the palette. */
+.cli-version-group-header[data-type="Added"]      { color: var(--success); }
+.cli-version-group-header[data-type="Fixed"]       { --changelog-tone: var(--cool); color: var(--changelog-tone); }
+.cli-version-group-header[data-type="Security"]    { --changelog-tone: var(--comp); color: var(--changelog-tone); }
+.cli-version-group-header[data-type="Deprecated"]  { --changelog-tone: var(--warm); color: var(--changelog-tone); }
 
 /* ---- Individual change entries ---- */
 .cli-version-item {
@@ -119,8 +117,8 @@
   padding: var(--space-1) var(--space-3);
   color: var(--text);
   font-family: var(--font);
-  font-size: var(--fs-label);
-  line-height: 1.5;
+  font-size: var(--fs-mono);
+  line-height: var(--lh-body);
 }
 .cli-version-item-text {
   color: var(--text-muted);
@@ -131,21 +129,13 @@
 /* ---- Engine tag chip (e.g. "V3") ---- */
 .cli-version-item-tag {
   flex-shrink: 0;
-  display: inline-block;
-  padding: 0.1rem var(--chip-padding-x);
-  border: var(--border-hair) solid var(--border-strong);
-  border-radius: var(--radius);
-  font-size: var(--fs-micro);
-  font-weight: var(--chip-font-weight);
-  letter-spacing: var(--chip-letter-spacing);
   color: var(--text-dim);
-  text-transform: uppercase;
 }
 
 /* ---- Empty / loading state ---- */
 .cli-version-empty {
   padding: var(--space-3);
-  font-size: var(--fs-label);
+  font-size: var(--fs-mono);
   color: var(--text-dim);
   text-align: center;
 }

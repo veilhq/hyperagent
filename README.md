@@ -59,7 +59,7 @@ Hyperagent is not self-contained — it depends on **Hyperkit**, the shared desi
 
 This isn't a pip package — it's a sibling directory that must physically exist at `.hyperspace/.hyperkit/` relative to this repo. If you're cloning Hyperagent standalone into a workspace that doesn't already have `.hyperkit/`, copy or clone it in before running `build.py`. `build.py` raises `FileNotFoundError` immediately (not a silent fallback) if any required Hyperkit file is missing.
 
-See [`.hyperspace/.hyperkit/README.md`](../.hyperkit/README.md) for what lives there and the override pattern for anything Hyperagent needs to render differently than Hypervisor (e.g. the clip-path `.hv-tab` shape).
+See [`.hyperspace/.hyperkit/README.md`](../.hyperkit/README.md) for what lives there and the override pattern for anything Hyperagent needs to render differently than Hypervisor (none today; tabs share `.nav-tab`).
 
 ## How It Works
 
@@ -129,7 +129,7 @@ No runtime file serving — the entire UI is a single inline HTML string passed 
 ├── assets/
 │   ├── shell.html         ← HTML template
 │   ├── css/
-│   │   ├── 00-primitives.css  ← Local override only (post-WI-142) — the clip-path .hv-tab shape
+│   │   ├── 00-primitives.css  ← Local overrides (none at present)
 │   │   ├── 00-variables.css   ← App-local globals only (post-WI-142) — reset, cursors, scrollbar, animations
 │   │   ├── 01-layout.css      ← Topbar, app layout, error bar, status cluster
 │   │   ├── 02-messages.css    ← Message bubbles, code blocks, markdown, welcome screen
@@ -144,7 +144,10 @@ No runtime file serving — the entire UI is a single inline HTML string passed 
 │   ├── js/
 │   │   ├── 00-core.js         ← DOM refs, state, accent sync, PyWebView bridge detection
 │   │   ├── 01-markdown.js     ← Lightweight markdown→HTML renderer
-│   │   ├── 02-handlers.js     ← ACP event handlers, tool cards, stream buffer
+│   │   ├── 02-handlers.js     ← ACP push handlers (window.__acp*), message and skill helpers
+│   │   ├── 02a-stream.js      ← Stream buffer, drain/flush, thought stream
+│   │   ├── 02b-tools.js       ← Tool cards, turn-end element, tool icons and groups
+│   │   ├── 02c-tabload.js     ← Tab load-state helpers
 │   │   ├── 03-ui.js           ← Send, cancel, shortcuts, welcome screen mount
 │   │   ├── 04-sidebar.js      ← Session list management
 │   │   ├── 05-thinking.js     ← WebGL2 thinking bar indicator
@@ -195,6 +198,7 @@ Five ecosystem JS modules (`HvCursorBox`, `HvNoiseField`, `HvGreeting`, `HvCurso
 | Ctrl+B | Toggle sidebar |
 | Ctrl+N | New session |
 | Ctrl+F | Search messages |
+| ! | Toggle ultracode |
 | F | Toggle fullscreen |
 
 ## Development

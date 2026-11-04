@@ -2,9 +2,11 @@
 /* Ecosystem-aligned (WI-113): uses list-row, status-chip, content-section-quiet primitives. */
 
 .main-layout {
+  --sidebar-w: 280px;
   flex: 1;
   display: flex;
   overflow: hidden;
+  position: relative;
 }
 .main-layout #messages { flex: 1; }
 
@@ -20,7 +22,7 @@
   flex-direction: column;
   transition: width var(--motion-base) var(--ease);
 }
-.sidebar.open { width: 280px; }
+.sidebar.open { width: var(--sidebar-w); }
 
 /* ---- Section layout ----
    Two sections: tabs (fixed top) and session history (scrollable bottom).
@@ -42,7 +44,7 @@
   margin: var(--space-3) 0 var(--space-3) 0;
 }
 
-/* Section headers — compact uppercase label */
+/* Section headers - compact uppercase label */
 .sidebar-section-header {
   display: flex;
   align-items: center;
@@ -51,14 +53,13 @@
 }
 
 .sidebar-section-label {
-  font-size: var(--fs-caption);
-  font-weight: var(--fw-bold);
+  font-size: var(--fs-mono);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-dim);
+  letter-spacing: var(--track-caps);
+  color: var(--text-muted);
 }
 
-/* Refresh button — small ghost icon button next to the Sessions label */
+/* Refresh button - small ghost icon button next to the Sessions label */
 .session-refresh-btn {
   display: flex;
   align-items: center;
@@ -72,13 +73,13 @@
   padding: 0;
   transition: color var(--motion-fast) var(--ease), transform var(--motion-fast) var(--ease);
 }
-.session-refresh-btn:hover { color: var(--accent); }
+.session-refresh-btn:hover { color: var(--interactive); }
 .session-refresh-btn:active { transform: rotate(180deg); }
-.session-refresh-btn.spinning svg { animation: spin 0.6s linear; } /* off-scale: spinner cadence */
+.session-refresh-btn.spinning svg { animation: spin var(--period-spin) linear; } /* off-scale: spinner cadence */
 
 /* ---- Tab cards ----
-   Clipped-corner cards with dither grid and title.
-   Corner notch (top-right) is the shape signature. No border — clip IS the shape. */
+   Session tabs compose .nav-tab (rounded rect + selected state) with a dither
+   grid and title. */
 .sidebar-tab-list {
   display: flex;
   flex-direction: column;
@@ -97,9 +98,8 @@
   transition: background var(--motion-fast) var(--ease),
               transform var(--motion-fast) var(--ease);
 }
-.sidebar-tab-item.active .sidebar-tab-item-title { color: var(--text-bright); }
 
-/* State classes — used by dither grid patterns only (no rail) */
+/* State classes - used by dither grid patterns only (no rail) */
 .sidebar-tab-item.crashed {
   animation: tab-rail-shake var(--motion-slow) ease-out;
 }
@@ -111,8 +111,8 @@
   100% { transform: translateX(0); }
 }
 
-/* ---- Tab state dither — 3×3 grid chase indicator ----
-   Inline element in the tab row grid. Shows only during prompting.
+/* ---- Tab state dither - 3x3 grid chase indicator ----
+   Inline element in the tab row grid; also the workflow agent-row state glyph (running chase, done +).
    Same perimeter-chase pattern as the thought stream dither. */
 .sidebar-tab-dither {
   --cell: 3px;
@@ -126,7 +126,7 @@
   flex-shrink: 0;
 }
 .sidebar-tab-dither > span {
-  background: var(--accent);
+  background: var(--live);
   opacity: 0.1;
 }
 /* Center cell: never lit in idle/prompting */
@@ -135,18 +135,18 @@
 }
 
 /* Prompting: run chase */
-.sidebar-tab-item.prompting .sidebar-tab-dither > span {
-  animation: tab-dither-pulse 1s linear infinite; /* off-scale: 1s perimeter chase cycle, delays are 1/8 divisions */
+:is(.sidebar-tab-item.prompting, .workflow-card-agent[data-state="running"], .workflow-detail-agent[data-state="running"]) .sidebar-tab-dither > span {
+  animation: tab-dither-pulse var(--period-blink) linear infinite; /* off-scale: 1s perimeter chase cycle, delays are 1/8 divisions */
 }
-.sidebar-tab-item.prompting .sidebar-tab-dither > span:nth-child(1) { animation-delay: 0s; }
-.sidebar-tab-item.prompting .sidebar-tab-dither > span:nth-child(2) { animation-delay: 0.125s; }
-.sidebar-tab-item.prompting .sidebar-tab-dither > span:nth-child(3) { animation-delay: 0.25s; }
-.sidebar-tab-item.prompting .sidebar-tab-dither > span:nth-child(6) { animation-delay: 0.375s; }
-.sidebar-tab-item.prompting .sidebar-tab-dither > span:nth-child(9) { animation-delay: 0.5s; }
-.sidebar-tab-item.prompting .sidebar-tab-dither > span:nth-child(8) { animation-delay: 0.625s; }
-.sidebar-tab-item.prompting .sidebar-tab-dither > span:nth-child(7) { animation-delay: 0.75s; }
-.sidebar-tab-item.prompting .sidebar-tab-dither > span:nth-child(4) { animation-delay: 0.875s; }
-.sidebar-tab-item.prompting .sidebar-tab-dither > span:nth-child(5) { animation: none; }
+:is(.sidebar-tab-item.prompting, .workflow-card-agent[data-state="running"], .workflow-detail-agent[data-state="running"]) .sidebar-tab-dither > span:nth-child(1) { animation-delay: 0s; }
+:is(.sidebar-tab-item.prompting, .workflow-card-agent[data-state="running"], .workflow-detail-agent[data-state="running"]) .sidebar-tab-dither > span:nth-child(2) { animation-delay: calc(var(--period-blink) * 1 / 8); }
+:is(.sidebar-tab-item.prompting, .workflow-card-agent[data-state="running"], .workflow-detail-agent[data-state="running"]) .sidebar-tab-dither > span:nth-child(3) { animation-delay: calc(var(--period-blink) * 2 / 8); }
+:is(.sidebar-tab-item.prompting, .workflow-card-agent[data-state="running"], .workflow-detail-agent[data-state="running"]) .sidebar-tab-dither > span:nth-child(6) { animation-delay: calc(var(--period-blink) * 3 / 8); }
+:is(.sidebar-tab-item.prompting, .workflow-card-agent[data-state="running"], .workflow-detail-agent[data-state="running"]) .sidebar-tab-dither > span:nth-child(9) { animation-delay: calc(var(--period-blink) * 4 / 8); }
+:is(.sidebar-tab-item.prompting, .workflow-card-agent[data-state="running"], .workflow-detail-agent[data-state="running"]) .sidebar-tab-dither > span:nth-child(8) { animation-delay: calc(var(--period-blink) * 5 / 8); }
+:is(.sidebar-tab-item.prompting, .workflow-card-agent[data-state="running"], .workflow-detail-agent[data-state="running"]) .sidebar-tab-dither > span:nth-child(7) { animation-delay: calc(var(--period-blink) * 6 / 8); }
+:is(.sidebar-tab-item.prompting, .workflow-card-agent[data-state="running"], .workflow-detail-agent[data-state="running"]) .sidebar-tab-dither > span:nth-child(4) { animation-delay: calc(var(--period-blink) * 7 / 8); }
+:is(.sidebar-tab-item.prompting, .workflow-card-agent[data-state="running"], .workflow-detail-agent[data-state="running"]) .sidebar-tab-dither > span:nth-child(5) { animation: none; }
 
 @keyframes tab-dither-pulse {
   0%, 100% { opacity: 0.2; }
@@ -155,23 +155,25 @@
 }
 
 /* Done: + pattern (edges + center lit, corners dark) */
-.sidebar-tab-item.done .sidebar-tab-dither > span {
-  background: var(--warm);
+:is(.sidebar-tab-item.done, .workflow-card-agent[data-state="done"], .workflow-detail-agent[data-state="done"]) .sidebar-tab-dither > span {
+  --dither-tone: var(--warm);
+  background: var(--dither-tone);
   opacity: 0;
   animation: none;
 }
 /* Edges: 2, 4, 6, 8 + center: 5 */
-.sidebar-tab-item.done .sidebar-tab-dither > span:nth-child(2),
-.sidebar-tab-item.done .sidebar-tab-dither > span:nth-child(4),
-.sidebar-tab-item.done .sidebar-tab-dither > span:nth-child(5),
-.sidebar-tab-item.done .sidebar-tab-dither > span:nth-child(6),
-.sidebar-tab-item.done .sidebar-tab-dither > span:nth-child(8) {
+:is(.sidebar-tab-item.done, .workflow-card-agent[data-state="done"], .workflow-detail-agent[data-state="done"]) .sidebar-tab-dither > span:nth-child(2),
+:is(.sidebar-tab-item.done, .workflow-card-agent[data-state="done"], .workflow-detail-agent[data-state="done"]) .sidebar-tab-dither > span:nth-child(4),
+:is(.sidebar-tab-item.done, .workflow-card-agent[data-state="done"], .workflow-detail-agent[data-state="done"]) .sidebar-tab-dither > span:nth-child(5),
+:is(.sidebar-tab-item.done, .workflow-card-agent[data-state="done"], .workflow-detail-agent[data-state="done"]) .sidebar-tab-dither > span:nth-child(6),
+:is(.sidebar-tab-item.done, .workflow-card-agent[data-state="done"], .workflow-detail-agent[data-state="done"]) .sidebar-tab-dither > span:nth-child(8) {
   opacity: 0.9;
 }
 
 /* Crashed: X pattern (corners + center lit, edges dark) */
 .sidebar-tab-item.crashed .sidebar-tab-dither > span {
-  background: var(--comp);
+  --dither-tone: var(--comp);
+  background: var(--dither-tone);
   opacity: 0;
   animation: none;
 }
@@ -185,10 +187,11 @@
 }
 
 /* Errored: prompt-level failure (subprocess still alive). Same X pattern as
-   crashed — both are failures, the distinction is connection vs. run. Declared
+   crashed - both are failures, the distinction is connection vs. run. Declared
    after .done so it wins if a turn-end race leaves both classes applied. */
 .sidebar-tab-item.errored .sidebar-tab-dither > span {
-  background: var(--comp);
+  --dither-tone: var(--comp);
+  background: var(--dither-tone);
   opacity: 0;
   animation: none;
 }
@@ -206,15 +209,13 @@
 /* Tab title */
 
 .sidebar-tab-item-title {
-  font-size: var(--fs-label);
-  font-weight: var(--fw-bold);
-  color: var(--text);
+  font-size: var(--fs-mono);
+  color: inherit;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
 }
-.sidebar-tab-item:hover .sidebar-tab-item-title { color: var(--accent); }
 
 .sidebar-tab-item-close {
   position: absolute;
@@ -223,26 +224,25 @@
   background: none;
   border: none;
   color: var(--text-dim);
-  font-size: var(--fs-heading);
+  font-size: var(--fs-mono);
   cursor: pointer;
-  padding: 0 var(--space-0-2);
-  line-height: 1;
+  padding: 0 var(--space-1);
+  line-height: var(--lh-tight);
   opacity: 0;
   flex-shrink: 0;
   transition: opacity var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
 }
 .sidebar-tab-item:hover .sidebar-tab-item-close { opacity: 1; }
-.sidebar-tab-item-close:hover { color: var(--comp); }
+.sidebar-tab-item-close:hover { color: var(--interactive); }
 
 /* Tab rename input */
 .sidebar-tab-rename-input {
   font-family: var(--font);
-  font-size: var(--fs-label);
-  font-weight: var(--fw-bold);
+  font-size: var(--fs-mono);
   color: var(--text-bright);
   background: var(--bg);
-  border: var(--border-hair) solid var(--accent);
-  padding: var(--space-0-1) var(--space-0-3);
+  border: var(--border-hair) solid var(--focus);
+  padding: var(--space-1) var(--space-1);
   grid-column: 2;
   min-width: 0;
   outline: none;
@@ -256,13 +256,12 @@
   right: -5px;
   min-width: 12px;
   height: 12px;
-  padding: 0 3px;
-  font-size: 8px;
-  font-weight: var(--fw-bold);
+  padding: 0 var(--border-rail);
+  font-size: var(--fs-mono);
   line-height: 12px;
   text-align: center;
   color: var(--bg);
-  background: var(--comp);
+  background: var(--live);
   /* Rounded square to match ecosystem chrome; ring in the surface color keeps it clean over the edge */
   border-radius: var(--radius);
   box-shadow: 0 0 0 var(--border-hair) var(--bg);
@@ -309,17 +308,16 @@
 .session-item:hover {
   background: var(--bg-card-hover);
 }
-.session-item:hover .session-item-title { color: var(--accent); }
+.session-item:hover .session-item-title { color: var(--interactive); }
 .session-item.active {
-  background: var(--accent-glow);
-  border-color: var(--accent-border);
+  background: var(--selected-wash);
+  border-color: var(--selected-border);
 }
 .session-item.active .session-item-title { color: var(--text-bright); }
 
 /* Top row: title (full-width, defining element) */
 .session-item-title {
-  font-size: var(--fs-label);
-  font-weight: var(--fw-bold);
+  font-size: var(--fs-mono);
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -342,13 +340,13 @@
 
 /* Age label */
 .session-item-age {
-  font-size: var(--fs-micro);
+  font-size: var(--fs-mono);
   font-variant-numeric: tabular-nums;
   color: var(--text-dim);
   white-space: nowrap;
 }
 
-/* Removal transition — tabs */
+/* Removal transition - tabs */
 .sidebar-tab-item.tab-removing {
   opacity: 0;
   transform: translateX(-10px);
@@ -362,7 +360,7 @@
               padding var(--motion-base) var(--ease);
 }
 
-/* Removal transition — sessions */
+/* Removal transition - sessions */
 .session-item.session-removing {
   opacity: 0;
   transform: translateX(-10px);
@@ -378,7 +376,7 @@
               margin var(--motion-base) var(--ease);
 }
 
-/* Delete button — top-right corner, absolute positioned */
+/* Delete button - top-right corner, absolute positioned */
 .session-delete-btn {
   position: absolute;
   top: var(--space-2);
@@ -386,50 +384,50 @@
   background: none;
   border: none;
   color: var(--text-dim);
-  font-size: var(--fs-heading);
+  font-size: var(--fs-mono);
   cursor: pointer;
-  padding: 0 var(--space-0-2);
-  line-height: 1;
+  padding: 0 var(--space-1);
+  line-height: var(--lh-tight);
   opacity: 0;
   transition: opacity var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
 }
 .session-item:hover .session-delete-btn { opacity: 1; }
-.session-delete-btn:hover { color: var(--comp); }
+.session-delete-btn:hover { color: var(--error); }
 
-/* Lock badge — warm-tinted chip override */
+/* Lock badge - warning-tinted chip override */
 .session-lock {
-  color: var(--warm);
-  border-color: var(--warm);
-  margin-left: var(--space-0-4);
+  color: var(--warning);
+  border-color: var(--warning);
+  margin-left: var(--space-2);
 }
 
 /* ---- Context menu ---- */
 .session-ctx-menu {
   position: fixed;
   z-index: var(--z-dropdown);
-  background: var(--bg-elevated);
+  background: var(--bg-raised);
   border: var(--border-hair) solid var(--border-strong);
-  padding: var(--space-0-3) 0;
+  padding: var(--space-1) 0;
   min-width: 120px;
   display: none;
 }
 .session-ctx-menu.visible { display: block; }
 .session-ctx-menu-item {
-  padding: var(--space-0-4) var(--space-0-8);
-  font-size: var(--fs-caption);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--fs-mono);
   color: var(--text);
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: var(--space-0-4);
+  gap: var(--space-2);
 }
 .session-ctx-menu-item:hover {
-  background: var(--accent-glow);
+  background: var(--interactive-wash);
   color: var(--text-bright);
 }
 .session-ctx-menu-item.danger:hover {
-  background: rgba(255, 51, 51, 0.1);
-  color: var(--comp);
+  background: var(--danger-hover-bg);
+  color: var(--error);
 }
 .session-ctx-menu-sep {
   height: 1px;
@@ -441,12 +439,11 @@
 .session-item-title.renaming { display: none; }
 .session-rename-input {
   font-family: var(--font);
-  font-size: var(--fs-label);
-  font-weight: var(--fw-bold);
+  font-size: var(--fs-mono);
   color: var(--text-bright);
   background: var(--bg);
-  border: var(--border-hair) solid var(--accent);
-  padding: var(--space-0-1) var(--space-0-3);
+  border: var(--border-hair) solid var(--focus);
+  padding: var(--space-1) var(--space-1);
   width: 100%;
   min-width: 0;
   outline: none;

@@ -12,7 +12,7 @@ function createTaskPanel() {
   taskPanel.id = 'task-panel';
   taskPanel.className = 'task-panel';
   taskPanel.innerHTML = '<div class="panel-header task-panel-header">Tasks</div><div class="task-panel-body" id="task-panel-body"></div>';
-  // Toggle collapse on header click — shared HvCollapsible primitive; the panel
+  // Toggle collapse on header click - shared HvCollapsible primitive; the panel
   // markup is owned here, the primitive attaches only the toggle behavior.
   var taskHeader = taskPanel.querySelector('.task-panel-header');
   if (window.HvCollapsible) {
@@ -33,14 +33,14 @@ function renderTasks() {
   var body = document.getElementById('task-panel-body');
   if (!body) return;
   var html = '';
-  if (taskDescription) html += '<div class="task-panel-desc">' + taskDescription + '</div>';
+  if (taskDescription) html += '<div class="task-panel-desc">' + HvUtils.escapeHtml(String(taskDescription)) + '</div>';
   if (taskList.length) {
     html += '<ul class="task-panel-list">';
     for (var i = 0; i < taskList.length; i++) {
       var t = taskList[i];
       var cls = t.completed ? 'task-item done' : 'task-item';
       var check = t.completed ? '■' : '□';
-      html += '<li class="' + cls + '"><span class="task-check">' + check + '</span>' + t.task_description + '</li>';
+      html += '<li class="' + cls + '"><span class="task-check">' + check + '</span>' + HvUtils.escapeHtml(String(t.task_description == null ? '' : t.task_description)) + '</li>';
     }
     html += '</ul>';
   }

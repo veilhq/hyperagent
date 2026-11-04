@@ -1,13 +1,4 @@
 /* ===== Hyperagent: Local Primitive Overrides =====
-   Shared primitives (status-chip, list-row, action-button, modal-overlay, etc.) relocated
-   to .hyperkit/css/primitives.css (WI-142 Phase 1) — loaded before this file.
-   This file holds only the shape-level divergence Hyperagent keeps: the
-   clipped-corner tab card. See hyperkit/css/primitives.css for the shared
-   .nav-tab base (position, background, hover transition) that this extends. */
-
-/* ---- Tab card primitive ----------------------------------------------------
-   The clipped-corner notch that was Hyperagent's local divergence is now the
-   shared ecosystem tab shape - see .nav-tab in hyperkit/css/primitives.css,
-   which provides the clip-path, surface, and active-glow. Nothing tab-shaped
-   is overridden here anymore; Hyperagent's session-tab layout specifics live
-   in 05-sidebar.css. */
+   Shared primitives (status-chip, list-row, action-button, modal-overlay, tabs, etc.)
+   live in .hyperkit/css/primitives.css (loaded before this file). No local
+   overrides remain at present; session-tab layout lives in 05-sidebar.css. */
