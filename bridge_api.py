@@ -527,6 +527,15 @@ class HyperagentAPI:
                     str(tab_id or self._pool._active_tab)[:6])
         return client.answer_workflow_plan(tool_call_id, bool(allow))
 
+    def answer_question(self, tool_call_id, answers, action, tab_id=None):
+        """Answer a held agent question (accept/decline/cancel); False when no such question is waiting."""
+        client = self._pool.get_client(tab_id) if tab_id else self._pool.active_client
+        if not client:
+            return False
+        logger.info("answer_question: call=%s action=%s (tab=%s)", str(tool_call_id)[:12], action,
+                    str(tab_id or self._pool._active_tab)[:6])
+        return client.answer_question(tool_call_id, answers, action)
+
     def stop_workflow(self, task_id, tab_id=None):
         """Stop a running background workflow through the adapter; False when it is unknown or already stopping."""
         client = self._pool.get_client(tab_id) if tab_id else self._pool.active_client
@@ -642,6 +651,27 @@ class HyperagentAPI:
             return None
         self._mark_changelog_seen(version)
         return self._backend.changelog(version)
+
+    def get_pending_changelog(self):
+        """Return one merged changelog block for releases newer than the
+        installed version, or None when up to date or unsupported."""
+        return self._backend.pending_changelog()
+
+    def get_release_state(self):
+        """Return the update-flow state ({active, runtime, candidate,
+        candidateRuntime, test}), or None when the agent has no in-app update."""
+        return self._backend.release_state()
+
+    def test_release(self):
+        """Install the candidate release beside the active one and smoke-test
+        it. Blocks for minutes; returns the saved {version, ok, checks, at}."""
+        logger.info("test_release: started")
+        return self._backend.test_release()
+
+    def install_release(self):
+        """Switch to the tested candidate release; tabs pick it up on Reconnect."""
+        logger.info("install_release: started")
+        return self._backend.install_release()
 
     def _mark_changelog_seen(self, version):
         """Persist the acknowledged changelog version to preferences."""

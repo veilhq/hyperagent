@@ -460,6 +460,103 @@ def get_kiro_all_changelogs():
     return _parse_changelog_blocks(r.stdout)
 
 
+# ---------------------------------------------------------------------------
+# Claude Code release notes (GitHub CHANGELOG.md) and update detection
+# ---------------------------------------------------------------------------
+
+CLAUDE_CHANGELOG_URL = "https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md"
+_CLAUDE_CHANGELOG_TTL = 3600.0
+_claude_changelog_cache = {"fetched": 0.0, "blocks": []}
+_claude_changelog_lock = threading.Lock()
+
+_CLAUDE_HEADER_RE = re.compile(r"^##\s+(\d+\.\d+\.\d+)\s*$")
+# Leading verb -> display category; unlisted verbs keep their text under Changed.
+_CLAUDE_VERB_TYPES = {
+    "Added": "Added", "Fixed": "Fixed", "Changed": "Changed", "Security": "Security",
+    "Deprecated": "Deprecated", "Improved": "Changed", "Updated": "Changed",
+    "Removed": "Deprecated",
+}
+_CLAUDE_STRIPPED_VERBS = ("Added", "Fixed", "Changed", "Security", "Deprecated")
+
+
+def version_key(version):
+    """Sortable tuple for a dotted version string; () when unparsable."""
+    try:
+        return tuple(int(part) for part in version.split("."))
+    except (ValueError, AttributeError):
+        return ()
+
+
+def parse_claude_changelog(text):
+    """Parse the Claude Code CHANGELOG.md into version blocks, newest-first.
+
+    Each block matches the kiro shape ({version, date, entries}); the file
+    carries no dates, so date is None. Entries are bullets under a `## x.y.z`.
+    """
+    blocks = []
+    current = None
+    for line in text.splitlines():
+        header = _CLAUDE_HEADER_RE.match(line)
+        if header:
+            current = {"version": header.group(1), "date": None, "entries": []}
+            blocks.append(current)
+            continue
+        if current is None or not line.startswith("- "):
+            continue
+        body = line[2:].strip()
+        verb = body.split(" ", 1)[0]
+        entry_type = _CLAUDE_VERB_TYPES.get(verb, "Changed")
+        if verb in _CLAUDE_STRIPPED_VERBS:
+            body = body[len(verb):].strip()
+        current["entries"].append({"type": entry_type, "tag": None, "text": body})
+    return blocks
+
+
+def get_claude_changelog_blocks(force=False):
+    """Claude Code release blocks (newest-first), cached for an hour.
+
+    Fetches the upstream CHANGELOG.md; returns the last good copy (or []) when
+    the fetch fails, so a network outage never breaks the badge.
+    """
+    import urllib.request
+    now = time.time()
+    with _claude_changelog_lock:
+        cached = _claude_changelog_cache
+        if cached["blocks"] and not force and now - cached["fetched"] < _CLAUDE_CHANGELOG_TTL:
+            return cached["blocks"]
+        try:
+            request = urllib.request.Request(
+                CLAUDE_CHANGELOG_URL, headers={"User-Agent": "hyperagent"})
+            with urllib.request.urlopen(request, timeout=8) as response:
+                text = response.read().decode("utf-8")
+            blocks = parse_claude_changelog(text)
+        except Exception as e:
+            logger.debug("get_claude_changelog_blocks failed: %s", e)
+            return cached["blocks"]
+        if blocks:
+            cached["fetched"] = now
+            cached["blocks"] = blocks
+        return cached["blocks"]
+
+
+def pending_changelog(blocks, installed):
+    """Merge the blocks newer than `installed` into one block, or None.
+
+    The merged block is labeled with the newest version; entries keep
+    newest-first order across the releases.
+    """
+    floor = version_key(installed)
+    newer = [b for b in blocks if version_key(b["version"]) > floor]
+    if not newer:
+        return None
+    return {
+        "version": newer[0]["version"],
+        "date": None,
+        "range": [newer[-1]["version"], newer[0]["version"]],
+        "entries": [entry for block in newer for entry in block["entries"]],
+    }
+
+
 # Persistent changelog archive - lives in the hypervisor data dir so the
 # hypervisor viewer utility can read it. Hyperagent owns the write side (it
 # detects updates and talks to the CLI); hypervisor only reads.

@@ -21,6 +21,8 @@ EXPECTED = [
     "_attempt_session_reload", "cancel", "new_session", "_read_stdout",
     "_drain_stderr", "_run_callback", "_dispatch", "_handle_server_request",
     "_hold_workflow_plan", "answer_workflow_plan", "_cancel_workflow_plans", "_detect_skill_activation",
+    "_parse_questions", "_hold_question", "answer_question", "_cancel_questions",
+    "_normalize_commands", "_capture_commands", "_push_update_available",
     "_push_skill_activation", "_maybe_suggest_model", "_resolve_model_tier", "_model_display_name",
     "_track_file_change", "_push_js", "_push_js_throttled", "_emit_file_change_event",
     "_push_state", "_push_cli_version_badge", "_load_prefs", "_load_session_id",

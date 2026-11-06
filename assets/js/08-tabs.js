@@ -314,6 +314,7 @@ function switchTab(tabId) {
   // Sync task panel DOM to the new active tab's task state
   _syncTaskPanelToActiveTab();
   if (window._syncWorkflowCards) window._syncWorkflowCards();
+  if (window._syncQuestionCards) window._syncQuestionCards();
 
   // Swap the global `msgs` reference to point to this tab's container
   msgs = tabs[tabId].msgsEl;

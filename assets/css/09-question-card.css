@@ -1,0 +1,156 @@
+/* ---- Agent question card - composes with .modal-overlay .modal-panel ----
+   Same shell as the workflow launch card: flat sections divided by hairlines. */
+.question-card-panel {
+  max-width: 520px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.question-card-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: var(--border-hair) solid var(--border);
+}
+.question-card-kicker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-mono);
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+  color: var(--text-muted);
+}
+.question-card-kicker-tab { color: var(--text-dim); }
+.question-card-count { margin-left: auto; color: var(--text-dim); }
+.question-card-title {
+  font-family: var(--font-body);
+  font-size: var(--fs-prose-body);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-ui);
+  color: var(--text-bright);
+}
+.question-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  overflow-y: auto;
+}
+.question-card-text {
+  font-family: var(--font-body);
+  font-size: var(--fs-prose-ui);
+  line-height: var(--lh-prose);
+  color: var(--text);
+}
+.question-card-options { display: flex; flex-direction: column; gap: var(--space-2); }
+/* The whole card is the selection control; the native input stays for keyboard and a11y. */
+.question-card-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: var(--border-hair) solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color var(--motion-base) var(--ease),
+              background var(--motion-base) var(--ease);
+}
+.question-card-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.question-card-option:hover { border-color: var(--border-strong); }
+.question-card-option:has(input:checked) {
+  border-color: var(--selected);
+  background: var(--bg-raised);
+}
+.question-card-option:has(input:focus-visible) {
+  border-color: var(--focus);
+  box-shadow: var(--focus-ring);
+}
+.question-card-option-title {
+  font-size: var(--fs-mono);
+  line-height: var(--lh-ui);
+  color: var(--text-bright);
+}
+.question-card-option-desc {
+  font-family: var(--font-body);
+  font-size: var(--fs-prose-sm);
+  line-height: var(--lh-ui);
+  color: var(--text-muted);
+}
+.question-card-other-label {
+  font-size: var(--fs-mono);
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+  color: var(--text-muted);
+}
+.question-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border-top: var(--border-hair) solid var(--border);
+  background: var(--bg-surface);
+}
+.question-card-skip { margin-right: auto; }
+
+/* ---- Answers record: inline, collapsed by default, same family as the compaction card ---- */
+.answers-card {
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  min-width: 260px;
+  max-width: clamp(300px, 90%, 900px);
+  margin: var(--space-2) 0;
+  background: var(--bg-card);
+  border: var(--border-hair) solid var(--tool-change);
+  border-radius: var(--radius);
+  font-size: var(--fs-mono);
+  color: var(--text-muted);
+  animation: fadeSlideIn var(--motion-slow) var(--ease);
+}
+.answers-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: none;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.answers-card-header:disabled { cursor: default; }
+.answers-card-header:not(:disabled):hover { color: var(--interactive); }
+.answers-card-header:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.answers-card-header:not(:disabled)::after {
+  content: '\25B4';
+  margin-left: auto;
+  color: var(--text-dim);
+  transition: transform var(--motion-base) var(--ease);
+}
+.answers-card.collapsed .answers-card-header::after { transform: rotate(180deg); }
+.answers-card-label {
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+  white-space: nowrap;
+}
+.answers-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-top: var(--border-hair) solid var(--border);
+}
+.answers-card.collapsed .answers-card-body { display: none; }
+.answers-card-row { display: flex; flex-direction: column; gap: var(--space-1); }
+.answers-card-question { color: var(--text-muted); line-height: var(--lh-ui); }
+.answers-card-answer { color: var(--text-bright); line-height: var(--lh-ui); }
+.answers-card-note { font-family: var(--font-body); font-size: var(--fs-prose-sm); color: var(--text-muted); line-height: var(--lh-ui); }

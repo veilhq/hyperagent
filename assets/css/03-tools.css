@@ -17,15 +17,15 @@
    reads --indicator-color for every state (running fill, completed fade), so
    one declaration per group covers all states and no state is left uncolored. */
 .tool-indicator.tc-core      { --indicator-color: var(--text-muted); }
-.tool-indicator.tc-read      { --indicator-color: var(--tool-read); }
-.tool-indicator.tc-write     { --indicator-color: var(--tool-write); }
-.tool-indicator.tc-shell     { --indicator-color: var(--tool-shell); }
-.tool-indicator.tc-web       { --indicator-color: var(--tool-web); }
-.tool-indicator.tc-devops    { --indicator-color: var(--tool-devops); }
+.tool-indicator.tc-read,
+.tool-indicator.tc-knowledge { --indicator-color: var(--tool-in); }
+.tool-indicator.tc-write,
+.tool-indicator.tc-tasks     { --indicator-color: var(--tool-change); }
+.tool-indicator.tc-shell,
+.tool-indicator.tc-subagent  { --indicator-color: var(--tool-exec); }
+.tool-indicator.tc-web,
+.tool-indicator.tc-devops    { --indicator-color: var(--tool-ext); }
 .tool-indicator.tc-hyper     { --indicator-color: var(--tool-hyper); }
-.tool-indicator.tc-knowledge { --indicator-color: var(--tool-knowledge); }
-.tool-indicator.tc-subagent  { --indicator-color: var(--tool-subagent); }
-.tool-indicator.tc-tasks     { --indicator-color: var(--tool-tasks); }
 
 
 /* Long-running warning - handled by the shared .tool-indicator-long primitive state. */

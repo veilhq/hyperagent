@@ -328,4 +328,22 @@ window.__acpCliVersion = function (data) {
       badge.setAttribute('data-tooltip', cli + ' v' + data.version + ' - click for release notes');
     }
   }
+  // A new version pushes a fresh update check; drop the stale pending state.
+  if (window._cliUpdateLatest && window._cliUpdateLatest === data.version) {
+    window._cliUpdateLatest = '';
+  }
+};
+
+/* Pushed after __acpCliVersion when the backend finds a newer release.
+   Reuses the has-new cue; the changelog dropdown then lists the pending notes. */
+window._cliUpdateLatest = '';
+
+window.__acpCliUpdate = function (data) {
+  if (!data || !data.latest) return;
+  window._cliUpdateLatest = data.latest;
+  var badge = document.getElementById('cli-version');
+  if (!badge) return;
+  var cli = (window._activeBackendName || 'CLI') + ' CLI';
+  badge.classList.add('has-new');
+  badge.setAttribute('data-tooltip', cli + ' v' + data.installed + ' - update available (v' + data.latest + '), click for release notes');
 };

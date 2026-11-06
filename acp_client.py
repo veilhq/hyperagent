@@ -30,6 +30,7 @@ from helpers import (
     logger,
     read_prefs,
     update_prefs,
+    version_key,
     prompt_key,
     _kill_inflight_title_subprocesses,
     _title_inflight_snapshot,
@@ -104,6 +105,7 @@ class ACPClient(ModelEffortMixin, UltracodeMixin):
         self._ultracode_budget = limits["budget"]
         self._ultracode_agent_cap = limits["agentCap"]
         self._ultracode_threshold = limits["threshold"]
+        self._questions = {}  # toolCallId -> held elicitation request awaiting an answer
         self._workflow_plans = {}  # toolCallId -> held Workflow permission request awaiting approval
         self._async_tasks = {}  # asyncTaskId -> latest state of each background workflow
         self._prompt_start = None
@@ -499,6 +501,7 @@ class ACPClient(ModelEffortMixin, UltracodeMixin):
             on_scratch_session(None)
 
     def stop(self):
+        self._cancel_questions()
         if self._state == "prompting" and self._session_id and self._sockfile:
             # Let the agent record a clean stop before its processes are killed.
             logger.info("%sstop: cancelling in-flight turn", self._tab_ctx())
@@ -991,6 +994,7 @@ class ACPClient(ModelEffortMixin, UltracodeMixin):
         reason = reason or "user"
         logger.info("%scancel: reason=%s state=%s", self._tab_ctx(), reason, self._state)
         self._cancel_workflow_plans()
+        self._cancel_questions()
         if self._state == "prompting" and self._session_id:
             self._cancelled.set()
             prompt_id = self._active_prompt_id
@@ -1272,6 +1276,9 @@ class ACPClient(ModelEffortMixin, UltracodeMixin):
                     "result": {"outcome": {"outcome": "cancelled"}}})
             return
 
+        if method == "elicitation/create" and self._hold_question(msg):
+            return
+
         # Every agent-to-client request must get a response: the agent blocks on
         # it, so a dropped request hangs the turn with no error. Anything this
         # client does not implement (fs/*, terminal/*, extensions) gets JSON-RPC
@@ -1314,6 +1321,72 @@ class ACPClient(ModelEffortMixin, UltracodeMixin):
             self._send({"jsonrpc": "2.0", "id": plan["rid"], "result": {"outcome": {"outcome": "cancelled"}}})
             self._push_js("__acpWorkflowPlanClosed", {"toolCallId": call_id})
         self._workflow_plans.clear()
+
+    @staticmethod
+    def _parse_questions(schema):
+        """Turn an elicitation form schema into [{id, title, description, multiSelect, options, custom}] in order."""
+        props = (schema or {}).get("properties") or {}
+        found = []
+        for key, spec in props.items():
+            m = re.fullmatch(r"question_(\d+)", key)
+            if m and isinstance(spec, dict):
+                found.append((int(m.group(1)), key, spec))
+        questions = []
+        for _, key, spec in sorted(found, key=lambda f: f[0]):
+            multi = spec.get("type") == "array"
+            raw = ((spec.get("items") or {}).get("anyOf") if multi else spec.get("oneOf")) or []
+            questions.append({
+                "id": key,
+                "title": spec.get("title") or "",
+                "description": spec.get("description") or "",
+                "multiSelect": multi,
+                "options": [{"value": o.get("const"), "title": o.get("title") or o.get("const") or "",
+                             "description": o.get("description") or ""} for o in raw if isinstance(o, dict)],
+                "custom": (key + "_custom") in props,
+            })
+        return questions
+
+    def _hold_question(self, msg):
+        """Park a form elicitation (an agent question) and show it as a card; False for any other mode."""
+        params = msg.get("params") or {}
+        call_id = params.get("toolCallId")
+        if params.get("mode") != "form" or not call_id:
+            return False
+        if self._cancelled.is_set():
+            self._send({"jsonrpc": "2.0", "id": msg["id"], "result": {"action": "cancel"}})
+            return True
+        questions = self._parse_questions(params.get("requestedSchema"))
+        self._questions[call_id] = {"rid": msg["id"]}
+        logger.info("%squestion held for answer: %s (%d)", self._tab_ctx(), call_id[:12], len(questions))
+        self._push_js("__acpQuestion", {"toolCallId": call_id, "message": params.get("message") or "",
+                                        "questions": questions})
+        return True
+
+    def answer_question(self, call_id, answers, action):
+        """Answer a held question with accept (answers), decline (skipped) or cancel; False for an unknown id."""
+        held = self._questions.pop(call_id, None)
+        if not held:
+            return False
+        action = action if action in ("accept", "decline", "cancel") else "cancel"
+        result = {"action": action}
+        if action == "accept":
+            content = {}
+            for qid, ans in (answers or {}).items():
+                value = ans.get("value")
+                if value not in (None, "", []):
+                    content[qid] = value
+                if ans.get("custom"):
+                    content[qid + "_custom"] = ans["custom"]
+            result["content"] = content
+        logger.info("%squestion %s: %s", self._tab_ctx(), call_id[:12], action)
+        self._send({"jsonrpc": "2.0", "id": held["rid"], "result": result})
+        self._push_js("__acpQuestionClosed", {"toolCallId": call_id, "action": action})
+        return True
+
+    def _cancel_questions(self):
+        """Answer every held question as cancelled and close its card."""
+        for call_id in list(self._questions):
+            self.answer_question(call_id, None, "cancel")
 
     def _detect_skill_activation(self, update):
         """Return the skill a tool_call loads, "_unknown" for a skill load whose name is not known yet, or None.
@@ -1527,6 +1600,20 @@ class ACPClient(ModelEffortMixin, UltracodeMixin):
             "version": version,
             "isNew": version != seen,
         })
+        threading.Thread(target=self._push_update_available, args=(version,), daemon=True).start()
+
+    def _push_update_available(self, installed):
+        """Push `__acpCliUpdate` when the backend reports a newer release.
+
+        Runs off the state thread because the check may fetch over the network.
+        """
+        try:
+            latest = self._backend.latest_version()
+            if latest and version_key(latest) > version_key(installed):
+                logger.info("%supdate available: %s -> %s", self._tab_ctx(), installed, latest)
+                self._push_js("__acpCliUpdate", {"installed": installed, "latest": latest})
+        except Exception as e:
+            logger.debug("%supdate check failed: %s", self._tab_ctx(), e)
 
     # --- Session persistence ---
 

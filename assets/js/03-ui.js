@@ -209,14 +209,21 @@ input.addEventListener('keydown', function(e) {
   if (commandMenuKey(e)) return;
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
 });
+// True when the element takes typed text, so single-key shortcuts must not fire.
+function isTypingTarget(el) {
+  if (!el) return false;
+  var tag = el.tagName;
+  return tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SELECT' || el.isContentEditable;
+}
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
     if (searchActive) { closeSearch(); return; }
     if (shortcutsVisible) { toggleShortcuts(); return; }
     if (state === 'prompting') cancel();
   }
-  if (e.key === '/' && document.activeElement !== input) { e.preventDefault(); input.focus(); }
-  if (e.key === '?' && document.activeElement !== input) { e.preventDefault(); toggleShortcuts(); }
+  var typing = isTypingTarget(document.activeElement);
+  if (e.key === '/' && !typing) { e.preventDefault(); input.focus(); }
+  if (e.key === '?' && !typing) { e.preventDefault(); toggleShortcuts(); }
   // Ctrl+F: in-session search
   if (e.ctrlKey && e.key === 'f') { e.preventDefault(); openSearch(); }
 });

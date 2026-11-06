@@ -737,10 +737,17 @@ window.__acpSessionLoaded = function(data) {
             var tName = tm.name || 'tool';
             var tKind = tm.tool ? (CLAUDE_TOOL_ALIASES[tm.tool.toLowerCase()] || tm.tool) : tName;
             var tStatus = tm.status === 'failed' ? 'tool-indicator-failed' : 'tool-indicator-completed';
+            var answered = window.buildAnswersCardFromTool ? window.buildAnswersCardFromTool(tm.input, tm.output) : null;
+            if (answered) {
+              if (row.childNodes.length) { msgs.appendChild(row); row = document.createElement('div'); row.className = 'tool-row'; }
+              msgs.appendChild(answered);
+              idx++;
+              continue;
+            }
             row.appendChild(buildToolCard(null, tName, tKind, tStatus, tm.input, tm.output));
             idx++;
           }
-          msgs.appendChild(row);
+          if (row.childNodes.length) msgs.appendChild(row);
           continue;
         } else if (m.role === 'thought') {
           // Reasoning and subagent output render in a collapsed thought row.

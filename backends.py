@@ -22,6 +22,7 @@ import threading
 import time
 from pathlib import Path
 
+import adapter_release
 from helpers import (
     AUTH_NO,
     AUTH_OK,
@@ -30,13 +31,16 @@ from helpers import (
     _do_login_visible,
     _find_kiro,
     capture_changelog_cache,
+    get_claude_changelog_blocks,
     get_kiro_changelog,
     get_kiro_version,
     get_model_rates,
     invalidate_kiro_version_cache,
     logger,
+    pending_changelog,
     read_kiro_default_model,
     read_prefs,
+    version_key,
     write_kiro_default_model,
 )
 
@@ -135,6 +139,29 @@ class Backend:
         of newly archived versions."""
         return 0
 
+    def latest_version(self):
+        """Newest released agent version, or None when the agent has no
+        update check."""
+        return None
+
+    def pending_changelog(self):
+        """One merged changelog block covering releases newer than the
+        installed version, or None when up to date or unknown."""
+        return None
+
+    def release_state(self):
+        """Update-flow state ({active, runtime, candidate, candidateRuntime,
+        test}), or None when the agent has no in-app update."""
+        return None
+
+    def test_release(self):
+        """Test the candidate release. Returns the saved test result."""
+        return {"ok": False, "error": "Updating is not supported for this agent."}
+
+    def install_release(self):
+        """Switch to the tested candidate release."""
+        return {"ok": False, "error": "Updating is not supported for this agent."}
+
     def title_command(self, prompt):
         """argv for a one-shot, non-interactive completion of `prompt` whose
         stdout carries the reply, or None to use the heuristic title."""
@@ -221,14 +248,6 @@ class ClaudeCodeBackend(Backend):
     name = "claude-code"
     display_name = "Claude Code"
 
-    ADAPTER_NAME = "@agentclientprotocol/claude-agent-acp"
-    ADAPTER_VERSION = "0.94.0"
-    ADAPTER_PACKAGE = ADAPTER_NAME + "@" + ADAPTER_VERSION
-
-    # One adapter install per process, shared by every tab.
-    _install_lock = threading.Lock()
-    _install_started = False
-
     # Agent stderr carries routine adapter diagnostics, not user-facing errors.
     stderr_to_ui = False
     # session/load works on a fresh connection; no scratch session/new needed.
@@ -247,9 +266,11 @@ class ClaudeCodeBackend(Backend):
     usage_via_session = True
     # Notices arrive as `notice` updates (else as transcript text); subagent
     # text is replayed into reopened history (else dropped from replay); the
-    # asyncTasks capability streams background workflow state and spend.
+    # asyncTasks capability streams background workflow state and spend; form
+    # elicitation lets the agent's AskUserQuestion tool reach the question card.
     client_capabilities_extra = {
         "session": {"notices": {}},
+        "elicitation": {"form": {}},
         "_meta": {
             "subagent-transcript": True,
             "jetbrains": {"air": {"version": 1, "capabilities": ["asyncTasks"]}},
@@ -345,52 +366,6 @@ class ClaudeCodeBackend(Backend):
         fallback = Path(os.environ.get("USERPROFILE", "")) / ".local" / "bin" / "claude.exe"
         return str(fallback) if fallback.exists() else None
 
-    @classmethod
-    def adapter_dir(cls):
-        """App-owned install location for the pinned adapter version."""
-        base = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "Hyperagent"
-        return base / ("claude-agent-acp-" + cls.ADAPTER_VERSION)
-
-    @classmethod
-    def adapter_entry(cls):
-        return (cls.adapter_dir() / "node_modules" / "@agentclientprotocol"
-                / "claude-agent-acp" / "dist" / "index.js")
-
-    @classmethod
-    def _install_adapter_in_background(cls):
-        """Install the pinned adapter once so later launches skip npx."""
-        with cls._install_lock:
-            if cls._install_started:
-                return
-            cls._install_started = True
-        threading.Thread(target=cls._install_adapter, daemon=True).start()
-
-    @classmethod
-    def _install_adapter(cls):
-        npm = shutil.which("npm")
-        if not npm:
-            logger.warning("claude-code: npm not found; adapter stays on npx launches")
-            return
-        target = cls.adapter_dir()
-        logger.info("claude-code: installing %s into %s", cls.ADAPTER_PACKAGE, target)
-        started = time.time()
-        try:
-            target.mkdir(parents=True, exist_ok=True)
-            proc = subprocess.run(
-                [npm, "install", "--prefix", str(target), "--no-audit", "--no-fund",
-                 "--loglevel=error", cls.ADAPTER_PACKAGE],
-                capture_output=True, text=True, timeout=600,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            )
-        except (OSError, subprocess.TimeoutExpired) as e:
-            logger.error("claude-code: adapter install failed: %s", e)
-            return
-        if proc.returncode != 0 or not cls.adapter_entry().exists():
-            logger.error("claude-code: adapter install failed (exit=%d): %s",
-                         proc.returncode, (proc.stderr or proc.stdout or "")[-500:])
-            return
-        logger.info("claude-code: adapter installed in %.1fs", time.time() - started)
-
     def spawn_command(self):
         connectors = bool(read_prefs().get("claudeAiConnectors"))
         env = {
@@ -403,17 +378,18 @@ class ClaudeCodeBackend(Backend):
         # Launch the locally installed adapter with node: npx re-resolves the
         # package on every launch, which has taken from 3s to over 100s.
         node = shutil.which("node")
-        entry = self.adapter_entry()
+        active = adapter_release.active_version()
+        entry = adapter_release.adapter_entry(active)
         if node and entry.exists():
             return {"argv": [node, str(entry)], "env": env}
 
-        self._install_adapter_in_background()
+        adapter_release.install_active_in_background()
         npx = self._find_npx()
         if not npx:
             logger.error("claude-code: npx not found on PATH (Node.js is required for the ACP adapter)")
             return None
         logger.info("claude-code: local adapter not installed yet, launching via npx")
-        return {"argv": [npx, "-y", self.ADAPTER_PACKAGE], "env": env}
+        return {"argv": [npx, "-y", adapter_release.package_spec(active)], "env": env}
 
     def check_auth(self):
         now = time.time()
@@ -463,6 +439,39 @@ class ClaudeCodeBackend(Backend):
         self.invalidate_auth_cache()
         logger.info("claude-code: login exit=%d", proc.returncode)
         return proc.returncode == 0
+
+    def version(self):
+        """Claude Code version bundled in the adapter Hyperagent launches, or None."""
+        return adapter_release.runtime_version(adapter_release.active_version())
+
+    def changelog(self, version):
+        for block in get_claude_changelog_blocks():
+            if block["version"] == version:
+                return block
+        return None
+
+    def latest_version(self):
+        """Claude Code version the newest adapter bundles, when that adapter is
+        newer than the one in use; None otherwise."""
+        candidate = adapter_release.candidate_version()
+        return adapter_release.runtime_version(candidate) if candidate else None
+
+    def pending_changelog(self):
+        installed = self.version()
+        latest = self.latest_version()
+        if not installed or not latest:
+            return None
+        blocks = [b for b in get_claude_changelog_blocks() if version_key(b["version"]) <= version_key(latest)]
+        return pending_changelog(blocks, installed)
+
+    def release_state(self):
+        return adapter_release.release_state()
+
+    def test_release(self):
+        return adapter_release.test_release()
+
+    def install_release(self):
+        return adapter_release.install_release()
 
     def title_command(self, prompt):
         # One-shot low-effort haiku call with no tools, MCP servers, skills, settings, or saved session.
