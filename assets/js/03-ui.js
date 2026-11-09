@@ -297,7 +297,7 @@ function toggleShortcuts() {
       + '<div class="shortcuts-grid">'
       + sc('/', 'Focus input')
       + sc('?', 'Toggle shortcuts')
-      + sc('Ctrl+B', 'Toggle sidebar')
+      + sc('Ctrl+\\', 'Toggle sidebar')
       + sc('Ctrl+N', 'New tab')
       + sc('Ctrl+T', 'New tab')
       + sc('Ctrl+W', 'Close tab')

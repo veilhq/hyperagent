@@ -195,7 +195,7 @@ Five ecosystem JS modules (`HvCursorBox`, `HvNoiseField`, `HvGreeting`, `HvCurso
 | Escape | Cancel prompt / close overlay |
 | / | Focus input |
 | ? | Toggle shortcuts overlay |
-| Ctrl+B | Toggle sidebar |
+| Ctrl+\ | Toggle sidebar |
 | Ctrl+N | New session |
 | Ctrl+F | Search messages |
 | ! | Toggle ultracode |

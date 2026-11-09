@@ -217,7 +217,7 @@ function deleteSession(id, el) {
 // Keyboard shortcuts
 document.addEventListener('keydown', function(e) {
   // Ctrl+Shift+B: debug - cycle the error bar through its states then hide.
-  // Checked before the plain Ctrl+B toggle below; with Shift held e.key is 'B'.
+  // Ctrl+Shift+B is a debug chord, unrelated to the sidebar toggle.
   if (e.ctrlKey && e.shiftKey && (e.key === 'B' || e.key === 'b')) {
     e.preventDefault();
     if (!window.HaErrorBar) return;
@@ -233,8 +233,8 @@ document.addEventListener('keydown', function(e) {
     window.__errorBarDebugStep++;
     return;
   }
-  // Ctrl+B: toggle sidebar
-  if (e.ctrlKey && e.key === 'b') { e.preventDefault(); toggleSidebar(); }
+  // Ctrl+\: toggle sidebar
+  if (e.ctrlKey && e.key === '\\') { e.preventDefault(); toggleSidebar(); }
   // Ctrl+N: new tab (was in-place newSession; tabs are the primary UX now)
   if (e.ctrlKey && e.key === 'n') { e.preventDefault(); if (typeof createTab === 'function') createTab(); else newSession(); }
   // f: toggle fullscreen (when not typing, and no modifier - avoid clashing with Ctrl+F search).
