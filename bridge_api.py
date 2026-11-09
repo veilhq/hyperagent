@@ -712,6 +712,19 @@ class HyperagentAPI:
             logger.warning("clipboard write failed: %s", e)
             return False
 
+    def open_external(self, url):
+        """Open an http(s) URL in the system default browser."""
+        if not isinstance(url, str) or not re.match(r"^https?://", url, re.I):
+            logger.warning("open_external: rejected non-http url")
+            return False
+        try:
+            import webbrowser
+            logger.info("open_external: %s", url)
+            return bool(webbrowser.open(url))
+        except Exception as e:
+            logger.warning("open_external failed: %s", e)
+            return False
+
     def get_plan_usage(self, auto=False):
         """Return plan usage for the plan chip.
 

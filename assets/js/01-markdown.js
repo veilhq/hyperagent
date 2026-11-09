@@ -81,6 +81,12 @@ function renderMarkdown(text) {
 
   // Links
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+  // Bare URLs after whitespace or "(" become links; trailing punctuation stays outside.
+  html = html.replace(/(^|[\s(])(https?:\/\/[^\s<]+)/g, function(m, lead, url) {
+    var tail = /[.,;:!?)]+$/.exec(url);
+    if (tail) url = url.slice(0, -tail[0].length);
+    return lead + '<a href="' + url + '">' + url + '</a>' + (tail ? tail[0] : '');
+  });
 
   // Horizontal rules
   html = html.replace(/^---$/gm, '<hr>');

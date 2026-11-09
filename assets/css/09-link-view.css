@@ -1,0 +1,27 @@
+/* ---- Link view - reuses the workflow detail panel geometry; only the header buttons and URL line live here ---- */
+.link-view-actions { display: flex; gap: var(--space-2); margin-left: var(--space-3); }
+.link-view-btn {
+  background: var(--bg-surface);
+  border: var(--border-hair) solid var(--border);
+  color: var(--text-muted);
+  font: var(--fs-mono)/1 var(--font);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+}
+.link-view-btn:hover { color: var(--interactive); border-color: var(--interactive); }
+.link-view-btn.copied { color: var(--success); border-color: var(--success); }
+.link-view-body { padding: 0; }
+.link-view-frame { flex: 1; width: 100%; min-height: 0; border: 0; background: var(--bg); }
+.link-view-url {
+  padding: var(--space-2) var(--space-5);
+  border-top: var(--border-hair) solid var(--border);
+  font-size: var(--fs-mono);
+  line-height: var(--lh-body);
+  color: var(--text-muted);
+  user-select: text;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
