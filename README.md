@@ -5,14 +5,14 @@
 <h1 align="center">Hyperagent</h1>
 
 <p align="center">
-  A standalone desktop AI chat app powered by Kiro CLI's Agent Communication Protocol.
+  A standalone desktop AI chat app that speaks the Agent Communication Protocol (ACP) to a pluggable agent backend (Kiro CLI or Claude Code).
 </p>
 
 ---
 
 ## What It Does
 
-Hyperagent wraps `kiro-cli acp` in a native desktop window, replacing the terminal-based chat experience with a graphical UI:
+Hyperagent wraps an ACP agent process (selected by the `backend` key in `preferences.json`) in a native desktop window, replacing the terminal-based chat experience with a graphical UI:
 
 - **Streaming responses** — real-time markdown rendering as the agent types
 - **Tool call visualization** — compact cards showing each tool invocation with status and expandable details
@@ -28,7 +28,7 @@ Hyperagent wraps `kiro-cli acp` in a native desktop window, replacing the termin
 - **Zero frameworks** — Python + vanilla CSS + vanilla JS. No React, no Node, no bundler.
 - **Brutalist terminal aesthetic** — pure black background, Departure Mono everywhere, hard edges, no border-radius.
 - **Native desktop** — PyWebView window, not a browser tab. Launchable from Start menu or taskbar.
-- **Thin client** — Hyperagent is just a UI shell. All intelligence lives in kiro-cli.
+- **Thin client** — Hyperagent is just a UI shell. All intelligence lives in the agent backend.
 
 ## Quick Start
 
@@ -44,7 +44,7 @@ pythonw hyperagent.py
 **Prerequisites:**
 - Python 3.10+
 - `pywebview` (pip install)
-- `kiro-cli` installed and authenticated (`kiro-cli login`)
+- An agent backend installed and authenticated: `kiro-cli` (`kiro-cli login`, the default) or Claude Code with the `@agentclientprotocol/claude-agent-acp` adapter. Set `"backend": "claude-code"` in `preferences.json` to switch (takes effect on next start).
 - `.hyperspace/.hyperkit/` present as a sibling directory (see [Dependencies](#dependencies))
 
 ## Dependencies
@@ -79,14 +79,14 @@ See [`.hyperspace/.hyperkit/README.md`](../.hyperkit/README.md) for what lives t
 │  │  TCP ↔ stdio relay                             │ │
 │  └──────────────────────────────────┬─────────────┘ │
 │                                     │ stdin/stdout   │
-│  kiro-cli acp --trust-all-tools     │               │
+│  agent process (per backend)        │               │
 │  ┌──────────────────────────────────┴─────────────┐ │
 │  │  AI agent (ACP protocol, JSON-RPC over stdio)  │ │
 │  └────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────┘
 ```
 
-**Why the TCP bridge?** PyWebView interferes with subprocess stdio pipes on Windows. The bridge (`acp_bridge.py`) runs as a separate process that spawns kiro-cli with direct pipe access and relays JSON-RPC messages over a localhost TCP socket.
+**Why the TCP bridge?** PyWebView interferes with subprocess stdio pipes on Windows. The bridge (`acp_bridge.py`) runs as a separate process that spawns the backend's agent process with direct pipe access and relays JSON-RPC messages over a localhost TCP socket.
 
 ### State Machine
 
@@ -130,7 +130,7 @@ No runtime file serving — the entire UI is a single inline HTML string passed 
 │   ├── shell.html         ← HTML template
 │   ├── css/
 │   │   ├── 00-primitives.css  ← Local overrides (none at present)
-│   │   ├── 00-variables.css   ← App-local globals only (post-WI-142) — reset, cursors, scrollbar, animations
+│   │   ├── 00-variables.css   ← App-local globals only (only) — reset, cursors, scrollbar, animations
 │   │   ├── 01-layout.css      ← Topbar, app layout, error bar, status cluster
 │   │   ├── 02-messages.css    ← Message bubbles, code blocks, markdown, welcome screen
 │   │   ├── 03-tools.css       ← Tool call cards and states
@@ -158,7 +158,7 @@ No runtime file serving — the entire UI is a single inline HTML string passed 
 └── .gitignore
 ```
 
-### Hyperkit (WI-142)
+### Hyperkit
 
 Five ecosystem JS modules (`HvCursorBox`, `HvNoiseField`, `HvGreeting`, `HvCursorTrail`, `HvToast`) and the shared CSS (`tokens.css`, `primitives.css`) no longer live inside `.hyperagent/`. They live one directory up at `.hyperspace/.hyperkit/`, shared verbatim with Hypervisor. `build.py` reads them from there and emits them first — before any file in `assets/`. See `.hyperspace/.hyperkit/README.md` for the full consumption pattern and override rules. Edit those five JS files and the two CSS files in `.hyperkit/`, never as a local copy inside `.hyperagent/assets/`.
 
