@@ -78,12 +78,13 @@
 .session-refresh-btn.spinning svg { animation: spin var(--period-spin) linear; } /* off-scale: spinner cadence */
 
 /* ---- Tab cards ----
-   Session tabs compose .nav-tab (rounded rect + selected state) with a dither
-   grid and title. */
+   Session tabs compose the shared folder tab inside a .tab-stack, with a dither
+   grid and title. The list has no side padding, so each tab's sloped sides taper
+   down onto a baseline that runs to the sidebar edges. */
 .sidebar-tab-list {
   display: flex;
   flex-direction: column;
-  padding: var(--space-1) var(--space-3) var(--space-3);
+  padding: var(--space-1) 0 var(--space-3);
 }
 
 .sidebar-tab-item {
@@ -92,7 +93,7 @@
   grid-template-columns: auto 1fr;
   align-items: center;
   column-gap: var(--space-2);
-  padding: calc(var(--space-5) + var(--space-1)) var(--space-5) var(--space-3) var(--space-5);
+  padding: var(--space-2) var(--space-5) calc(var(--space-2) + var(--space-3));
   cursor: pointer;
   transition: background var(--motion-fast) var(--ease),
               color var(--motion-fast) var(--ease),
@@ -100,44 +101,12 @@
               transform var(--motion-base) var(--ease);
 }
 
-/* Stacked dividers: each tab is a trapezoid card (a perspective-tilted ::before
-   carries fill, hairline and the big top curves) overlapped by the next, so only
-   its header strip shows. The active tab takes a defined fill and is pulled up. */
-.nav-tab.sidebar-tab-item,
-.nav-tab.sidebar-tab-item:hover,
-.nav-tab.sidebar-tab-item.active {
-  --tab-curve: calc(var(--radius) * 5);
-  --tab-tilt: 28deg;
-  isolation: isolate;
-  background: transparent;
-  border-color: transparent;
-  border-radius: 0;
-}
-.sidebar-tab-item::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: var(--bg-card);
-  border: var(--border-hair) solid var(--border);
-  border-radius: var(--tab-curve) var(--tab-curve) 0 0;
-  transform-origin: 50% 100%;
-  transform: perspective(10rem) rotateX(var(--tab-tilt));
-  transition: background var(--motion-fast) var(--ease),
-              border-color var(--motion-fast) var(--ease);
-}
-.sidebar-tab-item + .sidebar-tab-item { margin-top: calc(var(--space-2) * -1); }
-.sidebar-tab-item:hover::before { background: var(--bg-card-hover); }
-.sidebar-tab-item:last-child { padding-bottom: var(--space-3); }
-.nav-tab.sidebar-tab-item.active {
-  z-index: 2;
-  transform: translateY(calc(var(--space-1) * -1));
-}
-.sidebar-tab-item.active::before {
-  background: var(--bg-raised);
-  border-color: var(--selected-border);
-  border-top-color: var(--selected);
-}
+/* Active tab: solid accent fill, so the dither glyph and close button invert. */
+.sidebar-tab-item.active .sidebar-tab-item-close { background: var(--bg); color: var(--selected); }
+.sidebar-tab-item.active .sidebar-tab-edited-mark { color: inherit; }
+
+/* Last tab has nothing overlapping it, so it drops the overlap allowance. */
+.sidebar-tab-item:last-child { padding-bottom: var(--space-2); }
 
 /* State classes - used by dither grid patterns only (no rail) */
 .sidebar-tab-item.crashed {
@@ -246,6 +215,9 @@
   animation: tab-rail-shake var(--motion-slow) ease-out;
 }
 
+/* Active tab is solid accent: dither cells invert to the ground color. */
+.sidebar-tab-item.active .sidebar-tab-dither > span { background: var(--bg); }
+
 /* Tab title */
 
 .sidebar-tab-item-title {
@@ -259,21 +231,29 @@
 
 .sidebar-tab-item-close {
   position: absolute;
-  top: var(--space-2);
-  right: var(--space-2);
-  background: none;
+  top: calc((100% - var(--space-3)) / 2);
+  right: var(--space-4);
+  transform: translateY(-50%);
+  width: var(--icon-md);
+  height: var(--icon-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--error);
   border: none;
-  color: var(--text-dim);
+  border-radius: 50%;
+  color: var(--bg);
   font-size: var(--fs-mono);
   cursor: pointer;
-  padding: 0 var(--space-1);
+  padding: 0;
   line-height: var(--lh-tight);
   opacity: 0;
   flex-shrink: 0;
-  transition: opacity var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+  transition: opacity var(--motion-fast) var(--ease), filter var(--motion-fast) var(--ease);
 }
+.sidebar-tab-item:last-child .sidebar-tab-item-close { top: 50%; }
 .sidebar-tab-item:hover .sidebar-tab-item-close { opacity: 1; }
-.sidebar-tab-item-close:hover { color: var(--interactive); }
+.sidebar-tab-item-close:hover { filter: brightness(1.15); }
 
 /* Tab rename input */
 .sidebar-tab-rename-input {
@@ -386,18 +366,21 @@
   white-space: nowrap;
 }
 
-/* Removal transition - tabs */
+/* Tab entrance and exit. Exit collapses from the height JS stores in --tab-h. */
+.sidebar-tab-item {
+  animation: sidebarTabIn var(--motion-base) var(--ease);
+}
 .sidebar-tab-item.tab-removing {
-  opacity: 0;
-  transform: translateX(-10px);
-  max-height: 0;
-  padding-top: 0;
-  padding-bottom: 0;
   overflow: hidden;
-  transition: opacity var(--motion-fast) var(--ease),
-              transform var(--motion-fast) var(--ease),
-              max-height var(--motion-base) var(--ease),
-              padding var(--motion-base) var(--ease);
+  pointer-events: none;
+  animation: sidebarTabOut var(--motion-base) var(--ease) forwards;
+}
+@keyframes sidebarTabIn {
+  from { opacity: 0; transform: translateX(calc(var(--space-2) * -1)); }
+}
+@keyframes sidebarTabOut {
+  from { opacity: 1; max-height: var(--tab-h, 100vh); }
+  to   { opacity: 0; transform: translateX(calc(var(--space-2) * -1)); max-height: 0; padding-top: 0; padding-bottom: 0; }
 }
 
 /* Removal transition - sessions */

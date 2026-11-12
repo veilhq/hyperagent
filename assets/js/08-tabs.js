@@ -247,7 +247,7 @@ function _addTabToUI(tabId, title, sessionId) {
 
   // Create sidebar tab item - 3-column grid: [chip] [title] [close]
   var tabEl = document.createElement('div');
-  tabEl.className = 'nav-tab sidebar-tab-item';
+  tabEl.className = 'nav-tab nav-tab-folder sidebar-tab-item';
   tabEl.setAttribute('data-tab-id', tabId);
   tabEl.innerHTML = '<span class="sidebar-tab-dither"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>'
     + '<span class="sidebar-tab-item-title">' + _escTabHtml(title || 'New Chat') + '</span>'
@@ -384,6 +384,7 @@ function closeTab(tabId) {
   // Animate sidebar tab out, then remove DOM
   var tabEl = tabs[tabId].el;
   var tabMsgs = tabs[tabId].msgsEl;
+  tabEl.style.setProperty('--tab-h', tabEl.offsetHeight + 'px');
   tabEl.classList.add('tab-removing');
   tabMsgs.remove();
   delete tabs[tabId];
@@ -760,7 +761,7 @@ function _registerInitialTab(tabId) {
 
   // Create sidebar tab item for initial tab - 3-column grid: [chip] [title] [close]
   var tabEl = document.createElement('div');
-  tabEl.className = 'nav-tab sidebar-tab-item active';
+  tabEl.className = 'nav-tab nav-tab-folder sidebar-tab-item active';
   tabEl.setAttribute('data-tab-id', tabId);
   tabEl.innerHTML = '<span class="sidebar-tab-dither"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>'
     + '<span class="sidebar-tab-item-title">New Chat</span>'
