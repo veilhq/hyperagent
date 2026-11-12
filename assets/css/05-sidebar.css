@@ -83,8 +83,7 @@
 .sidebar-tab-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  padding: 0 var(--space-3) var(--space-3);
+  padding: var(--space-1) var(--space-3) var(--space-3);
 }
 
 .sidebar-tab-item {
@@ -93,10 +92,51 @@
   grid-template-columns: auto 1fr;
   align-items: center;
   column-gap: var(--space-2);
-  padding: var(--space-2) var(--space-4) var(--space-2) var(--space-3);
+  padding: calc(var(--space-5) + var(--space-1)) var(--space-5) var(--space-3) var(--space-5);
   cursor: pointer;
   transition: background var(--motion-fast) var(--ease),
-              transform var(--motion-fast) var(--ease);
+              color var(--motion-fast) var(--ease),
+              border-color var(--motion-fast) var(--ease),
+              transform var(--motion-base) var(--ease);
+}
+
+/* Stacked dividers: each tab is a trapezoid card (a perspective-tilted ::before
+   carries fill, hairline and the big top curves) overlapped by the next, so only
+   its header strip shows. The active tab takes a defined fill and is pulled up. */
+.nav-tab.sidebar-tab-item,
+.nav-tab.sidebar-tab-item:hover,
+.nav-tab.sidebar-tab-item.active {
+  --tab-curve: calc(var(--radius) * 5);
+  --tab-tilt: 28deg;
+  isolation: isolate;
+  background: transparent;
+  border-color: transparent;
+  border-radius: 0;
+}
+.sidebar-tab-item::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--bg-card);
+  border: var(--border-hair) solid var(--border);
+  border-radius: var(--tab-curve) var(--tab-curve) 0 0;
+  transform-origin: 50% 100%;
+  transform: perspective(10rem) rotateX(var(--tab-tilt));
+  transition: background var(--motion-fast) var(--ease),
+              border-color var(--motion-fast) var(--ease);
+}
+.sidebar-tab-item + .sidebar-tab-item { margin-top: calc(var(--space-2) * -1); }
+.sidebar-tab-item:hover::before { background: var(--bg-card-hover); }
+.sidebar-tab-item:last-child { padding-bottom: var(--space-3); }
+.nav-tab.sidebar-tab-item.active {
+  z-index: 2;
+  transform: translateY(calc(var(--space-1) * -1));
+}
+.sidebar-tab-item.active::before {
+  background: var(--bg-raised);
+  border-color: var(--selected-border);
+  border-top-color: var(--selected);
 }
 
 /* State classes - used by dither grid patterns only (no rail) */
