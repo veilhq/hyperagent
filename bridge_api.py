@@ -43,6 +43,7 @@ from backends import get_backend
 from palette import build_palette_oklch, GRADIENT_MAPS  # noqa: E402 - shared palette math + preset data from hyperkit
 from acp_pool import ACPClientPool
 from compaction_watch import compact_summary_heads, read_earlier_history, transcript_path
+from sprite_window import sprite_enabled
 import plan_usage
 
 
@@ -76,6 +77,7 @@ class HyperagentAPI:
     def __init__(self, pool):
         self._pool = pool
         self._backend = get_backend()
+        self._status_sprite = None
 
     @property
     def _acp(self):
@@ -484,6 +486,17 @@ class HyperagentAPI:
         except Exception as e:
             logger.error("launch_hypereye failed: %s", e)
             return {"ok": False, "error": str(e)}
+
+    def get_status_sprite(self):
+        """Whether the status sprite tile is turned on."""
+        return {"on": bool(self._status_sprite) and sprite_enabled()}
+
+    def set_status_sprite(self, on):
+        """Shows or hides the status sprite tile and remembers the choice."""
+        if not self._status_sprite:
+            return {"on": False}
+        logger.info("status sprite: set %s", "on" if on else "off")
+        return self._status_sprite.set_enabled(bool(on))
 
     # --- Model switcher API ---
 

@@ -432,6 +432,26 @@ function launchHypereye() {
 }
 window.launchHypereye = launchHypereye;
 
+// --- Status sprite toggle ---
+function syncStatusSpriteButton(result) {
+  var btn = document.getElementById('status-sprite-btn');
+  if (btn && result) btn.setAttribute('aria-pressed', result.on ? 'true' : 'false');
+}
+function toggleStatusSprite() {
+  var bridge = window.pywebview && window.pywebview.api;
+  if (!bridge || !bridge.set_status_sprite) {
+    if (window.HvToast) HvToast.show({ variant: 'warn', message: 'The status sprite requires the desktop app' });
+    return;
+  }
+  var btn = document.getElementById('status-sprite-btn');
+  var on = !(btn && btn.getAttribute('aria-pressed') === 'true');
+  bridge.set_status_sprite(on).then(syncStatusSpriteButton);
+}
+window.toggleStatusSprite = toggleStatusSprite;
+window.addEventListener('pywebviewready', function () {
+  if (window.pywebview.api.get_status_sprite) window.pywebview.api.get_status_sprite().then(syncStatusSpriteButton);
+});
+
 // --- /hs prefix: zero-token semantic search (no agent round-trip) ---
 function _handleHsSearch(query) {
   if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.semantic_search) {

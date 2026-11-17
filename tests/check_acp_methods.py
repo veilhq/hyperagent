@@ -24,7 +24,7 @@ EXPECTED = [
     "_parse_questions", "_hold_question", "answer_question", "_cancel_questions",
     "_normalize_commands", "_capture_commands", "_push_update_available",
     "_push_skill_activation", "_maybe_suggest_model", "_resolve_model_tier", "_model_display_name",
-    "_track_file_change", "_push_js", "_push_js_throttled", "_emit_file_change_event",
+    "_track_file_change", "_push_js", "_stamp_activity", "_push_js_throttled", "_emit_file_change_event",
     "_push_state", "_push_cli_version_badge", "_load_prefs", "_load_session_id",
     "_save_session_id", "_register_owned_session", "_unregister_owned_session", "_clear_session_id",
     "_capture_and_push_models", "_capture_config_options", "_capture_context_usage", "_capture_rate_limit",

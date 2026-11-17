@@ -25,6 +25,7 @@
   transition: border-color var(--motion-base) var(--ease), color var(--motion-base) var(--ease);
 }
 .input-icon-btn:hover { border-color: var(--interactive); color: var(--text-bright); }
+.input-icon-btn[aria-pressed="true"] { border-color: var(--selected-border); color: var(--selected); }
 
 /* Attach affordance - gated on the agent's advertised image capability.
    Hidden until #app carries .image-capable so images are never offered to an

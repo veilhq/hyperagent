@@ -29,12 +29,13 @@ from helpers import (
 )
 from acp_pool import ACPClientPool
 from bridge_api import HyperagentAPI
+from sprite_window import StatusSprite, sprite_enabled
 
 # Auto-build: regenerate generated_html.py from current source before import
 import sys
 from launch_build import build_or_warn, with_notice
 _build_notice = build_or_warn(Path(__file__).parent, "Hyperagent")
-from generated_html import HTML
+from generated_html import HTML, SPRITE_HTML
 HTML = with_notice(HTML, _build_notice)
 
 
@@ -70,8 +71,8 @@ def _apply_window_chrome(title: str, icon_path: str):
 # Theme file watcher
 # ---------------------------------------------------------------------------
 
-def _start_theme_watcher(window, api):
-    """Poll preferences.json for changes and push palette updates to frontend."""
+def _start_theme_watcher(window, api, sprite=None):
+    """Poll preferences.json for changes and push palette updates to frontend and the status sprite."""
     prefs_file = HYPERVISOR_DIR / "preferences.json"
     last_mtime = prefs_file.stat().st_mtime if prefs_file.exists() else 0
 
@@ -88,6 +89,8 @@ def _start_theme_watcher(window, api):
                     palette = api.get_accent()
                     payload = json.dumps(palette).replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
                     window.evaluate_js(f"if(window.applyAccent)window.applyAccent(JSON.parse(`{payload}`))")
+                    if sprite:
+                        sprite.push_accent(palette)
                     # Sync light mode class across ecosystem
                     data = json.loads(prefs_file.read_text(encoding="utf-8"))
                     light = data.get("hypervisor-light-mode", "0")
@@ -392,6 +395,8 @@ def main():
     # roughly 350-500 MB. Capped at 3 to bound idle memory footprint.
     pool = ACPClientPool(max_tabs=5)
     api = HyperagentAPI(pool)
+    sprite = StatusSprite(pool, api.get_accent, SPRITE_HTML)
+    api._status_sprite = sprite
 
     # Always start fresh with a single tab
     initial_tab = pool.create_tab()
@@ -408,6 +413,7 @@ def main():
         min_size=(500, 400),
         background_color='#000000',
     )
+    window.events.closing += sprite.close
 
     def on_start():
         time.sleep(1)
@@ -417,7 +423,9 @@ def main():
         # Ensure shared MCP service is available before connecting tabs
         _ensure_mcp_service()
         pool.connect_tab(initial_tab)
-        _start_theme_watcher(window, api)
+        _start_theme_watcher(window, api, sprite)
+        if sprite_enabled():
+            sprite.open()
 
     webview.start(on_start, icon=icon_path, debug=False)
     pool.save_tab_state()

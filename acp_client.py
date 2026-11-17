@@ -71,6 +71,11 @@ class ACPClient(ModelEffortMixin, UltracodeMixin):
         self._sockfile = None
         self._window = None
         self._state = "stopped"  # stopped | starting | ready | prompting
+        # Activity stamps read by the status sprite: newest error and recent turn ends.
+        self.last_error_at = None
+        self.turn_end_times = []
+        self.last_success_at = None
+        self.waiting_on = set()
         self._id_counter = 0
         self._pending = {}  # id -> callback
         self._session_id = None
@@ -1500,6 +1505,7 @@ class ACPClient(ModelEffortMixin, UltracodeMixin):
         self._push_js("__acpCommands", {"commands": self._commands})
 
     def _push_js(self, fn_name, data):
+        self._stamp_activity(fn_name, data)
         if not self._window:
             return
         if hasattr(self, '_tab_id') and self._tab_id:
@@ -1512,6 +1518,29 @@ class ACPClient(ModelEffortMixin, UltracodeMixin):
             logger.trace("%spush_js OK: %s", self._tab_ctx(), fn_name)
         except Exception as e:
             logger.error("%spush_js FAIL: %s -> %s", self._tab_ctx(), fn_name, e)
+
+    _WAIT_OPEN = {"__acpQuestion": "question", "__acpWorkflowPlan": "plan", "__acpAuthRequired": "auth"}
+    _WAIT_CLOSE = {"__acpQuestionClosed": "question", "__acpWorkflowPlanClosed": "plan", "__acpAuthComplete": "auth"}
+
+    def _stamp_activity(self, fn_name, data):
+        """Record errors, turn ends, clean finishes, and open prompts to the operator for the status sprite.
+
+        Agent stderr is not an error; a turn that failed, was cancelled, or stopped early is not a success.
+        """
+        now = time.time()
+        info = data if isinstance(data, dict) else {}
+        if fn_name == "__acpError" and info.get("source") != "stderr":
+            self.last_error_at = now
+        elif fn_name == "__acpTurnEnd":
+            self.turn_end_times = [at for at in self.turn_end_times if now - at <= 60] + [now]
+            self.waiting_on.clear()
+            reason = info.get("stopReason") or info.get("stop_reason") or ""
+            if not info.get("_failed") and not info.get("_cancelled") and reason in ("", "end_turn"):
+                self.last_success_at = now
+        elif fn_name in self._WAIT_OPEN:
+            self.waiting_on.add(self._WAIT_OPEN[fn_name] + ":" + str(info.get("toolCallId") or ""))
+        elif fn_name in self._WAIT_CLOSE:
+            self.waiting_on.discard(self._WAIT_CLOSE[fn_name] + ":" + str(info.get("toolCallId") or ""))
 
     def _push_js_throttled(self, fn_name, data):
         now = time.time()
