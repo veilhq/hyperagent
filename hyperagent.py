@@ -37,34 +37,7 @@ from launch_build import build_or_warn, with_notice
 _build_notice = build_or_warn(Path(__file__).parent, "Hyperagent")
 from generated_html import HTML, SPRITE_HTML
 HTML = with_notice(HTML, _build_notice)
-
-
-# ---------------------------------------------------------------------------
-# Window chrome (dark title bar + custom icon via Windows DWM API)
-# ---------------------------------------------------------------------------
-
-def _apply_window_chrome(title: str, icon_path: str):
-    """Force dark title bar and custom icon via Windows DWM API."""
-    import ctypes
-    hwnd = ctypes.windll.user32.FindWindowW(None, title)
-    if not hwnd:
-        return
-    DWMWA_USE_IMMERSIVE_DARK_MODE = 20
-    val = ctypes.c_int(1)
-    ctypes.windll.dwmapi.DwmSetWindowAttribute(
-        hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ctypes.byref(val), ctypes.sizeof(val)
-    )
-    IMAGE_ICON = 1
-    LR_LOADFROMFILE = 0x0010
-    WM_SETICON = 0x0080
-    ICON_BIG = 1
-    ICON_SMALL = 0
-    hicon = ctypes.windll.user32.LoadImageW(
-        0, icon_path, IMAGE_ICON, 0, 0, LR_LOADFROMFILE
-    )
-    if hicon:
-        ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, hicon)
-        ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, hicon)
+from window_chrome import apply_window_chrome
 
 
 # ---------------------------------------------------------------------------
@@ -418,7 +391,7 @@ def main():
 
     def on_start():
         time.sleep(1)
-        _apply_window_chrome("Hyperagent", str(ICON_FILE))
+        apply_window_chrome("Hyperagent", ICON_FILE, logger)
         pool.set_window(window)
         logger.info("on_start: window ready, connecting protocol")
         # Ensure shared MCP service is available before connecting tabs
