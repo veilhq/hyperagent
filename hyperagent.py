@@ -29,7 +29,7 @@ from helpers import (
 )
 from acp_pool import ACPClientPool
 from bridge_api import HyperagentAPI
-from sprite_window import StatusSprite, sprite_enabled
+from sprite_window import StatusSprite, sprite_enabled, use_per_monitor_dpi
 
 # Auto-build: regenerate generated_html.py from current source before import
 import sys
@@ -404,6 +404,7 @@ def main():
 
     icon_path = str(ICON_FILE) if ICON_FILE.exists() else None
 
+    use_per_monitor_dpi()
     window = webview.create_window(
         "Hyperagent",
         html=HTML,

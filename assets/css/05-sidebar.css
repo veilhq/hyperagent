@@ -78,13 +78,13 @@
 .session-refresh-btn.spinning svg { animation: spin var(--period-spin) linear; } /* off-scale: spinner cadence */
 
 /* ---- Tab cards ----
-   Session tabs compose the shared folder tab inside a .tab-stack, with a dither
-   grid and title. The list has no side padding, so each tab's sloped sides taper
-   down onto a baseline that runs to the sidebar edges. */
+   Session tabs compose the shared rounded-rect .nav-tab, with a dither grid and
+   title. Extra right padding leaves the close button room past the title. */
 .sidebar-tab-list {
   display: flex;
   flex-direction: column;
-  padding: var(--space-1) 0 var(--space-3);
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3) var(--space-3);
 }
 
 .sidebar-tab-item {
@@ -93,7 +93,7 @@
   grid-template-columns: auto 1fr;
   align-items: center;
   column-gap: var(--space-2);
-  padding: var(--space-2) var(--space-5) calc(var(--space-2) + var(--space-3));
+  padding: var(--space-2) var(--space-6) var(--space-2) var(--space-3);
   cursor: pointer;
   transition: background var(--motion-fast) var(--ease),
               color var(--motion-fast) var(--ease),
@@ -101,12 +101,7 @@
               transform var(--motion-base) var(--ease);
 }
 
-/* Active tab: solid accent fill, so the dither glyph and close button invert. */
-.sidebar-tab-item.active .sidebar-tab-item-close { background: var(--bg); color: var(--selected); }
 .sidebar-tab-item.active .sidebar-tab-edited-mark { color: inherit; }
-
-/* Last tab has nothing overlapping it, so it drops the overlap allowance. */
-.sidebar-tab-item:last-child { padding-bottom: var(--space-2); }
 
 /* State classes - used by dither grid patterns only (no rail) */
 .sidebar-tab-item.crashed {
@@ -215,9 +210,6 @@
   animation: tab-rail-shake var(--motion-slow) ease-out;
 }
 
-/* Active tab is solid accent: dither cells invert to the ground color. */
-.sidebar-tab-item.active .sidebar-tab-dither > span { background: var(--bg); }
-
 /* Tab title */
 
 .sidebar-tab-item-title {
@@ -231,8 +223,8 @@
 
 .sidebar-tab-item-close {
   position: absolute;
-  top: calc((100% - var(--space-3)) / 2);
-  right: var(--space-4);
+  top: 50%;
+  right: var(--space-2);
   transform: translateY(-50%);
   width: var(--icon-md);
   height: var(--icon-md);
@@ -251,7 +243,6 @@
   flex-shrink: 0;
   transition: opacity var(--motion-fast) var(--ease), filter var(--motion-fast) var(--ease);
 }
-.sidebar-tab-item:last-child .sidebar-tab-item-close { top: 50%; }
 .sidebar-tab-item:hover .sidebar-tab-item-close { opacity: 1; }
 .sidebar-tab-item-close:hover { filter: brightness(1.15); }
 

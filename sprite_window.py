@@ -7,8 +7,10 @@ preferences.json.
 
 import ctypes
 import json
+import os
 import threading
 import time
+from contextlib import contextmanager
 from ctypes import wintypes
 
 import webview
@@ -28,6 +30,43 @@ SWP_NOSIZE, SWP_NOMOVE, SWP_NOZORDER, SWP_NOACTIVATE = 0x0001, 0x0002, 0x0004, 0
 MONITOR_DEFAULTTONULL = 0
 DWMWA_NCRENDERING_POLICY, DWMNCRP_DISABLED = 2, 1
 DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND = 33, 1
+DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4
+
+_user32 = ctypes.windll.user32
+_user32.SetThreadDpiAwarenessContext.restype = ctypes.c_void_p
+_user32.SetThreadDpiAwarenessContext.argtypes = [ctypes.c_void_p]
+_ENUM_WINDOWS_PROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+
+@contextmanager
+def per_monitor_dpi():
+    """Runs the block with this thread per-monitor DPI aware, so window and cursor coordinates are physical pixels."""
+    previous = _user32.SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)
+    try:
+        yield
+    finally:
+        if previous:
+            _user32.SetThreadDpiAwarenessContext(previous)
+
+
+def _own_window(title):
+    """Handle of this process's top-level window with the given title, or None."""
+    found = []
+    pid = os.getpid()
+
+    def visit(hwnd, _):
+        owner = wintypes.DWORD()
+        _user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+        if owner.value == pid:
+            buffer = ctypes.create_unicode_buffer(len(title) + 2)
+            _user32.GetWindowTextW(hwnd, buffer, len(buffer))
+            if buffer.value == title:
+                found.append(hwnd)
+                return False
+        return True
+
+    _user32.EnumWindows(_ENUM_WINDOWS_PROC(visit), 0)
+    return found[0] if found else None
 
 
 def reduce_status(states, error_times, turn_times, now, waiting=(), success_times=()):
@@ -82,14 +121,15 @@ class SpriteApi:
         self._accent_source = accent_source
         self._window = None
         self._hwnd = None
+        self._grab = None
 
     def bind(self, window):
         self._window = window
         self._hwnd = None
 
     def _handle(self):
-        if not self._hwnd:
-            self._hwnd = ctypes.windll.user32.FindWindowW(None, SPRITE_TITLE)
+        if not self._hwnd or not _user32.IsWindow(self._hwnd):
+            self._hwnd = _own_window(SPRITE_TITLE)
         return self._hwnd
 
     def get_status(self):
@@ -109,28 +149,54 @@ class SpriteApi:
         return self._accent_source()
 
     def get_bounds(self):
+        """Window rect in physical pixels."""
         rect = wintypes.RECT()
-        ctypes.windll.user32.GetWindowRect(self._handle(), ctypes.byref(rect))
+        with per_monitor_dpi():
+            _user32.GetWindowRect(self._handle(), ctypes.byref(rect))
         return {"x": rect.left, "y": rect.top, "w": rect.right - rect.left, "h": rect.bottom - rect.top}
-
-    def set_bounds(self, x, y, w, h):
-        ctypes.windll.user32.SetWindowPos(self._handle(), None, int(x), int(y), int(w), int(h), SWP_NOZORDER | SWP_NOACTIVATE)
 
     def save_bounds(self):
         _save_sprite_prefs(bounds=self.get_bounds())
 
+    def _cursor(self):
+        point = wintypes.POINT()
+        _user32.GetCursorPos(ctypes.byref(point))
+        return point.x, point.y
+
+    def begin_drag(self):
+        """Remembers where the cursor holds the window, so drag_to keeps that spot under it."""
+        with per_monitor_dpi():
+            cursor = self._cursor()
+        bounds = self.get_bounds()
+        self._grab = (cursor[0] - bounds["x"], cursor[1] - bounds["y"])
+
+    def drag_to(self):
+        """Moves the window so the held spot follows the cursor; True when it moved."""
+        if not self._grab:
+            return False
+        with per_monitor_dpi():
+            x, y = self._cursor()
+            _user32.SetWindowPos(self._handle(), None, x - self._grab[0], y - self._grab[1], 0, 0,
+                                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSIZE)
+        return True
+
+    def end_drag(self, moved):
+        """Ends a drag and saves the position if the window moved."""
+        self._grab = None
+        if moved:
+            self.save_bounds()
+
     def restore(self):
         """Moves to the saved position if it is still on a monitor, then sizes for that monitor's DPI."""
-        user32 = ctypes.windll.user32
         hwnd = self._handle()
         saved = _sprite_prefs().get("bounds")
-        if isinstance(saved, dict) and all(key in saved for key in ("x", "y", "w", "h")):
-            rect = wintypes.RECT(int(saved["x"]), int(saved["y"]), int(saved["x"] + saved["w"]), int(saved["y"] + saved["h"]))
-            if user32.MonitorFromRect(ctypes.byref(rect), MONITOR_DEFAULTTONULL):
-                user32.SetWindowPos(hwnd, None, int(saved["x"]), int(saved["y"]), 0, 0, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSIZE)
-        scale = user32.GetDpiForWindow(hwnd) / 96
-        side = round(SPRITE_SIZE * scale)
-        user32.SetWindowPos(hwnd, None, 0, 0, side, side, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOMOVE)
+        with per_monitor_dpi():
+            if isinstance(saved, dict) and all(key in saved for key in ("x", "y", "w", "h")):
+                rect = wintypes.RECT(int(saved["x"]), int(saved["y"]), int(saved["x"] + saved["w"]), int(saved["y"] + saved["h"]))
+                if _user32.MonitorFromRect(ctypes.byref(rect), MONITOR_DEFAULTTONULL):
+                    _user32.SetWindowPos(hwnd, None, int(saved["x"]), int(saved["y"]), 0, 0, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSIZE)
+            side = round(SPRITE_SIZE * _user32.GetDpiForWindow(hwnd) / 96)
+            _user32.SetWindowPos(hwnd, None, 0, 0, side, side, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOMOVE)
 
     def set_tile_region(self, radius):
         """Clips the window to a rounded rect with the given corner radius in physical px."""
@@ -141,7 +207,18 @@ class SpriteApi:
         for attribute, value in ((DWMWA_NCRENDERING_POLICY, DWMNCRP_DISABLED), (DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND)):
             setting = ctypes.c_int(value)
             ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, attribute, ctypes.byref(setting), ctypes.sizeof(setting))
-        ctypes.windll.user32.SetWindowRgn(hwnd, region, True)
+        with per_monitor_dpi():
+            _user32.SetWindowRgn(hwnd, region, True)
+
+
+def use_per_monitor_dpi():
+    """Makes the process per-monitor DPI aware so every window renders crisp at each monitor's scale.
+
+    Call before the first window; WebView2 needs every window in the process to share one DPI mode.
+    """
+    _user32.SetProcessDpiAwarenessContext.argtypes = [ctypes.c_void_p]
+    if not _user32.SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2):
+        logger.warning("dpi: could not make the process per-monitor aware (error %d)", ctypes.GetLastError())
 
 
 class StatusSprite:
@@ -161,7 +238,17 @@ class StatusSprite:
         with self._lock:
             if self._window:
                 return
-            window = webview.create_window(
+            window = self._create_window()
+            self._api.bind(window)
+            window.events.shown += self._api.restore
+            window.events.closed += self._on_closed
+            self._window = window
+            if window.events.shown.is_set():
+                self._api.restore()
+        logger.info("status sprite: opened")
+
+    def _create_window(self):
+        return webview.create_window(
                 SPRITE_TITLE,
                 html=self._html,
                 js_api=self._api,
@@ -174,11 +261,6 @@ class StatusSprite:
                 on_top=True,
                 background_color="#000000",
             )
-            self._api.bind(window)
-            window.events.shown += self._api.restore
-            window.events.closed += self._on_closed
-            self._window = window
-        logger.info("status sprite: opened")
 
     def close(self):
         with self._lock:

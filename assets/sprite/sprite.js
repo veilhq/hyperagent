@@ -1,4 +1,4 @@
-// Status sprite: Hyperagent's state as a three-fold inkblot on a 25x25 square-cell LED grid.
+// Status sprite: Hyperagent's state as one-dot line-work on a 25x25 square-cell LED grid.
 (function () {
   'use strict';
   var GRID = 25, CELLS = GRID * GRID, CENTER = (GRID - 1) / 2, RADIUS = GRID / 2;
@@ -6,10 +6,16 @@
   var POLL_MS = 2000, ALARM_S = 30;
   var SEED_NAME = 'hyperagent';
   var MID_X = 12, MID_Y = 12;
-  // Three-way rotation alone gives a pinwheel; adding the mirror gives a trefoil.
-  var MIRROR = true;
   // Morph timing in ticks: wave delay per cell of distance, random spread, flash fade, ghost hold.
   var WAVE = 0.5, JITTER = 4, FLASH_DECAY = 0.62, GHOST_TICKS = 2, GHOST_INK = 0.16;
+  // Idle rule half-width and blink beat in ticks (one --period-blink); seconds of trace motion per tick.
+  var LINE_HALF = 5, BLINK_TICKS = 10, TICK_S = 0.1;
+  // Scope trace: reach from center in cells, and the curve parameter step between trail samples.
+  var TRACE_AMP = 8, TRACE_STEP = 0.03;
+  // Waiting ping: ring reach in cells, and the beat in ticks (the ring travels, then a pause).
+  var PING_REACH = 8, PING_TICKS = 16;
+  // Error stages: fault line half-width, spike frame length in ticks, and the cooling beat in ticks.
+  var FAULT_HALF = 9, SPIKE_TICKS = 2, BEACON_TICKS = 20;
   var SEVERITY = ['sleep', 'idle', 'live', 'success', 'busy', 'waiting', 'beacon', 'alarm'];
   // The token each stage's flash blends toward; stages not listed use --live.
   var TINTS = { success: '--success', waiting: '--warning', beacon: '--error', alarm: '--error' };
@@ -44,13 +50,13 @@
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
-  // FNV-1a, so an app name always seeds the same inkblot and patterns.
+  // FNV-1a, so an app name always seeds the same patterns.
   function hash(text) {
     var value = 2166136261;
     for (var k = 0; k < text.length; k++) { value ^= text.charCodeAt(k); value = Math.imul(value, 16777619); }
     return value >>> 0;
   }
-  // Cheap per-cell noise in [0, 1) so symmetric cells share their morph timing.
+  // Cheap per-cell noise in [0, 1) for morph timing.
   function cellNoise(x, y, salt) {
     var value = Math.imul(x * 374761393 + y * 668265263 + salt * 2246822519, 3266489917);
     value = Math.imul(value ^ (value >>> 15), 2654435761);
@@ -58,101 +64,21 @@
   }
   function distance(x, y) { return Math.sqrt((x - MID_X) * (x - MID_X) + (y - MID_Y) * (y - MID_Y)); }
 
-  // Three-point symmetry: every point has copies at 120 and 240 degrees around the center, plus their mirrors when MIRROR is on.
-  var FOLDS = 3;
-  function images(dx, dy) {
-    var found = [];
-    for (var k = 0; k < FOLDS; k++) {
-      var angle = k * Math.PI * 2 / FOLDS, cos = Math.cos(angle), sin = Math.sin(angle);
-      var rx = dx * cos - dy * sin, ry = dx * sin + dy * cos;
-      found.push([rx, ry]);
-      if (MIRROR) found.push([-rx, ry]);
-    }
-    return found;
-  }
-  // Each cell's symmetric partners on the grid, and the lowest index among them so partners share timing.
-  var ORBITS = new Array(CELLS), CANON = new Int32Array(CELLS);
-  for (var oi = 0; oi < CELLS; oi++) {
-    var members = [oi];
-    images(oi % GRID - MID_X, Math.floor(oi / GRID) - MID_Y).forEach(function (point) {
-      var px = Math.round(MID_X + point[0]), py = Math.round(MID_Y + point[1]);
-      if (px >= 0 && py >= 0 && px < GRID && py < GRID && members.indexOf(py * GRID + px) < 0) members.push(py * GRID + px);
-    });
-    ORBITS[oi] = members;
-    CANON[oi] = Math.min.apply(null, members);
-  }
-  function setOrbit(target, i, value) { ORBITS[i].forEach(function (j) { target[j] = value; }); }
-
-  // Inkblot from metaballs copied three ways around the center; spread scales the same blot from a drop to full size.
-  var blots = {};
-  function inkblot(seed, spread) {
-    var key = seed + ':' + spread;
-    if (blots[key]) return blots[key];
-    var rng = mulberry32(seed), blobs = [];
-    blobs.push({ x: 0, y: 0, r: 0.8 + spread * 1.2, weight: 1 });
-    var count = 2 + Math.floor(rng() * 3);
-    for (var k = 0; k < count; k++) {
-      var reach = 1.5 + rng() * spread * 8, angle = rng() * Math.PI * 2;
-      blobs.push({ x: Math.cos(angle) * reach, y: Math.sin(angle) * reach, r: 0.5 + rng() * spread * 1.8, weight: 1 });
-    }
-    // Holes: negative blobs that open the white gaps of a pressed blot.
-    var holes = Math.floor(rng() * 3 * spread);
-    for (var h = 0; h < holes; h++) {
-      var holeReach = 1 + rng() * spread * 6, holeAngle = rng() * Math.PI * 2;
-      blobs.push({ x: Math.cos(holeAngle) * holeReach, y: Math.sin(holeAngle) * holeReach, r: 0.5 + rng() * spread, weight: -1.6 });
-    }
-    var copies = [];
-    blobs.forEach(function (blob) {
-      var points = blob.x === 0 && blob.y === 0 ? [[0, 0]] : images(blob.x, blob.y);
-      points.forEach(function (point) { copies.push({ x: MID_X + point[0], y: MID_Y + point[1], r: blob.r, weight: blob.weight }); });
-    });
-    var cells = new Uint8Array(CELLS);
-    for (var i = 0; i < CELLS; i++) {
-      var x = i % GRID, y = Math.floor(i / GRID), ink = 0;
-      copies.forEach(function (blob) {
-        var bx = x - blob.x, by = y - blob.y;
-        ink += blob.weight * blob.r * blob.r / (bx * bx + by * by + 0.01);
-      });
-      if (ink >= 1.1) setOrbit(cells, i, 1);
-    }
-    // Spatter: a few loose drops around a grown blot.
-    var drops = Math.floor(spread * 4 * rng());
-    for (var d = 0; d < drops; d++) {
-      var dropReach = 4 + rng() * spread * 9, dropAngle = rng() * Math.PI * 2;
-      var dx = Math.round(MID_X + Math.cos(dropAngle) * dropReach), dy = Math.round(MID_Y + Math.sin(dropAngle) * dropReach);
-      if (dx >= 0 && dy >= 0 && dx < GRID && dy < GRID) setOrbit(cells, dy * GRID + dx, 1);
-    }
-    return (blots[key] = cells);
-  }
-  function inked(cells, ink) {
-    var levels = new Float32Array(CELLS);
-    for (var i = 0; i < CELLS; i++) if (cells[i]) levels[i] = ink;
-    return levels;
-  }
-  // Empty cells touching the blot, one per symmetric set: where a bleed can spread.
-  function edges(cells) {
-    var found = [];
-    for (var i = 0; i < CELLS; i++) {
-      var x = i % GRID, y = Math.floor(i / GRID);
-      if (cells[i] || CANON[i] !== i) continue;
-      if ((x > 0 && cells[i - 1]) || (x < GRID - 1 && cells[i + 1]) || (y > 0 && cells[i - GRID]) || (y < GRID - 1 && cells[i + GRID])) found.push(i);
-    }
-    return found;
-  }
-
   // Morph: cells move to their target in a wave from the center out; each change flashes, and removed cells leave a brief ghost.
   var morph = {
     ink: new Float32Array(CELLS), target: new Float32Array(CELLS), due: new Int32Array(CELLS).fill(-1),
-    flash: new Float32Array(CELLS), ghost: new Uint8Array(CELLS), salt: 0
+    flash: new Float32Array(CELLS), ghost: new Uint8Array(CELLS), quiet: new Uint8Array(CELLS), salt: 0
   };
-  function morphTo(levels, wave) {
+  // Quiet changes land at once with no flash, for motion that stays in grey ink.
+  function morphTo(levels, wave, quiet) {
     morph.salt++;
     var spread = wave === 0 ? 1 : JITTER;
     for (var i = 0; i < CELLS; i++) {
       if (levels[i] === morph.target[i]) continue;
       morph.target[i] = levels[i];
+      morph.quiet[i] = quiet ? 1 : 0;
       var x = i % GRID, y = Math.floor(i / GRID);
-      morph.due[i] = reduceMotion ? ticks : ticks + Math.round(distance(x, y) * wave + cellNoise(CANON[i], 0, morph.salt) * spread);
+      morph.due[i] = reduceMotion || quiet ? ticks : ticks + Math.round(distance(x, y) * wave + cellNoise(i, 0, morph.salt) * spread);
     }
   }
   function advance(field) {
@@ -164,7 +90,7 @@
         var was = morph.ink[i], next = morph.target[i];
         if (was !== next) {
           morph.ink[i] = next;
-          if (!reduceMotion) morph.flash[i] = 1;
+          if (!reduceMotion && !morph.quiet[i]) morph.flash[i] = 1;
           if (next === 0) morph.ghost[i] = GHOST_TICKS;
         }
       }
@@ -172,125 +98,122 @@
     }
   }
 
-  // One stage of the app's inkblot per status; each pattern only picks targets and the morph animates them.
+  // One pattern per status; each pattern only picks targets and the morph animates them.
   var PATTERNS = {
-    // Drop: the blot shrunk to a still seed.
+    // Standby: one dim dot held at the center, powered down.
     sleep: {
-      init: function (rng, seed) { morphTo(inked(inkblot(seed, 0.15), 0.3), WAVE); return {}; },
+      init: function () {
+        var levels = new Float32Array(CELLS);
+        levels[MID_Y * GRID + MID_X] = 0.3;
+        morphTo(levels, WAVE);
+        return {};
+      },
       step: function () {}
     },
-    // Blot: the full shape at rest, now and then one symmetric set of edge cells soaks in and dries.
+    // Line: a flat dim rule across the center row, one mirrored pair of its dots blinking bright on each beat.
     idle: {
-      init: function (rng, seed) {
-        var cells = inkblot(seed, 0.6);
-        morphTo(inked(cells, 0.55), WAVE);
-        return { ticks: 0, cells: cells, edges: edges(cells), soak: false };
+      init: function () {
+        morphTo(ruled(-1), WAVE);
+        return { ticks: 0, pair: -1 };
       },
       step: function (state, rng) {
-        if (state.ticks++ % 30 !== 29 || !state.edges.length) return;
-        var levels = inked(state.cells, 0.55);
-        state.soak = !state.soak;
-        if (state.soak) setOrbit(levels, state.edges[Math.floor(rng() * state.edges.length)], 0.55);
-        morphTo(levels, 0);
+        var phase = state.ticks++ % BLINK_TICKS;
+        if (phase === 0) state.pair = 1 + Math.floor(rng() * LINE_HALF);
+        if (phase === 0 || phase === BLINK_TICKS / 2) morphTo(ruled(phase === 0 ? state.pair : -1), 0, true);
       }
     },
-    // Bleed: ink creeps out from the blot edge, three ways at once, as fast as the log lines arrive, then retracts.
+    // Murmur: the scope trace at half speed with a short tail, the tail growing with the rate log lines arrive.
     live: {
-      init: function (rng, seed) {
-        var cells = inkblot(seed, 0.6);
-        morphTo(inked(cells, 0.7), WAVE);
-        return { cells: cells, edges: edges(cells), bleeds: [] };
-      },
+      init: function (rng) { return { clock: 0, phase: rng() * Math.PI * 2 }; },
       step: function (state, rng, app) {
-        var chance = Math.min(0.9, 0.05 + Math.log2(1 + app.rate) / 8), changed = false;
-        if (rng() < chance && state.edges.length) {
-          state.bleeds.push({ cell: state.edges[Math.floor(rng() * state.edges.length)], life: 8 + Math.floor(rng() * 12) });
-          changed = true;
-        }
-        state.bleeds = state.bleeds.filter(function (bleed) {
-          if (--bleed.life > 0) return true;
-          changed = true;
-          return false;
-        });
-        if (!changed) return;
-        var levels = inked(state.cells, 0.7);
-        state.bleeds.forEach(function (bleed) { setOrbit(levels, bleed.cell, 0.7); });
-        morphTo(levels, 0);
+        state.clock += TICK_S * 0.5;
+        var tail = Math.min(4, 1.5 + Math.log2(1 + app.rate) / 2);
+        morphTo(trace(state.clock, state.phase, tail, TRACE_AMP * 0.8), 0);
       }
     },
-    // Kaleidoscope: the blot keeps turning to a new three-way figure, drawn as lace so it never reads as a solid lump.
+    // Signal: a bright point drawing a Lissajous figure with a fading tail; its frequency ratio drifts so the figure keeps reshaping.
     busy: {
-      init: function (rng, seed) { return { ticks: 0, seed: seed, turn: 0, every: 12 + Math.floor(rng() * 6) }; },
+      init: function (rng) { return { clock: 0, phase: rng() * Math.PI * 2 }; },
       step: function (state) {
-        if (state.ticks++ % state.every !== 0) return;
-        morphTo(inked(laced(inkblot(state.seed + state.turn++ * 7919, 0.7)), 0.8), WAVE);
+        state.clock += TICK_S;
+        morphTo(trace(state.clock, state.phase, 5, TRACE_AMP), 0);
       }
     },
-    // Smear: a cooling error, where the blot breaks into speckle and re-forms on a slow beat.
+    // Break: a cooling error, the fault line split at the center and flaring bright once per slow beat.
     beacon: {
-      init: function (rng, seed) {
-        var cells = inkblot(seed, 0.6);
-        morphTo(inked(cells, 0.85), WAVE);
-        return { ticks: 0, cells: cells, period: 24 + Math.floor(rng() * 10) };
-      },
-      step: function (state, rng) {
-        var phase = state.ticks++ % state.period;
-        if (phase === 0) morphTo(inked(state.cells, 0.85), WAVE);
-        if (phase === Math.floor(state.period / 2)) morphTo(speckle(state.cells, rng, 0.45, 0.85), WAVE);
+      init: function () { return { ticks: 0 }; },
+      step: function (state) {
+        var phase = state.ticks++ % BEACON_TICKS;
+        if (phase === 0 || phase === 3) morphTo(broken(phase === 0 ? 0.85 : 0.35), 0);
       }
     },
-    // Ripple: a turn just finished cleanly, the blot pulsing bright and back on a quick beat.
+    // Settle: the trace lands on the idle rule and a bright pulse runs from center out to both ends on each beat.
     success: {
-      init: function (rng, seed) { return { ticks: 0, cells: inkblot(seed, 0.6) }; },
+      init: function () { return { ticks: 0 }; },
       step: function (state) {
-        var phase = state.ticks++ % 10;
-        if (phase === 0) morphTo(inked(state.cells, 1), WAVE);
-        if (phase === 5) morphTo(inked(state.cells, 0.6), WAVE);
+        var phase = state.ticks++ % BLINK_TICKS;
+        morphTo(ruled(phase <= LINE_HALF ? phase : -1, 0.5), 0);
       }
     },
-    // Breathe: the agent is blocked on the operator, the blot swelling and fading on a slow beat until answered.
+    // Ping: the agent is blocked on the operator, a steady center dot sending out a ring that widens and fades until answered.
     waiting: {
-      init: function (rng, seed) { return { ticks: 0, cells: inkblot(seed, 0.6) }; },
+      init: function () { return { ticks: 0 }; },
       step: function (state) {
-        var phase = state.ticks++ % 16;
-        if (phase === 0) morphTo(inked(state.cells, 0.85), WAVE);
-        if (phase === 8) morphTo(inked(state.cells, 0.4), WAVE);
+        var phase = state.ticks++ % PING_TICKS;
+        morphTo(ping(phase < PING_REACH ? phase + 1 : -1), 0);
       }
     },
-    // Shatter: a fresh error, flipping between the blot and symmetric noise every few frames.
+    // Fault: a fresh error, the wide line jolted by jagged spikes that jump every few frames.
     alarm: {
-      init: function (rng, seed) { return { ticks: 0, cells: inkblot(seed, 0.6) }; },
+      init: function () { return { ticks: 0 }; },
       step: function (state, rng) {
-        var phase = state.ticks++ % 6;
-        if (phase === 0) morphTo(inked(state.cells, 1), 0);
-        if (phase === 3) morphTo(noise(rng, 0.3, 1), 0);
+        if (state.ticks++ % SPIKE_TICKS === 0) morphTo(spiked(rng), 0);
       }
     }
   };
-  // The blot with each symmetric set kept at the given odds, plus stray sets nearby.
-  function speckle(cells, rng, keep, ink) {
-    var levels = new Float32Array(CELLS);
-    for (var i = 0; i < CELLS; i++) {
-      if (CANON[i] !== i) continue;
-      var x = i % GRID, near = cells[i] || (x > 0 && cells[i - 1]) || (i >= GRID && cells[i - GRID]);
-      if (near && rng() < (cells[i] ? keep : keep / 4)) setOrbit(levels, i, ink);
+  // The scope trace at time clock (seconds): the last tail radians of the curve, brightest at the head and fading behind it.
+  function trace(clock, phase, tail, amp) {
+    var levels = new Float32Array(CELLS), head = clock * 2.2;
+    var fx = 3 + 0.4 * Math.sin(clock * 0.11 + phase), fy = 2 + 0.25 * Math.sin(clock * 0.07);
+    for (var t = head - tail; t <= head; t += TRACE_STEP) {
+      var px = amp * Math.sin(fx * t + phase), py = amp * Math.sin(fy * t);
+      var x = Math.round(MID_X + px), y = Math.round(MID_Y + py);
+      if (x < 0 || y < 0 || x >= GRID || y >= GRID) continue;
+      var fresh = 1 - (head - t) / tail, ink = 0.25 + 0.75 * fresh * fresh;
+      if (ink > levels[y * GRID + x]) levels[y * GRID + x] = ink;
     }
     return levels;
   }
-  // The blot's outline plus every third ring out from the center, which opens a filled shape into lace.
-  function laced(cells) {
-    var out = new Uint8Array(CELLS);
-    for (var i = 0; i < CELLS; i++) {
-      if (CANON[i] !== i || !cells[i]) continue;
-      var x = i % GRID, y = Math.floor(i / GRID);
-      var inside = x > 0 && x < GRID - 1 && y > 0 && y < GRID - 1 && cells[i - 1] && cells[i + 1] && cells[i - GRID] && cells[i + GRID];
-      if (!inside || Math.round(distance(x, y)) % 3 === 0) setOrbit(out, i, 1);
-    }
-    return out;
-  }
-  function noise(rng, density, ink) {
+  // The idle rule: LINE_HALF dots each side of center on the center row, with the pair at the given distance lit bright.
+  function ruled(pair, ink) {
     var levels = new Float32Array(CELLS);
-    for (var i = 0; i < CELLS; i++) if (CANON[i] === i && rng() < density / 2) setOrbit(levels, i, ink);
+    for (var dx = -LINE_HALF; dx <= LINE_HALF; dx++) levels[MID_Y * GRID + MID_X + dx] = Math.abs(dx) === pair ? 0.85 : ink || 0.35;
+    return levels;
+  }
+  // The center dot and, for radius > 0, a one-dot ring at that radius dimming as it widens.
+  function ping(radius) {
+    var levels = new Float32Array(CELLS);
+    levels[MID_Y * GRID + MID_X] = 1;
+    if (radius <= 0) return levels;
+    for (var i = 0; i < CELLS; i++) {
+      if (Math.abs(distance(i % GRID, Math.floor(i / GRID)) - radius) < 0.5) levels[i] = 1 - 0.6 * radius / PING_REACH;
+    }
+    return levels;
+  }
+  // The fault line with two or three vertical spikes at random columns, each brightest at its tip.
+  function spiked(rng) {
+    var levels = new Float32Array(CELLS), spikes = 2 + Math.floor(rng() * 2);
+    for (var dx = -FAULT_HALF; dx <= FAULT_HALF; dx++) levels[MID_Y * GRID + MID_X + dx] = 0.4;
+    for (var k = 0; k < spikes; k++) {
+      var x = MID_X + Math.round((rng() * 2 - 1) * FAULT_HALF), height = 2 + Math.floor(rng() * 6), dir = rng() < 0.5 ? -1 : 1;
+      for (var h = 1; h <= height; h++) levels[(MID_Y + dir * h) * GRID + x] = h === height ? 1 : 0.7;
+    }
+    return levels;
+  }
+  // The fault line with its center three dots cut out, at the given ink.
+  function broken(ink) {
+    var levels = new Float32Array(CELLS);
+    for (var dx = -FAULT_HALF; dx <= FAULT_HALF; dx++) if (Math.abs(dx) > 1) levels[MID_Y * GRID + MID_X + dx] = ink;
     return levels;
   }
 
@@ -347,21 +270,23 @@
     var off = hexToRgb(styles.getPropertyValue('--border'));
     var on = hexToRgb(styles.getPropertyValue('--text-bright'));
     var tints = TINT_TOKENS.map(function (token) { return hexToRgb(styles.getPropertyValue(token)); });
-    var pitch = Math.min(width, height) / GRID;
-    // Square cells, the system dot-matrix shape: halfSide is half of each side.
-    var halfSide = pitch * 0.38;
-    var originX = (width - pitch * GRID) / 2, originY = (height - pitch * GRID) / 2;
+    // Whole-pixel pitch and an LED side of matching parity, so every LED is identical and the field centers to the pixel.
+    var pitch = Math.max(1, Math.floor(Math.min(width, height) / GRID));
+    if ((width - pitch * GRID) % 2 && pitch > 1) pitch--;
+    var side = Math.max(1, Math.round(pitch * 0.76));
+    if ((pitch - side) % 2) side = side + 1 <= pitch ? side + 1 : side - 1;
+    var inset = (pitch - side) / 2;
+    var originX = Math.floor((width - pitch * GRID) / 2), originY = Math.floor((height - pitch * GRID) / 2);
     var cornerPx = (parseFloat(getComputedStyle(sprite).borderTopLeftRadius) || 0) * dpr;
     buildMask(Math.max(0, cornerPx / pitch - 0.5));
     var leds = new Array(CELLS);
     for (var i = 0; i < CELLS; i++) {
       if (!mask[i]) continue;
-      var ledX = Math.floor(originX + (i % GRID + 0.5) * pitch) + 0.5, ledY = Math.floor(originY + (Math.floor(i / GRID) + 0.5) * pitch) + 0.5;
+      var ledX = originX + (i % GRID) * pitch + inset, ledY = originY + Math.floor(i / GRID) * pitch + inset;
       var pixels = [];
-      for (var ly = Math.floor(ledY - halfSide); ly <= Math.ceil(ledY + halfSide); ly++) {
-        for (var lx = Math.floor(ledX - halfSide); lx <= Math.ceil(ledX + halfSide); lx++) {
-          var ldx = lx + 0.5 - ledX, ldy = ly + 0.5 - ledY;
-          if (lx >= 0 && ly >= 0 && lx < width && ly < height && Math.abs(ldx) <= halfSide && Math.abs(ldy) <= halfSide) pixels.push((ly * width + lx) * 4);
+      for (var ly = ledY; ly < ledY + side; ly++) {
+        for (var lx = ledX; lx < ledX + side; lx++) {
+          if (lx >= 0 && ly >= 0 && lx < width && ly < height) pixels.push((ly * width + lx) * 4);
         }
       }
       leds[i] = Int32Array.from(pixels);
@@ -455,16 +380,14 @@
   }
   window.applySpriteTheme = applySpriteTheme;
 
-  // Move: pointer capture keeps the gesture alive outside the window.
+  // Move: Python tracks the cursor in physical pixels, so the drag holds across monitors with different scaling.
   var gesture = null, pending = false;
   sprite.addEventListener('pointerdown', function (e) {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || !api()) return;
     e.preventDefault();
     sprite.setPointerCapture(e.pointerId);
-    var g = { sx: e.screenX, sy: e.screenY, bounds: null, moved: false };
-    gesture = g;
-    var bridge = api();
-    if (bridge) bridge.get_bounds().then(function (bounds) { g.bounds = bounds; });
+    gesture = { sx: e.screenX, sy: e.screenY, moved: false };
+    api().begin_drag();
   });
   sprite.addEventListener('pointermove', function (e) {
     var g = gesture;
@@ -472,16 +395,14 @@
     var dx = e.screenX - g.sx, dy = e.screenY - g.sy;
     if (!g.moved && dx * dx + dy * dy < 9) return;
     g.moved = true;
-    if (!g.bounds || pending) return;
-    var dpr = window.devicePixelRatio || 1;
+    if (pending) return;
     pending = true;
-    api().set_bounds(g.bounds.x + dx * dpr, g.bounds.y + dy * dpr, g.bounds.w, g.bounds.h)
-      .then(function () { pending = false; });
+    api().drag_to().then(function () { pending = false; }, function () { pending = false; });
   });
   function endGesture() {
     var g = gesture;
     gesture = null;
-    if (g && g.moved && api()) api().save_bounds();
+    if (g && api()) api().end_drag(g.moved);
   }
   sprite.addEventListener('pointerup', endGesture);
   sprite.addEventListener('pointercancel', endGesture);

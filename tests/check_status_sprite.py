@@ -84,8 +84,9 @@ window.pywebview = { api: {
   get_accent: function () { return Promise.resolve({ accent: '#ff00ff', lightMode: false,
     semantics: { success: '#00ff00', warning: '#ffff00', error: '#ff0000' } }); },
   get_bounds: function () { return Promise.resolve({ x: 0, y: 0, w: 176, h: 176 }); },
-  set_bounds: function () { return Promise.resolve(); },
-  save_bounds: function () { return Promise.resolve(); },
+  begin_drag: function () { return Promise.resolve(); },
+  drag_to: function () { return Promise.resolve(true); },
+  end_drag: function () { return Promise.resolve(); },
   set_tile_region: function (r) { window.__calls.push('tile ' + Math.round(r)); return Promise.resolve(); }
 } };
 </script>
